@@ -1,0 +1,4 @@
+strategy_args,metric_name,"UniTS;{""horizon"": 1, ""is_train"": 1, ""norm"": true, ""num_epochs"": 3, ""sampling_rate"": 1, ""seq_len"": 96}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.34081076497379764
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.3946501821870896
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.7158701814049836

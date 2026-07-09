@@ -1,0 +1,12 @@
+*.log
+*.out
+*.err
+runs/
+output_temp/
+__pycache__/
+*.pyc
+.env
+*.pem
+.vscode/
+.DS_Store
+Thumbs.db

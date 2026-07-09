@@ -1,0 +1,4 @@
+strategy_args,metric_name,"PatchTST;{""batch_size"": 16, ""c_out"": 12, ""d_ff"": 64, ""d_layers"": 1, ""d_model"": 256, ""dec_in"": 12, ""e_layers"": 1, ""enc_in"": 12, ""horizon"": 0, ""lr"": 0.0001, ""norm"": true, ""num_epochs"": 100, ""patch_len"": 10, ""patience"": 3, ""seq_len"": 100, ""stride"": 10, ""task_name"": ""anomaly_detection""}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.999172219166792
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.9543897308599472
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.8910898044437711

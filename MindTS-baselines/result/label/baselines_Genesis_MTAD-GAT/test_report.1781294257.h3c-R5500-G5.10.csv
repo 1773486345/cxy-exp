@@ -1,0 +1,2 @@
+strategy_args,metric_name,"MTADGAT;{""batch_size"": 128, ""conv1d_filter_width"": 7, ""fc_hidden"": 64, ""gru_hidden"": 64, ""keep_checkpoint_max"": 2, ""log_step_count_steps"": 20, ""num_train_steps"": 100, ""run_mode"": ""FORECASTING"", ""save_checkpoints_steps"": 100, ""vae_latent"": 18, ""window_length"": 100}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.4518567698399652

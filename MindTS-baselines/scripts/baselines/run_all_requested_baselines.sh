@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-/media/h3c/users/wangyueyang1/cxy/.env/envs/mindts_env/bin/python}"
+SKIP_EXISTING="${SKIP_EXISTING:-1}"
+
+DATASETS=("$@")
+
+run_group() {
+  local script_name="$1"
+  shift
+  echo "[requested baselines] running ${script_name} skip_existing=${SKIP_EXISTING}"
+  SKIP_EXISTING="${SKIP_EXISTING}" \
+    PYTHON_BIN="${PYTHON_BIN}" \
+    bash "${SCRIPT_DIR}/${script_name}" "${DATASETS[@]}"
+}
+
+run_group "run_classic_baselines.sh"
+run_group "run_self_impl_deep_baselines.sh"
+run_group "run_gdn_baselines.sh"
+run_group "run_omni_anomaly_baselines.sh"
+run_group "run_interfusion_baselines.sh"
+run_group "run_mtad_gat_baselines.sh"
+run_group "run_tab_supported_baselines.sh"
+
+TSLIB_DATASETS=()
+if [ "${#DATASETS[@]}" -eq 0 ]; then
+  TSLIB_DATASETS=(
+    "Genesis.csv"
+    "Weather.csv"
+    "Energy.csv"
+    "SKAB.csv"
+    "MSDS.csv"
+    "Daphnet.csv"
+    "GECCO.csv"
+    "ExathlonSmall.csv"
+    "Metro.csv"
+  )
+else
+  for dataset in "${DATASETS[@]}"; do
+    case "${dataset}" in
+      Genesis.csv|Weather.csv|Energy.csv|SKAB.csv|MSDS.csv|Daphnet.csv|GECCO.csv|ExathlonSmall.csv|Metro.csv)
+        TSLIB_DATASETS+=("${dataset}")
+        ;;
+    esac
+  done
+fi
+
+if [ "${#TSLIB_DATASETS[@]}" -gt 0 ]; then
+  SKIP_EXISTING="${SKIP_EXISTING}" \
+    PYTHON_BIN="${PYTHON_BIN}" \
+    bash "${SCRIPT_DIR}/run_daphnet_gecco_tslib_baselines.sh" "${TSLIB_DATASETS[@]}"
+fi
+
+"${PYTHON_BIN}" "${SCRIPT_DIR}/summarize_requested_baselines.py"
+
+echo "[requested baselines] complete result_root=${PROJECT_ROOT}/result/label"

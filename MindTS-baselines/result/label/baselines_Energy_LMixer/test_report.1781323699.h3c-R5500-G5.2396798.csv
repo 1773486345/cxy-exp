@@ -1,0 +1,4 @@
+strategy_args,metric_name,"LLMMixerModel;{""d_model"": 32, ""horizon"": 1, ""lr"": 0.001, ""n_heads"": 4, ""norm"": true, ""sampling_rate"": 1, ""seq_len"": 96, ""use_norm"": 1}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.33168581697026106
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.5672771754314211
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.3212931084366861
