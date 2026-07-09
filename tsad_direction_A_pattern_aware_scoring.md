@@ -1,7 +1,7 @@
-# 方向 A：模式感知的异常证据评分
+﻿# 方向 A：模式感知的异常证据评分
 
 记录日期：2026-06-30  
-更新日期：2026-07-05
+更新日期：2026-07-10
 
 方向定位：
 
@@ -181,15 +181,17 @@ extreme value threshold
 S = w1 * z1 + w2 * z2 + ...
 ```
 
-更合理的候选方式包括：
+更合理的候选方式应首先保证 raw residual 的主体地位，再由结构背景调节该 residual 的异常含义，例如：
 
 ```text
 context-conditioned calibration
-top-k / softmax evidence pooling
-tail-probability aggregation
+reliability-weighted residual scoring
+tail-probability calibration
 slow-drift vs abrupt-shift separation
 multi-scale inconsistency scoring
 ```
+
+第一轮实验也表明，简单把多个结构证据都转化为异常分数再做 top-k / mean / max 聚合并不稳健，容易让辅助证据噪声支配最终排序。因此，后续实现应避免把背景描述量直接当成独立异常证据。
 
 ---
 
@@ -267,44 +269,65 @@ frequency-aware evidence 明显升高。
 
 ---
 
-## 7. 最小可行方案
+## 7. 修订后的最小可行方案
 
-第一版的核心仍是评分机制，但落地时应避免选择通道独立的重构主干。更合适的基础重构器应直接接收完整多变量状态，获得：
+第一版实验后，方向 A 的最小可行方案需要从“多组件异常证据聚合”修订为“残差语义校准”。核心判断是：raw reconstruction residual 本身仍然是最稳定的异常证据，结构背景不应直接变成一组并列异常分数，而应解释该 residual 在当前状态下是否可靠、是否需要放大或减弱。
+
+因此，落地流程应为：
 
 ```text
-x_hat
-e = |x - x_hat|
+x_hat = JointMultivariateReconstructor(x)
+e_raw = MSE(x, x_hat)
+context = describe_local_dynamics(x)
+score = e_raw * reliability_weight(context)
 ```
 
-然后构造以下分数：
+其中，`context` 用于描述 residual 所处背景，而不是替代 residual：
 
 ```text
-global residual score
-local scale-normalized residual score
-short / mid / long window residual score
-trend residual score
-abrupt shift score
-frequency band residual score
-cross-variable residual synchrony score
+local scale context：
+局部方差、局部波动强度，用于判断同等 residual 是否发生在高波动阶段。
+
+trend / shift context：
+局部趋势运动和水平变化强度，用于判断 residual 是否可能来自正常趋势演化或突发结构变化。
+
+frequency context：
+去趋势后的局部高频能量，用于判断当前窗口是否本身处于强振荡状态。
+
+cross-variable concentration context：
+残差是否集中在少数变量或同步出现在多个变量上，用于提供弱风险提示。
 ```
 
-训练阶段使用正常样本拟合各分数的正常分布。测试阶段输出：
+修订后的评分目标不是：
 
 ```text
-context-aware component scores
-overall anomaly score
+S = aggregate(raw_score, scale_score, trend_score, freq_score, sync_score)
 ```
 
-关键消融：
+而是：
 
 ```text
-raw residual
-raw residual + global calibration
-scale-aware scoring
-trend / shift-aware scoring
-frequency-aware scoring
-multi-scale scoring
-all components
+S = raw_residual * context_reliability_weight
+```
+
+这样更符合方向 A 的动机：同样大小的 residual，在稳定状态下可以更可疑，在高波动或强动态状态下可以更谨慎；但上下文不能完全抹掉 residual 本身，也不能让手工构造的辅助分量主导排序。
+
+关键实验比较也应相应调整为：
+
+```text
+raw residual control
+reliability-weighted residual scoring
+legacy aggregate scorer, only as an ablation
+```
+
+消融重点不再是不断堆叠 `raw + scale + trend + freq + sync`，而是验证不同上下文对 raw residual 的调权是否有效：
+
+```text
+raw only
+raw * scale-context weight
+raw * scale/trend/frequency-context weight
+raw * dynamic-context + weak sync-risk weight
+legacy top-k aggregate scorer
 ```
 
 ---
@@ -338,77 +361,113 @@ L_rec = MSE(x_hat_masked, x_masked_target) + η · MSE(x_hat, x)
 
 ### 8.2 异常评分流程
 
-推理阶段不再直接使用：
+推理阶段仍先得到原始窗口 `x` 和重构窗口 `x_hat`，但当前版本不再把所有结构证据都作为独立异常分数进行聚合。默认评分公式修订为：
 
 ```text
-score_t = |x_t - x_hat_t|
+raw = MSE(x, x_hat)
+weight = context_reliability_weight(x)
+score = raw * weight
 ```
 
-而是先基于原始窗口 `x` 和重构窗口 `x_hat` 构造多个残差语义证据：
+其中，`raw` 是主要异常证据；局部结构信息只用于估计当前 residual 的解释背景：
 
 ```text
-raw：
-原始多变量重构残差。
+scale_context：
+局部波动尺度。高波动状态下，同等 raw residual 的异常意义应适当降低。
 
-scale：
-局部波动尺度归一化后的残差，用于区分稳定阶段和高波动阶段中同等残差的不同含义。
+trend_context：
+局部趋势运动或水平变化强度。动态变化强的阶段，对 residual 的判定应更谨慎。
 
-trend：
-真实序列与重构序列的局部趋势残差。
+freq_context：
+去趋势后的高频能量。局部振荡较强时，残差可能更容易受正常动态影响。
 
-shift：
-真实序列与重构序列的局部水平变化模式差异，而不是把水平变化本身直接判为异常。
-
-freq：
-去除局部趋势后的高频残差，用于保留局部振荡、频率结构变化等证据。
-
-sync：
-多变量残差的集中或同步程度，用于描述残差是否在多个变量上共同出现。
+sync_context：
+残差在变量维度上的集中程度。该项只作为弱风险提示，而不是独立主导分数。
 ```
 
-这些证据分别在训练集正常窗口上用 median / MAD 进行稳健校准。测试阶段每个证据先转化为相对训练正常分布的异常程度，再通过 `top-k` 聚合得到最终异常分数。当前默认使用 `top-k` 聚合，是为了避免某一个强异常证据被其他弱证据平均稀释。
+实现上，训练集正常窗口用于拟合这些上下文量的 median / MAD 统计量。测试阶段根据当前上下文相对训练正常分布的偏离程度生成权重。动态上下文主要提供 `relief`，用于降低高波动、高趋势运动或高频状态下的误报；残差集中上下文提供较弱的 `risk`，用于保留局部变量不一致的风险信号。权重被限制在固定范围内，避免上下文完全抹除 raw residual：
 
-### 8.3 当前实现边界
+```text
+relief = context_strength * tanh(dynamic_context_z)
+risk = risk_strength * tanh(sync_context_z)
+weight = clip(1 - relief + risk, min_weight, max_weight)
+score = raw * weight
+```
 
-当前版本已经删除 `use_pattern_aware_scoring` 兼容开关，Pattern-Aware scoring 是 `PatternAD` 的默认评分机制。模型入口改为：
+旧版的多组件聚合逻辑仍保留为显式消融路径：
+
+```text
+pattern_score_mode = "aggregate"
+```
+
+但它不再是默认方法。默认方法为：
+
+```text
+pattern_score_mode = "reliability_weighted"
+```
+
+### 8.3 第一轮实验反馈
+
+第一轮实验比较了旧版默认 PatternAD scorer 和 raw residual control。结果表明，旧版“多组件校准 + top-k 聚合”没有获得实验支持，平均指标反而低于 raw control：
+
+```text
+              F1      Adjust-F1  Aff-F    AUC-ROC  AUC-PR  R-AUC-ROC  R-AUC-PR  VUS-ROC  VUS-PR
+old PatternAD 0.3634  0.5664     0.7339   0.6571   0.3303  0.6280     0.3342    0.6241   0.3352
+raw control   0.3921  0.6313     0.7518   0.7275   0.3897  0.6798     0.3763    0.6794   0.3775
+```
+
+这说明旧版实现的问题不在于“是否需要模式背景”，而在于“如何使用模式背景”。将 scale、trend、freq、sync 都当作独立异常分数并 top-k 聚合，会把辅助证据的估计噪声放大，破坏 raw residual 原本较稳定的排序能力。由此，当前版本改为 reliability-weighted residual scoring：保留 raw residual 的主体地位，只让上下文参与解释和调权。
+
+### 8.4 当前实现边界
+
+当前版本已经删除 `use_pattern_aware_scoring` 兼容开关，Pattern-Aware scoring 是 `PatternAD` 的默认评分机制。模型入口为：
 
 ```text
 PatternAD.PatternAD
 ```
 
-多变量实验脚本改为：
+多变量实验脚本为：
 
 ```text
 cxy/PatternAD-main/scripts/multivariate_detection/detect_label/*_script/PatternAD.sh
 ```
 
-单变量相关脚本已删除，`PatternAD` 在数据变量数 `D <= 1` 时直接拒绝运行。这是因为该方向当前主做多变量异常检测，`sync` 等证据本身依赖多变量残差结构，继续保留单变量入口会增加无关复杂度。
+raw control 脚本仍应保留，用于固定比较基线：
 
-当前版本没有引入关系图、文本拓扑同构、固定关系原型或 LLM zero-shot 异常打分。为了处理原 LLM prompt 主干多变量实验速度过慢的问题，文本暂不进入模型，multivariate loader 仅返回占位文本张量以保持 benchmark 接口一致。最终异常分数来自模式感知残差证据的校准与聚合。
+```text
+cxy/PatternAD-main/scripts/multivariate_detection/detect_label/*_script/PatternAD_raw.sh
+```
 
-### 8.4 当前版本的作用定位
+单变量相关脚本已删除，`PatternAD` 在数据变量数 `D <= 1` 时直接拒绝运行。这是因为该方向当前主做多变量异常检测，变量维度上的 residual concentration 等上下文依赖多变量结构，继续保留单变量入口会增加无关复杂度。
 
-该版本是方向 A 的第一版可运行实现，核心验证问题是：
+当前版本没有引入关系图、文本拓扑同构、固定关系原型或 LLM zero-shot 异常打分。为了处理原 LLM prompt 主干多变量实验速度过慢的问题，文本暂不进入模型，multivariate loader 仅返回占位文本张量以保持 benchmark 接口一致。最终异常分数来自 raw residual 与局部动态上下文的可靠性调权。
+
+### 8.5 当前版本的作用定位
+
+该版本是方向 A 的第二版可运行实现，核心验证问题是：
 
 ```text
 在同一重构 backbone 下，
-模式感知残差评分是否优于原始重构误差评分？
+reliability-weighted residual scoring 是否优于 raw residual control，
+并且是否优于旧版 aggregate scorer？
 ```
 
-因此，首要实验应比较：
+因此，下一轮实验应比较：
 
 ```text
-Joint multivariate reconstruction + raw residual scoring
-PatternAD pattern-aware residual scoring
+old aggregate PatternAD result
+raw residual control
+new reliability-weighted PatternAD result
 ```
 
-并进一步做组件消融：
+评价不能只看 point-adjusted F1，应同时关注：
 
 ```text
-raw only
-raw + scale
-raw + scale + trend / shift
-raw + scale + trend / shift + freq
-all components
-top-k / mean / max / logsumexp aggregation
+AUC-PR
+AUC-ROC
+VUS-PR
+VUS-ROC
+event-level F1
+adjust-F1
+affiliation-F
 ```
