@@ -14,7 +14,7 @@ The model is no longer treated as an optional switch on top of the previous LLM-
 
 ## Main Design
 
-`PatternAD` now uses a lightweight joint-variable reconstruction backbone instead of the previous LLM prompt encoder. Each time step is encoded as a full multivariate state, so the reconstructor can use cross-variable context instead of processing every channel independently. After the best checkpoint is selected, it calibrates a pattern-aware residual scorer on training-normal windows. At inference, reconstruction residuals are not used directly. They are converted into several context-aware evidence scores, calibrated by train-set median/MAD statistics, and then aggregated into the final anomaly score.
+`PatternAD` now uses a lightweight joint-variable reconstruction backbone instead of the previous LLM prompt encoder. Each time step is encoded as a full multivariate state, so the reconstructor can use cross-variable context instead of processing every channel independently. After the best checkpoint is selected, it fits a context-aware residual scorer on training-normal windows. The current default score keeps raw reconstruction residual as the primary anomaly evidence and uses local temporal dynamics only as a reliability weight. This supersedes the earlier top-k aggregation of independent pattern components, which was not supported by the raw-control experiment.
 
 This makes the implementation match direction A: not anomaly type classification, not relation-graph prototype learning, and not text-topology alignment. The key object is the residual's meaning under local dynamics.
 
@@ -154,3 +154,65 @@ VUS-ROC
 event-level F1
 point-adjusted F1
 ```
+## 2026-07-10 Result Analysis And Scorer Revision
+
+### Workspace Note
+
+There are two working copies in the current workflow:
+
+```text
+Server workspace: /media/h3c/users/wangyueyang1/cxy/PatternAD-main
+Local downloaded workspace: E:\cxy-exp\cxy-exp\PatternAD-main
+```
+
+The local copy was used for result analysis and code modification. The updated local code should be synchronized to the server with Git before running the next experiment there.
+
+### Raw-Control Result
+
+The completed experiment compared the default PatternAD scorer against the raw-control script on seven multivariate datasets. Metrics were read from the detailed `*.tar.gz` result CSV files. For label metrics, the best value over the 42 anomaly-ratio rows was used. For score-ranking metrics, the reported values are the per-dataset score metrics in the detailed CSV.
+
+```text
+              F1      Adjust-F1  Aff-F    AUC-ROC  AUC-PR  R-AUC-ROC  R-AUC-PR  VUS-ROC  VUS-PR
+PatternAD     0.3634  0.5664     0.7339   0.6571   0.3303  0.6280     0.3342    0.6241   0.3352
+Raw-control   0.3921  0.6313     0.7518   0.7275   0.3897  0.6798     0.3763    0.6794   0.3775
+Delta         -0.0287 -0.0649    -0.0179  -0.0704  -0.0594 -0.0518    -0.0421   -0.0553  -0.0423
+```
+
+Interpretation: the first pattern-aware scorer was not experimentally supported. It treated raw, scale-normalized, trend, shift, frequency, and sync scores as independent anomaly evidence and aggregated them with top-k. This degraded ranking quality on most datasets. The strongest negative example was Weather, where raw-control reached much better AUC/VUS metrics. Energy and MSDS were the only clearly favorable or near-favorable cases for the old scorer.
+
+### Revision Made After Analysis
+
+`ts_benchmark/baselines/PatternAD/utils/pattern_scoring.py` was rewritten so that the default scoring path is now `pattern_score_mode="reliability_weighted"`:
+
+```text
+score = raw_reconstruction_residual * context_reliability_weight
+```
+
+The change follows the original motivation more closely. The goal is not to create several independent anomaly scores. The goal is to interpret the same reconstruction residual under different local operating states. In the new default path:
+
+- `raw` remains the main anomaly evidence.
+- local scale, trend motion, and high-frequency activity act as normal-dynamics context and can reduce the effective residual in volatile regions.
+- residual concentration acts only as a weak risk context and can mildly increase the score when disagreement is localized across variables.
+- the final weight is clipped by `pattern_score_min_weight` and `pattern_score_max_weight` so context cannot erase the raw residual.
+- raw-control scripts remain true raw residual controls because they set `pattern_score_components=["raw"]` and `pattern_score_use_calibration=false`.
+- the previous top-k component aggregation path remains available through `pattern_score_mode="aggregate"` for explicit ablation, but it is no longer the default model.
+
+
+### Next Server Experiment
+
+After syncing this local copy to the server, rerun:
+
+```text
+scripts/multivariate_detection/detect_label/*_script/PatternAD.sh
+scripts/multivariate_detection/detect_label/*_script/PatternAD_raw.sh
+```
+
+The key comparison is now:
+
+```text
+Raw-control residual scoring
+Reliability-weighted PatternAD scoring
+Legacy aggregate scorer, only if explicitly enabled with pattern_score_mode="aggregate"
+```
+
+The next result should be judged primarily by AUC-PR, AUC-ROC, VUS-PR, VUS-ROC, event-level F1, and point-adjusted F1. If reliability weighting still loses to raw-control, the model should not continue adding post-hoc handcrafted components; the next step should move context into reconstruction training or calibration rather than score aggregation.

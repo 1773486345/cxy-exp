@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?style=flat-square&logo=python)
 
 ## Introduction
-This branch implements **PatternAD**, a multivariate anomaly detection model built around pattern-aware reconstruction scoring. The reconstruction backbone is a lightweight joint-variable masked reconstructor: each time step is encoded as a full multivariate state, and training masks both individual variable points and whole variable traces inside a window. The anomaly score is no longer the raw reconstruction residual. Instead, residuals are calibrated under local scale, trend, shift, high-frequency, and cross-variable concentration contexts, so the same residual magnitude can carry different anomaly meaning in different temporal states.
+This branch implements **PatternAD**, a multivariate anomaly detection model built around context-aware reconstruction scoring. The reconstruction backbone is a lightweight joint-variable masked reconstructor: each time step is encoded as a full multivariate state, and training masks both individual variable points and whole variable traces inside a window. The default anomaly score keeps raw reconstruction residual as the primary evidence and uses local scale, trend motion, high-frequency activity, and residual concentration only as reliability context. The goal is to make the same residual magnitude carry different anomaly meaning under different temporal states without letting auxiliary handcrafted components dominate the raw reconstruction signal.
 
 ## Quickstart
 

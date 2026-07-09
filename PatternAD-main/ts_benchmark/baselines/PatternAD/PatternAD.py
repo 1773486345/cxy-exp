@@ -44,6 +44,11 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "pattern_score_logsumexp_tau": 1.0,
     "pattern_score_eps": 1e-6,
     "pattern_score_use_calibration": True,
+    "pattern_score_mode": "reliability_weighted",
+    "pattern_score_context_strength": 0.35,
+    "pattern_score_risk_strength": 0.15,
+    "pattern_score_min_weight": 0.5,
+    "pattern_score_max_weight": 1.5,
     "pattern_score_max_fit_windows": 20000,
 }
 
@@ -167,6 +172,11 @@ class PatternAD:
             logsumexp_tau=getattr(self.config, "pattern_score_logsumexp_tau", 1.0),
             eps=getattr(self.config, "pattern_score_eps", 1e-6),
             use_calibration=getattr(self.config, "pattern_score_use_calibration", True),
+            score_mode=getattr(self.config, "pattern_score_mode", "reliability_weighted"),
+            context_strength=getattr(self.config, "pattern_score_context_strength", 0.35),
+            risk_strength=getattr(self.config, "pattern_score_risk_strength", 0.15),
+            min_weight=getattr(self.config, "pattern_score_min_weight", 0.5),
+            max_weight=getattr(self.config, "pattern_score_max_weight", 1.5),
         )
 
     @staticmethod
