@@ -24,7 +24,7 @@ Prepare Data. You can obtain the pre-processed datasets from the ./dataset folde
 - Run a multivariate experiment:
 
 ```bash
-sh ./scripts/multivariate_detection/detect_label/Weather_script/PatternAD.sh
+
 ```
 
 ## Modification Record
