@@ -211,6 +211,15 @@ def process_data_df(data: pd.DataFrame, nrows=None) -> pd.DataFrame:
     :param data: Data frame to read.
     :return:  The DataFrame of the content of the data file.
     """
+    if "cols" not in data.columns:
+        df = data.copy()
+        if df.columns[0] == "date":
+            df["date"] = pd.to_datetime(df["date"])
+            df.set_index("date", inplace=True)
+        if nrows is not None and isinstance(nrows, int) and df.shape[0] >= nrows:
+            df = df.iloc[:nrows, :]
+        return df
+
     label_exists = "label" in data["cols"].values
 
     all_points = data.shape[0]

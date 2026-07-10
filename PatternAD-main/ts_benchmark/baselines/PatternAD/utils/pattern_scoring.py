@@ -8,9 +8,10 @@ class PatternAwareScorer:
     cross-variable scores as independent anomaly evidence, then aggregated them.
     The raw-control experiment showed that this often hurts ranking quality.
 
-    The default mode therefore keeps the raw reconstruction residual as the
-    primary evidence and uses temporal context only to adjust how reliable that
-    residual is under the current local dynamics.
+    The default mode now returns raw reconstruction residual. If conditional
+    scoring is enabled by the model, the residual is computed only on positions
+    that were hidden from the reconstructor. Context should improve the
+    reconstruction itself, not multiply the final score after the fact.
     """
 
     DEFAULT_COMPONENTS = ("raw", "scale", "trend", "shift", "freq", "sync")
@@ -21,12 +22,12 @@ class PatternAwareScorer:
         components=None,
         local_window=5,
         trend_window=7,
-        aggregation="topk",
+        aggregation="mean",
         top_k=2,
         logsumexp_tau=1.0,
         eps=1e-6,
-        use_calibration=True,
-        score_mode="reliability_weighted",
+        use_calibration=False,
+        score_mode="raw",
         context_strength=0.35,
         risk_strength=0.15,
         min_weight=0.5,
@@ -98,7 +99,7 @@ class PatternAwareScorer:
             out[:, t, :] = np.abs(right - left)
         return out
 
-    def _evidence_arrays(self, true, pred):
+    def _evidence_arrays(self, true, pred, score_mask=None):
         true = self._as_numpy(true)
         pred = self._as_numpy(pred)
         if true.shape != pred.shape:
@@ -108,22 +109,40 @@ class PatternAwareScorer:
             )
 
         residual = (true - pred) ** 2
-        raw = residual.mean(axis=-1)
+        mask = None
+        if score_mask is not None:
+            mask = score_mask.detach().cpu().numpy() if hasattr(score_mask, "detach") else score_mask
+            mask = np.asarray(mask, dtype=bool)
+            if mask.shape != residual.shape:
+                raise ValueError(
+                    "PatternAwareScorer score_mask shape mismatch: "
+                    f"{mask.shape} vs {residual.shape}"
+                )
+            denom = np.maximum(mask.sum(axis=-1), 1)
+            raw = (residual * mask).sum(axis=-1) / denom
+        else:
+            raw = residual.mean(axis=-1)
 
         local_scale = self._rolling_std(true, self.local_window)
-        scale = (residual / (local_scale ** 2 + self.eps)).mean(axis=-1)
+        if mask is not None:
+            scale = ((residual / (local_scale ** 2 + self.eps)) * mask).sum(axis=-1) / denom
+        else:
+            scale = (residual / (local_scale ** 2 + self.eps)).mean(axis=-1)
 
         true_trend = self._rolling_mean(true, self.trend_window)
         pred_trend = self._rolling_mean(pred, self.trend_window)
-        trend = ((true_trend - pred_trend) ** 2).mean(axis=-1)
+        trend_residual = (true_trend - pred_trend) ** 2
+        trend = (trend_residual * mask).sum(axis=-1) / denom if mask is not None else trend_residual.mean(axis=-1)
 
         true_shift = self._left_right_shift(true, self.trend_window)
         pred_shift = self._left_right_shift(pred, self.trend_window)
-        shift = ((true_shift - pred_shift) ** 2).mean(axis=-1)
+        shift_residual = (true_shift - pred_shift) ** 2
+        shift = (shift_residual * mask).sum(axis=-1) / denom if mask is not None else shift_residual.mean(axis=-1)
 
         true_high = true - true_trend
         pred_high = pred - pred_trend
-        freq = ((true_high - pred_high) ** 2).mean(axis=-1)
+        freq_residual = (true_high - pred_high) ** 2
+        freq = (freq_residual * mask).sum(axis=-1) / denom if mask is not None else freq_residual.mean(axis=-1)
 
         median = np.median(residual, axis=-1, keepdims=True)
         mad = np.median(np.abs(residual - median), axis=-1, keepdims=True)
@@ -146,8 +165,8 @@ class PatternAwareScorer:
             "sync_context": active_ratio,
         }
 
-    def component_scores(self, true, pred):
-        arrays = self._evidence_arrays(true, pred)
+    def component_scores(self, true, pred, score_mask=None):
+        arrays = self._evidence_arrays(true, pred, score_mask=score_mask)
         return {name: arrays[name] for name in self.components if name in arrays}
 
     def fit(self, true_windows, pred_windows):
@@ -216,10 +235,19 @@ class PatternAwareScorer:
         weight = np.clip(1.0 - relief + risk, self.min_weight, self.max_weight)
         return raw * weight
 
-    def score_windows(self, true_windows, pred_windows):
+    def score_windows(self, true_windows, pred_windows, score_mask=None):
+        if self.score_mode == "raw":
+            return self._evidence_arrays(true_windows, pred_windows, score_mask=score_mask)["raw"]
+
         raw_only = self.components == ("raw",) and not self.use_calibration
         if raw_only:
-            return self.component_scores(true_windows, pred_windows)["raw"]
+            return self.component_scores(true_windows, pred_windows, score_mask=score_mask)["raw"]
+
+        if score_mask is not None:
+            # Masked scoring is intentionally supported only for raw residual.
+            # Legacy component aggregation remains available as an explicit
+            # unmasked ablation path.
+            return self._evidence_arrays(true_windows, pred_windows, score_mask=score_mask)["raw"]
 
         if self.score_mode in {"aggregate", "legacy", "component_aggregate"}:
             return self._aggregate_components(true_windows, pred_windows)

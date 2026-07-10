@@ -1,4 +1,0 @@
-strategy_args,metric_name,"InterFusion;{""arnn_hidden"": 64, ""batch_size"": 128, ""dense_hidden"": 64, ""max_epoch"": 10, ""posterior_flow_layers"": 0, ""posterior_flow_type"": ""None"", ""pretrain_max_epoch"": 10, ""rnn_hidden"": 64, ""test_batch_size"": 256, ""test_n_z"": 1}"
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.695582889866708
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.4310131960504085
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.0017286815784716
