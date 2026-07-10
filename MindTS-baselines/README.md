@@ -56,6 +56,36 @@ PY
 bash scripts/baselines/run_all_requested_baselines.sh
 ```
 
+PatternAD 新增数据集 baseline，结果统一写到本目录的 `result/label`：
+
+```bash
+cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines
+PYTHON_BIN=/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python \
+  bash scripts/baselines/run_patternad_dataset_baselines.sh
+```
+
+默认跑 `MetroPT3, HAI21, SMD`，其中 HAI21/SMD 使用 PatternAD full 口径。只跑部分数据集：
+
+```bash
+PYTHON_BIN=/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python \
+  bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
+```
+
+只跑部分模型可用逗号分隔的 `MODEL_FILTER`，例如：
+
+```bash
+MODEL_FILTER=PCA,IsolationForest \
+PYTHON_BIN=/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python \
+  bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
+```
+
+汇总文件：
+
+```text
+result/label/patternad_baseline_summary.csv
+result/label/patternad_baseline_three_metrics.csv
+```
+
 强制重跑全部 9 个数据集 x 20 个 baseline：
 
 ```bash
