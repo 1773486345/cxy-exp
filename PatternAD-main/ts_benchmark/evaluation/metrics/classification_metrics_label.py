@@ -37,6 +37,18 @@ __all__ = [
 
 
 metricor_grader = metricor()
+_VUS_CACHE = {"actual": None, "score": None, "values": None}
+
+
+def _vus_metrics(actual: np.ndarray, score: np.ndarray):
+    if _VUS_CACHE["actual"] is actual and _VUS_CACHE["score"] is score:
+        return _VUS_CACHE["values"]
+
+    sliding_window = int(np.median(get_list_anomaly(actual)))
+    *_, vus_roc, vus_pr = generate_curve(actual, score, 2 * sliding_window)
+    values = (vus_roc, vus_pr)
+    _VUS_CACHE.update({"actual": actual, "score": score, "values": values})
+    return values
 
 
 def adjust_predicts(actual: np.ndarray, predicted: np.ndarray, **kwargs) -> np.ndarray:
@@ -496,20 +508,10 @@ def R_AUC_PR(actual: np.ndarray, predicted: np.ndarray, another: np.ndarray, **k
 
 
 def VUS_ROC(actual: np.ndarray, predicted: np.ndarray, another: np.ndarray, **kwargs):
-    slidingWindow = int(np.median(get_list_anomaly(actual)))
-    # slidingWindow = 100
-
-    _, _, _, _, _, _, VUS_ROC, VUS_PR = generate_curve(
-        actual, another, 2 * slidingWindow
-    )
-    return VUS_ROC
+    vus_roc, _ = _vus_metrics(actual, another)
+    return vus_roc
 
 
 def VUS_PR(actual: np.ndarray, predicted: np.ndarray, another: np.ndarray, **kwargs):
-    slidingWindow = int(np.median(get_list_anomaly(actual)))
-    # slidingWindow = 100
-
-    _, _, _, _, _, _, VUS_ROC, VUS_PR = generate_curve(
-        actual, another, 2 * slidingWindow
-    )
-    return VUS_PR
+    _, vus_pr = _vus_metrics(actual, another)
+    return vus_pr

@@ -518,3 +518,66 @@ Syntax check passed for PatternAD.py and pattern_scoring.py by Python compile().
 A real forward smoke test was not run locally because this downloaded workspace does not have torch installed.
 Run the smoke test on the server environment after syncing with Git.
 ```
+
+
+## 2026-07-11 Exact VUS Scalability Revision
+
+Large added datasets exposed a scalability defect in the shared VUS evaluator. This was an evaluation implementation issue, not a PatternAD model or scoring issue.
+
+Observed case:
+
+```text
+MetroPT3 test length: 1,302,098
+anomaly events: 4
+median anomaly length: 5,511
+VUS window count: 11,023
+old work: windows x 250 thresholds x full sequence scans
+symptom: model fitting/scoring completed, then evaluation appeared to hang
+```
+
+PatternAD-side code changes:
+
+```text
+ts_benchmark/evaluation/metrics/vus_metrics.py
+- RangeAUC_volume now uses an exact sparse implementation.
+- Score thresholds are prepared once.
+- Weighted true positives are accumulated only over anomaly ranges and their expanded support.
+- The metric definition, thresholds, positive-range extension, ROC integration, and PR integration are unchanged.
+
+ts_benchmark/evaluation/metrics/classification_metrics_label.py
+- VUS_ROC and VUS_PR now share one generate_curve result for the same label/score arrays.
+- This avoids computing the identical VUS volume twice.
+```
+
+Validation:
+
+```text
+Reference comparison: optimized implementation versus the Git HEAD implementation.
+Test sizes: 50, 101, 500, and 2,000 points.
+Test windows: 0, 1, 2, 3, 7, 15, and 30.
+Included tied anomaly scores.
+Result: all ROC/PR curves and final VUS_ROC/VUS_PR values matched within 1e-11.
+
+MetroPT3 scale benchmark:
+points: 1,302,098
+windows: 11,023
+optimized elapsed time: 4.52 seconds on the local benchmark machine
+The benchmark used real MetroPT3 labels and deterministic random scores to isolate metric runtime.
+```
+
+Experiment interpretation:
+
+```text
+- Existing completed PatternAD reports remain semantically valid; the VUS formula was not changed.
+- New PatternAD and baseline runs must use the synchronized optimized evaluator for practical runtime.
+- Do not compare runs that were interrupted before report generation; rerun those incomplete model-series pairs.
+- Server paths and Python environments remain deployment-specific. The code uses repository-relative imports and the currently selected Python environment.
+```
+
+Server continuation after Git sync:
+
+```bash
+cd <server-workspace>/PatternAD-main
+conda activate <server-environment>
+sh ./scripts/multivariate_detection/detect_label/MetroPT3_script/PatternAD.sh
+```

@@ -90,6 +90,12 @@ sh ./scripts/multivariate_detection/detect_label/SMD_script/PatternAD_full.sh
 sh ./scripts/multivariate_detection/detect_label/SMD_script/PatternAD_raw_full.sh
 ```
 
+## Evaluation Scalability
+
+The VUS evaluator uses an exact sparse implementation for long multivariate datasets. It preserves the original RangeAUC-volume definition while avoiding repeated full-sequence scans for every window and threshold. `VUS_ROC` and `VUS_PR` also share the same volume computation.
+
+This change affects evaluation runtime only; it does not change PatternAD reconstruction, anomaly scores, threshold ratios, or metric definitions. See `PATTERN_AD_MODIFICATION_LOG.md` for the equivalence tests and MetroPT3 benchmark.
+
 ## Notes
 
 Current local-added datasets:

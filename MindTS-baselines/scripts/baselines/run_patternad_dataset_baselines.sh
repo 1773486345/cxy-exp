@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-TAB_ROOT="${TAB_ROOT:-/media/h3c/users/wangyueyang1/cxy/TAB}"
-PYTHON_BIN="${PYTHON_BIN:-/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python}"
+TAB_ROOT="${TAB_ROOT:-${PROJECT_ROOT}/../TAB}"
+PYTHON_BIN="${PYTHON_BIN:-python}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
 CONTINUE_ON_ERROR="${CONTINUE_ON_ERROR:-1}"
 GPU="${GPU:-0}"
@@ -161,12 +161,18 @@ run_benchmark_model() {
     return 0
   fi
 
+  local benchmark_entry="./scripts/run_benchmark.py"
+  if [ "${root_dir}" = "${TAB_ROOT}" ]; then
+    benchmark_entry="${PROJECT_ROOT}/scripts/baselines/run_tab_benchmark.py"
+  fi
+
   local cmd=(
-    "${PYTHON_BIN}" -u ./scripts/run_benchmark.py
+    "${PYTHON_BIN}" -u "${benchmark_entry}"
     --config-path "unfixed_detect_label_multi_config.json"
     --data-name-list "${files[@]}"
     --model-name "${model_name}"
     --model-hyper-params "${model_params}"
+    --metrics '{"name":"affiliation_f"}' '{"name":"VUS_ROC"}' '{"name":"VUS_PR"}'
     --num-workers 1
     --timeout 60000
     --save-path "${save_path}"

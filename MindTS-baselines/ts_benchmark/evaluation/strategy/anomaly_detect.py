@@ -63,24 +63,34 @@ class AnomalyDetect(Strategy):
             predict_labels, another = self.detect(test_data)
 
             # 模型打label保存到本地
-            for ratio, labels in predict_labels.items():
-                pr_label = pd.DataFrame(labels, columns=['Label'])
-                folder_path = './Labels/MindTS/KR' + str(int(ratio)) + '/'
-                if not os.path.exists(folder_path):
-                    os.makedirs(folder_path)
-                output_file = os.path.join(folder_path, 'test_labels.txt')
-                np.savetxt(output_file, pr_label, fmt='%f')
+            if os.environ.get("SAVE_PREDICTED_LABELS") == "1":
+                for ratio, labels in predict_labels.items():
+                    pr_label = pd.DataFrame(labels, columns=["Label"])
+                    folder_path = "./Labels/MindTS/KR" + str(int(ratio)) + "/"
+                    os.makedirs(folder_path, exist_ok=True)
+                    output_file = os.path.join(folder_path, "test_labels.txt")
+                    np.savetxt(output_file, pr_label, fmt="%f")
 
             if not isinstance(predict_labels, dict):
                 predict_labels = {"None": predict_labels}
 
             actual_label = test_label.to_numpy().flatten()
+            actual_float = actual_label.astype(float, copy=False)
+            another = np.asarray(another)
+            remaining_length_another = len(actual_label) - len(another)
+            if remaining_length_another > 0:
+                another = np.pad(
+                    another,
+                    (0, remaining_length_another),
+                    mode="constant",
+                    constant_values=0,
+                )
+            another_float = another.astype(float, copy=False)
             end_inference_time = time.time()
 
             single_series_results_list = []
             for ratio, predict_label in predict_labels.items():
                 remaining_length = len(actual_label) - len(predict_label)
-                remaining_length_another = len(actual_label) - len(another)
                 print(remaining_length)
                 # Pad the predict_label array with zeros at the end
                 if remaining_length > 0:
@@ -91,29 +101,12 @@ class AnomalyDetect(Strategy):
                         constant_values=0,
                     )
 
-                if remaining_length_another > 0:
-                    another = np.pad(
-                        another,
-                        (0, remaining_length),
-                        mode="constant",
-                        constant_values=0,
-                    )
-
                 single_series_results, log_info = self.evaluator.evaluate_with_log(
-                    actual=actual_label.astype(float),
-                    predicted=predict_label.astype(float),
-                    another=another.astype(float),
+                    actual=actual_float,
+                    predicted=predict_label.astype(float, copy=False),
+                    another=another_float,
                 )
                 print(single_series_results)
-
-                inference_data = [predict_label, another]
-                actual_data_pickle = pickle.dumps(test_label)
-                actual_data_pickle = base64.b64encode(actual_data_pickle).decode("utf-8")
-
-                inference_data_pickle = pickle.dumps(inference_data)
-                inference_data_pickle = base64.b64encode(inference_data_pickle).decode(
-                    "utf-8"
-                )
 
                 single_series_results += [
                     series_name,

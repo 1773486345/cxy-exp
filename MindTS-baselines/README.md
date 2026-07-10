@@ -60,14 +60,14 @@ PatternAD 新增数据集 baseline，结果统一写到本目录的 `result/labe
 
 ```bash
 cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines
-PYTHON_BIN=/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python \
+PYTHON_BIN="$(command -v python)" \
   bash scripts/baselines/run_patternad_dataset_baselines.sh
 ```
 
 默认跑 `MetroPT3, HAI21, SMD`，其中 HAI21/SMD 使用 PatternAD full 口径。只跑部分数据集：
 
 ```bash
-PYTHON_BIN=/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python \
+PYTHON_BIN="$(command -v python)" \
   bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
 ```
 
@@ -75,7 +75,7 @@ PYTHON_BIN=/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python \
 
 ```bash
 MODEL_FILTER=PCA,IsolationForest \
-PYTHON_BIN=/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python \
+PYTHON_BIN="$(command -v python)" \
   bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
 ```
 

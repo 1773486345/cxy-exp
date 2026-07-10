@@ -394,57 +394,125 @@ class metricor:
 
     # TPR_FPR_window
     def RangeAUC_volume(self, labels_original, score, windowSize):
-        score_sorted = -np.sort(-score)
+        score = np.asarray(score)
+        labels_original = np.asarray(labels_original)
+        length = len(score)
+
+        score_sorted = np.sort(score)
+        threshold_indices = np.linspace(0, length - 1, 250).astype(int)
+        thresholds = score_sorted[::-1][threshold_indices]
+        threshold_starts = np.searchsorted(score_sorted, thresholds, side="left")
+        predicted_counts = length - threshold_starts
+        first_matching_threshold = np.searchsorted(
+            -thresholds, -score, side="left"
+        )
+
+        original_segments = self.range_convers_new(labels_original)
+        positive_count = np.sum(labels_original)
+        window_3d = np.arange(0, windowSize + 1, 1)
 
         tpr_3d = []
         fpr_3d = []
         prec_3d = []
-
         auc_3d = []
         ap_3d = []
 
-        window_3d = np.arange(0, windowSize + 1, 1)
-        P = np.sum(labels_original)
-
         for window in window_3d:
-            labels = self.extend_postive_range(labels_original, window)
+            half_window = window // 2
+            merged_segments = []
+            for start, end in original_segments:
+                expanded_start = max(0, start - half_window)
+                expanded_end = min(
+                    length - 1, end + half_window - 1 if half_window else end
+                )
+                if (
+                    merged_segments
+                    and expanded_start <= merged_segments[-1][1] + 1
+                ):
+                    merged_segments[-1][1] = max(
+                        merged_segments[-1][1], expanded_end
+                    )
+                    merged_segments[-1][2].append((start, end))
+                else:
+                    merged_segments.append(
+                        [expanded_start, expanded_end, [(start, end)]]
+                    )
 
-            # print(np.sum(labels))
-            L = self.range_convers_new(labels)
-            TPR_list = [0]
-            FPR_list = [0]
-            Precision_list = [1]
+            weighted_threshold_counts = np.zeros(len(thresholds), dtype=float)
+            adjusted_label_count = 0.0
+            segment_max_scores = []
 
-            for i in np.linspace(0, len(score) - 1, 250).astype(int):
-                threshold = score_sorted[i]
-                # print('thre='+str(threshold))
-                pred = score >= threshold
-                TPR, FPR, Precision = self.TPR_FPR_RangeAUC(labels, pred, P, L)
+            for expanded_start, expanded_end, source_segments in merged_segments:
+                values = np.zeros(expanded_end - expanded_start + 1, dtype=float)
+                for start, end in source_segments:
+                    original_start = max(start, expanded_start)
+                    original_end = min(end, expanded_end)
+                    values[
+                        original_start - expanded_start
+                        : original_end - expanded_start + 1
+                    ] += 1
 
-                TPR_list.append(TPR)
-                FPR_list.append(FPR)
-                Precision_list.append(Precision)
+                    if window:
+                        right_start = max(end, expanded_start)
+                        right_end = min(end + half_window - 1, expanded_end)
+                        if right_start <= right_end:
+                            positions = np.arange(right_start, right_end + 1)
+                            values[
+                                right_start - expanded_start
+                                : right_end - expanded_start + 1
+                            ] += np.sqrt(1 - (positions - end) / window)
 
-            TPR_list.append(1)
-            FPR_list.append(1)  # otherwise, range-AUC will stop earlier than (1,1)
+                        left_start = max(start - half_window, expanded_start)
+                        left_end = min(start - 1, expanded_end)
+                        if left_start <= left_end:
+                            positions = np.arange(left_start, left_end + 1)
+                            values[
+                                left_start - expanded_start
+                                : left_end - expanded_start + 1
+                            ] += np.sqrt(1 - (start - positions) / window)
 
-            tpr = np.array(TPR_list)
-            fpr = np.array(FPR_list)
-            prec = np.array(Precision_list)
+                np.minimum(values, 1, out=values)
+                threshold_bins = first_matching_threshold[
+                    expanded_start : expanded_end + 1
+                ]
+                weighted_threshold_counts += np.bincount(
+                    threshold_bins, weights=values, minlength=len(thresholds)
+                )[: len(thresholds)]
+                adjusted_label_count += np.sum(values)
+                segment_max_scores.append(
+                    np.max(score[expanded_start : expanded_end + 1])
+                )
+
+            true_positives = np.cumsum(weighted_threshold_counts)
+            positive_count_adjusted = (
+                positive_count + adjusted_label_count
+            ) / 2
+            recall = np.minimum(true_positives / positive_count_adjusted, 1)
+            existence_ratio = np.mean(
+                np.asarray(segment_max_scores)[:, None] >= thresholds[None, :],
+                axis=0,
+            )
+
+            tpr = np.r_[0, recall * existence_ratio, 1]
+            fpr = np.r_[
+                0,
+                (predicted_counts - true_positives)
+                / (length - positive_count_adjusted),
+                1,
+            ]
+            precision = np.r_[1, true_positives / predicted_counts]
 
             tpr_3d.append(tpr)
             fpr_3d.append(fpr)
-            prec_3d.append(prec)
+            prec_3d.append(precision)
 
             width = fpr[1:] - fpr[:-1]
             height = (tpr[1:] + tpr[:-1]) / 2
-            AUC_range = np.sum(width * height)
-            auc_3d.append(AUC_range)
+            auc_3d.append(np.sum(width * height))
 
-            width_PR = tpr[1:-1] - tpr[:-2]
-            height_PR = (prec[1:] + prec[:-1]) / 2
-            AP_range = np.sum(width_PR * height_PR)
-            ap_3d.append(AP_range)
+            width_pr = tpr[1:-1] - tpr[:-2]
+            height_pr = (precision[1:] + precision[:-1]) / 2
+            ap_3d.append(np.sum(width_pr * height_pr))
 
         return (
             tpr_3d,
@@ -454,7 +522,6 @@ class metricor:
             sum(auc_3d) / len(window_3d),
             sum(ap_3d) / len(window_3d),
         )
-
 
 def generate_curve(label, score, slidingWindow):
     (
