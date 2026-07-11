@@ -305,63 +305,29 @@ is now disabled in all formal cells. Expanded raw cells are stored in
 `p1_raw_cells_20260712.tar.gz`; `run_plan.json`, frozen inputs, and the strict
 summary remain directly readable.
 
-The next full experiment is the strict P1-v2 development grid: ten generator
-seeds crossed with model seeds 2021/2022/2023 and all four A cells. P1-v2 uses
-the frozen 80/10/10 temporal model-fit partition: optimization, early stopping,
-and a disjoint normal score-reference segment, with `seq_len - 1` gaps at both
-internal boundaries. The score-reference segment alone fits the scale-stratified
-empirical tail map; the outer calibration segment remains threshold-only.
-Inspect the 120-command plan without creating files or processes:
+P1-v2-holdout completed its ten-generator × three-model-seed × four-A-cell
+development grid. Its independent 80/10/10 temporal model-fit partition did not
+meet the matched-ordering or regime-FPR gates, so do not start P2. The next
+development-only check is a causal innovation head: it predicts `x_t` from
+`x_{<t}` only and is exported as a diagnostic component, not merged into the
+primary score. Run one full-epoch A11 diagnostic first:
 
 ```bash
 conda run --no-capture-output -n patternad_env \
-  python -u scripts/patternad/run_contextual_factorial.py \
-  --seed-group development --run-name p1_contextual_calibrated_v2_holdout \
-  --gpus 0 --dry-run
+  python -u scripts/patternad/evaluate_contextual_mechanisms.py \
+  --artifact-dir artifacts/patternad_synthetic/contextual_v1/seed_3101 \
+  --patternad-variant A11 --seed 2021 --num-epochs 30 \
+  --hyperparameter-overrides '{"reconstruction_causal_innovation_loss_weight": 1.0}' \
+  --method-name A11_causal_innovation_dev \
+  --output-dir result/patternad_synthetic/dev_causal_innovation
 ```
 
-Remove `--dry-run` to execute. The runner generates missing synthetic fixtures,
-runs one isolated model process at a time, writes an immutable `run_plan.json`,
-and validates every completed identity against its config/source hashes. A
-timeout or interrupt terminates the complete child process group before the
-runner returns, so CUDA workers do not remain attached. Resume failed or
-interrupted identities without overwriting completed ones:
-
-```bash
-conda run --no-capture-output -n patternad_env \
-  python -u scripts/patternad/run_contextual_factorial.py \
-  --seed-group development --run-name p1_contextual_calibrated_v2_holdout \
-  --gpus 0 --resume
-```
-
-Monitor the active run from a separate terminal. This read-only command refreshes
-the completed/total count, current identity, elapsed time, log freshness, recent
-epoch lines, failures, and a per-variant ETA when enough timings are available:
-
-```bash
-conda run --no-capture-output -n patternad_env \
-  python -u scripts/patternad/status_contextual_factorial.py \
-  --input result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development \
-  --watch 5
-```
-
-`Ctrl+C` stops only the status monitor; it does not signal the experiment
-runner. Omit `--watch 5` for a one-shot report.
-
-After the complete grid finishes, run the fail-closed paired summary and crossed
-generator/model-seed bootstrap:
-
-```bash
-conda run --no-capture-output -n patternad_env \
-  python -u scripts/patternad/summarize_contextual_factorial.py \
-  --input result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development \
-  --n-bootstrap 10000 --seed 2021
-```
-
-Return the run root including `run_plan.json`, `summary/`, and any identity whose
-`identity_metadata.json` is not `status=completed`. Do not open generator seeds
-3111-3120 before the development candidate, score combination, and gates are
-frozen. Locked synthetic confirmation requires the runner's explicit
+Inspect `score_component_orderings.csv` for
+`causal_innovation_standardized_squared_residual`: abrupt/gradual must improve
+without claiming a combined detector. If it does, freeze a multi-seed diagnostic
+grid and a p-value combination rule before any real-data run. Do not open
+generator seeds 3111-3120 before the development candidate, score combination,
+and gates are frozen. Locked synthetic confirmation requires the runner's explicit
 `--allow-locked` acknowledgement and the complete predeclared seed grid.
 
 External methods can instead provide one `<mechanism>.npz` per mechanism, each

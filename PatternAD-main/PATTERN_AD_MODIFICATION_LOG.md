@@ -811,3 +811,18 @@ score reference     10%
 The scaler is fitted on optimization train only. The score-reference segment alone fits the normal-only contextual-tail ECDF; validation is only for checkpoint selection, and the outer train-calibration tail remains threshold-only. All A/B cells use the same split, so this change does not add a context/distribution confound. Diagnostics now persist the segment sizes, fractions, gap, and reference source. Unit coverage verifies non-overlap, exact window gaps, and invalid fraction rejection.
 
 The stale tracked synthetic fixture `artifacts/patternad_synthetic/contextual_v1/seed_3101` was removed. Its recorded generator hash did not match the current generator, so the fail-closed P1 runner rejected it. The P1-v2-holdout runner regenerates all development fixtures from the frozen current generator instead of silently mixing incompatible synthetic inputs.
+
+## 2026-07-12 P1-v2-Holdout Result And Causal Innovation Diagnostic
+
+The complete P1-v2-holdout grid passed all provenance and balance checks: 10 generator seeds × 3 model seeds × A00/A10/A01/A11 = 120 identities. Its frozen Git commit is `20c857e`; it matches the current critical model, manifest, runner, and summarizer sources.
+
+```text
+A11 - A00 macro AP: +0.034939, 95% crossed-bootstrap CI [0.026281, 0.044365]
+A11 - A01 matched ordering: +0.006667, CI [-0.100000, 0.100000]  -> fail
+relative maximum regime-FPR-gap reduction vs A00: 5.40%, CI spans zero -> fail
+A11 - A00 dependency-break AP: +0.007662, CI [0.005228, 0.010457] -> pass
+```
+
+The failure is structurally informative. Dynamic Gaussian conditioning strongly improves the equal-deviation subproblem (`A11-A01` same-deviation ordering `+0.4556`), but it degrades slow-drift versus abrupt-shift ordering (`-0.6667`). Thus a bidirectional masked reconstructor can use post-transition observations to explain an abrupt shift. The holdout ECDF revision was statistically necessary, but it cannot repair this information-set mismatch. No real-data matrix may start from P1-v2.
+
+The new development-only branch is a causal innovation head. Its GRU receives `x_{<t}` through a one-step right shift and predicts a Gaussian distribution for `x_t`; perturbing `x_t` or future values cannot change the output at `t`. The head is trained on complete past observations by `reconstruction_causal_innovation_loss_weight`, is instantiated in every distribution variant for parameter-count fairness, and is disabled (`0.0`) in all formal A/B cells. At inference it exports raw and standardized innovation residuals as score components but does not alter the primary level-tail score. The first test is one full-epoch A11 run on generator 3101/model seed 2021 with weight `1.0`; inspect its component ordering before freezing any combination or expanded grid.

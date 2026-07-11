@@ -235,7 +235,9 @@ class PatternADContextualRunnerTest(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 _run_logged(command, root / "child.log", os.environ, 0.5)
             pid = int(pid_path.read_text(encoding="utf-8"))
-            with self.assertRaises(ProcessLookupError):
+            # Windows does not implement POSIX signal 0 and raises WinError 87
+            # after a successful process reap; POSIX raises ProcessLookupError.
+            with self.assertRaises((ProcessLookupError, OSError)):
                 os.kill(pid, 0)
 
 

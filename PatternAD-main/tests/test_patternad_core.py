@@ -131,6 +131,9 @@ class PatternADCoreTest(unittest.TestCase):
                 "transition_standardized_squared_residual",
                 "predicted_transition_scale",
                 "transition_gate",
+                "causal_innovation_squared_residual",
+                "causal_innovation_standardized_squared_residual",
+                "predicted_causal_innovation_scale",
             },
         )
         for values in components.values():
@@ -403,7 +406,10 @@ class PatternADCoreTest(unittest.TestCase):
         counts = []
         for distribution in ("mse", "gaussian", "student_t"):
             model = JointMultivariateReconstructor(
-                _small_config(distribution_mode=distribution)
+                _small_config(
+                    distribution_mode=distribution,
+                    use_causal_innovation_diagnostics=True,
+                )
             )
             counts.append(sum(parameter.numel() for parameter in model.parameters()))
             output = model(torch.randn(2, 6, 2))
@@ -416,6 +422,10 @@ class PatternADCoreTest(unittest.TestCase):
                 if distribution == "gaussian":
                     self.assertEqual(output["transition_mean"].shape, (2, 6, 2))
                     self.assertTrue((output["transition_scale"] > 0).all())
+                    self.assertEqual(
+                        output["causal_innovation_mean"].shape, (2, 6, 2)
+                    )
+                    self.assertTrue((output["causal_innovation_scale"] > 0).all())
         self.assertEqual(len(set(counts)), 1)
 
         context_on = JointMultivariateReconstructor(
@@ -648,6 +658,56 @@ class PatternADCoreTest(unittest.TestCase):
         loss.backward()
         self.assertIsNotNone(transition_scale.grad)
         self.assertGreater(float(transition_scale.grad.abs().sum()), 0.0)
+
+    def test_causal_innovation_outputs_ignore_current_and_future_values(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                use_causal_innovation_diagnostics=True,
+            )
+        )
+        model.eval()
+        source = torch.randn(1, 6, 2)
+        changed = source.clone()
+        changed[:, 3:, :] = changed[:, 3:, :] + 1e4
+
+        first = model(source)
+        second = model(changed)
+        torch.testing.assert_close(
+            first["causal_innovation_mean"][:, :4, :],
+            second["causal_innovation_mean"][:, :4, :],
+        )
+        torch.testing.assert_close(
+            first["causal_innovation_scale"][:, :4, :],
+            second["causal_innovation_scale"][:, :4, :],
+        )
+
+    def test_causal_innovation_loss_trains_only_post_initial_predictions(self):
+        detector = PatternAD(
+            reconstruction_distribution="gaussian",
+            reconstruction_full_loss_weight=0.0,
+            reconstruction_causal_innovation_loss_weight=1.0,
+        )
+        target = torch.tensor([[[0.0], [1.0], [2.0]]])
+        main_mean = target.clone().requires_grad_()
+        causal_mean = torch.zeros_like(target, requires_grad=True)
+        causal_scale = torch.ones_like(target, requires_grad=True)
+        outputs = {
+            "mean": main_mean,
+            "scale": torch.ones_like(target),
+            "causal_innovation_mean": causal_mean,
+            "causal_innovation_scale": causal_scale,
+        }
+        loss = detector._reconstruction_loss(
+            outputs, target, torch.ones_like(target, dtype=torch.bool)
+        )
+        loss.backward()
+        self.assertTrue(torch.equal(causal_mean.grad[:, :1, :], torch.zeros_like(causal_mean.grad[:, :1, :])))
+        self.assertGreater(float(causal_mean.grad[:, 1:, :].abs().sum()), 0.0)
+
+    def test_causal_innovation_loss_rejects_mse_configuration(self):
+        with self.assertRaisesRegex(ValueError, "requires gaussian or student_t"):
+            PatternADConfig(reconstruction_causal_innovation_loss_weight=0.1)
 
 
 if __name__ == "__main__":

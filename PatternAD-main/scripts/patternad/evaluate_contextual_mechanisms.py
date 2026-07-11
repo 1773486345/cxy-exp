@@ -94,6 +94,7 @@ def run_patternad_variant(
     seed: int,
     score_dir: Path,
     num_epochs: Optional[int] = None,
+    hyperparameter_overrides: Optional[Mapping[str, Any]] = None,
 ) -> Path:
     """Fit one frozen variant once and export aligned scores for all mechanisms."""
     if str(REPO_ROOT) not in sys.path:
@@ -106,6 +107,8 @@ def run_patternad_variant(
         raise ValueError(f"Unknown factorial variant {variant!r}.")
     hyperparameters = dict(factorial["shared_hyperparameters"])
     hyperparameters.update(factorial["variants"][variant]["hyperparameters"])
+    if hyperparameter_overrides:
+        hyperparameters.update(dict(hyperparameter_overrides))
     hyperparameters["train_mask_seed"] = int(seed)
     if num_epochs is not None:
         if num_epochs < 1:
@@ -625,6 +628,13 @@ def _parse_args() -> argparse.Namespace:
         help="Explicit smoke-only epoch override; omit for the frozen manifest value.",
     )
     parser.add_argument(
+        "--hyperparameter-overrides",
+        help=(
+            "JSON object applied after the selected variant; intended for isolated "
+            "development diagnostics and recorded in score_run_metadata.json."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         help="Defaults to an isolated generator/method/model-seed directory.",
@@ -656,6 +666,19 @@ def main() -> int:
     if args.score_dir is not None and args.patternad_variant is not None:
         raise ValueError("Use either --score-dir or --patternad-variant, not both.")
     score_dir = args.score_dir.resolve() if args.score_dir is not None else None
+    if args.hyperparameter_overrides is None:
+        hyperparameter_overrides = None
+    else:
+        try:
+            hyperparameter_overrides = json.loads(args.hyperparameter_overrides)
+        except json.JSONDecodeError as error:
+            raise ValueError("--hyperparameter-overrides must be valid JSON.") from error
+        if not isinstance(hyperparameter_overrides, dict):
+            raise ValueError("--hyperparameter-overrides must be a JSON object.")
+        if args.patternad_variant is None:
+            raise ValueError(
+                "--hyperparameter-overrides requires --patternad-variant."
+            )
     method_name = args.method_name
     if method_name == "unnamed":
         if args.patternad_variant is not None:
@@ -692,6 +715,7 @@ def main() -> int:
             args.seed,
             generated_score_dir,
             args.num_epochs,
+            hyperparameter_overrides,
         )
     if args.score_key is not None:
         score_key = args.score_key

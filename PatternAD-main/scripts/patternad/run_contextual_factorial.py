@@ -241,17 +241,23 @@ def _validate_completed_identity(
 def _terminate_process_group(process: subprocess.Popen, grace_seconds: float = 10.0) -> None:
     if process.poll() is not None:
         return
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return
+    if os.name == "nt":
+        process.terminate()
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
     try:
         process.wait(timeout=grace_seconds)
     except subprocess.TimeoutExpired:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        if os.name == "nt":
+            process.kill()
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         process.wait()
 
 
@@ -263,14 +269,20 @@ def _run_logged(
 ) -> float:
     started = time.perf_counter()
     with log_path.open("w", encoding="utf-8") as log:
+        process_options = {
+            "cwd": REPO_ROOT,
+            "env": dict(environment),
+            "stdout": log,
+            "stderr": subprocess.STDOUT,
+            "text": True,
+        }
+        if os.name == "nt":
+            process_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            process_options["start_new_session"] = True
         process = subprocess.Popen(
             list(command),
-            cwd=REPO_ROOT,
-            env=dict(environment),
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            text=True,
-            start_new_session=True,
+            **process_options,
         )
         try:
             return_code = process.wait(timeout=timeout_seconds)

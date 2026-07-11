@@ -40,6 +40,8 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "train_variable_mask_ratio": 0.15,
     "reconstruction_full_loss_weight": 0.1,
     "reconstruction_transition_loss_weight": 0.0,
+    "reconstruction_causal_innovation_loss_weight": 0.0,
+    "use_causal_innovation_diagnostics": False,
     "reconstruction_validation_fraction": 0.1,
     "pattern_score_components": ["raw"],
     "pattern_score_local_window": 5,
@@ -105,6 +107,19 @@ class PatternADConfig:
             float(getattr(self, "reconstruction_transition_loss_weight", 0.0)),
             0.0,
         )
+        self.reconstruction_causal_innovation_loss_weight = max(
+            float(
+                getattr(
+                    self,
+                    "reconstruction_causal_innovation_loss_weight",
+                    0.0,
+                )
+            ),
+            0.0,
+        )
+        self.use_causal_innovation_diagnostics = bool(
+            getattr(self, "use_causal_innovation_diagnostics", False)
+        ) or self.reconstruction_causal_innovation_loss_weight > 0.0
         self.reconstruction_validation_fraction = float(
             getattr(self, "reconstruction_validation_fraction", 0.1)
         )
@@ -150,6 +165,13 @@ class PatternADConfig:
         if self.reconstruction_distribution not in {"mse", "gaussian", "student_t"}:
             raise ValueError(
                 "reconstruction_distribution must be one of: mse, gaussian, student_t."
+            )
+        if (
+            self.reconstruction_causal_innovation_loss_weight > 0.0
+            and self.reconstruction_distribution == "mse"
+        ):
+            raise ValueError(
+                "Causal innovation training requires gaussian or student_t reconstruction."
             )
         if "pattern_score_mode" not in kwargs and self.reconstruction_distribution != "mse":
             self.pattern_score_mode = "tail_probability"
@@ -389,6 +411,24 @@ class JointMultivariateReconstructor(nn.Module):
         nn.init.trunc_normal_(self.pos_embedding, std=0.02)
         nn.init.trunc_normal_(self.mask_token, std=0.02)
         self._init_distribution_bias(config)
+        # This branch is deliberately created after the reconstruction backbone
+        # so enabling its diagnostics does not perturb the initialization of the
+        # established conditional-reconstruction path under a fixed seed.
+        self.causal_innovation_encoder = nn.GRU(
+            input_size=self.enc_in,
+            hidden_size=config.d_model,
+            batch_first=True,
+        )
+        self.use_causal_innovation_diagnostics = bool(
+            getattr(config, "use_causal_innovation_diagnostics", False)
+        )
+        self.causal_innovation_output_proj = nn.Sequential(
+            nn.Linear(config.d_model, config.d_ff),
+            _activation_module(config.activation),
+            nn.Dropout(config.dropout),
+            nn.Linear(config.d_ff, 2 * self.enc_in),
+        )
+        self._init_causal_innovation_bias(config)
 
     def _init_distribution_bias(self, config):
         output_layer = self.output_proj[-1]
@@ -421,6 +461,33 @@ class JointMultivariateReconstructor(nn.Module):
                 self.transition_output_proj.bias[self.enc_in:].fill_(
                     transition_bias
                 )
+
+    def _init_causal_innovation_bias(self, config):
+        output_layer = self.causal_innovation_output_proj[-1]
+        init_scale = float(getattr(config, "distribution_init_scale", 1.0))
+        scale_offset = max(init_scale - self.distribution_min_scale, 1e-6)
+        scale_bias = (
+            scale_offset
+            if scale_offset > 20.0
+            else math.log(math.expm1(scale_offset))
+        )
+        with torch.no_grad():
+            output_layer.weight[self.enc_in:, :].zero_()
+            output_layer.bias[self.enc_in:].fill_(scale_bias)
+
+    def _causal_innovation_distribution(self, x):
+        """Predict x_t from x_{<t}; neither x_t nor future values are inputs."""
+        causal_input = torch.zeros_like(x)
+        if x.shape[1] > 1:
+            causal_input[:, 1:, :] = x[:, :-1, :]
+        hidden, _ = self.causal_innovation_encoder(causal_input)
+        causal_mean, raw_causal_scale = self.causal_innovation_output_proj(
+            hidden
+        ).chunk(2, dim=-1)
+        causal_scale = (
+            F.softplus(raw_causal_scale) + self.distribution_min_scale
+        ).clamp(max=self.distribution_max_scale)
+        return causal_mean, causal_scale
 
     @staticmethod
     def _odd_window(window):
@@ -690,6 +757,10 @@ class JointMultivariateReconstructor(nn.Module):
         if self.reconstruction_distribution == "mse":
             return mean
         result = {"mean": mean, "scale": scale, "df": df}
+        if self.use_causal_innovation_diagnostics:
+            causal_mean, causal_scale = self._causal_innovation_distribution(x)
+            result["causal_innovation_mean"] = causal_mean
+            result["causal_innovation_scale"] = causal_scale
         if self.reconstruction_distribution == "gaussian":
             result["transition_mean"] = transition_mean
             result["transition_scale"] = transition_scale
@@ -991,6 +1062,27 @@ class PatternAD:
             if transition_mask.any():
                 transition_loss = transition_elementwise[transition_mask].mean()
                 loss = loss + transition_weight * transition_loss
+        causal_weight = self.config.reconstruction_causal_innovation_loss_weight
+        if causal_weight > 0.0 and target.shape[1] > 1:
+            if not (
+                isinstance(outputs, dict)
+                and "causal_innovation_mean" in outputs
+                and "causal_innovation_scale" in outputs
+            ):
+                raise ValueError(
+                    "Causal innovation loss requires causal mean and scale outputs."
+                )
+            causal_mean = outputs["causal_innovation_mean"][:, 1:, :]
+            causal_scale = outputs["causal_innovation_scale"][:, 1:, :].clamp_min(
+                self.config.distribution_min_scale
+            )
+            causal_standardized = (target[:, 1:, :] - causal_mean) / causal_scale
+            causal_loss = (
+                0.5 * causal_standardized.square()
+                + torch.log(causal_scale)
+                + 0.5 * math.log(2.0 * math.pi)
+            ).mean()
+            loss = loss + causal_weight * causal_loss
         return loss
 
     @staticmethod
@@ -1030,6 +1122,9 @@ class PatternAD:
             "transition_standardized_squared_residual": [],
             "predicted_transition_scale": [],
             "transition_gate": [],
+            "causal_innovation_squared_residual": [],
+            "causal_innovation_standardized_squared_residual": [],
+            "predicted_causal_innovation_scale": [],
         }
         batch_count = 0
         window_count = 0
@@ -1053,6 +1148,39 @@ class PatternAD:
                 else:
                     component_scale = torch.ones_like(mean_output)
                 raw_squared = (batch_x_time - mean_output).square()
+                causal_innovation_squared = torch.zeros_like(raw_squared)
+                causal_innovation_scale = torch.ones_like(component_scale)
+                if (
+                    isinstance(outputs, dict)
+                    and "causal_innovation_mean" in outputs
+                ):
+                    # The causal head consumes x_{<t} only. Run it on complete
+                    # observations so its diagnostic is not degraded by masks
+                    # assigned to unrelated earlier score targets.
+                    causal_outputs = self._align_output_to_true(
+                        self._forward_backbone(batch_x_time, None), batch_x_time
+                    )
+                    if not (
+                        isinstance(causal_outputs, dict)
+                        and "causal_innovation_mean" in causal_outputs
+                        and "causal_innovation_scale" in causal_outputs
+                    ):
+                        raise RuntimeError(
+                            "Causal innovation diagnostics require mean and scale outputs."
+                        )
+                    causal_innovation_scale = causal_outputs[
+                        "causal_innovation_scale"
+                    ].clamp_min(self.config.distribution_min_scale)
+                    causal_innovation_squared = (
+                        batch_x_time - causal_outputs["causal_innovation_mean"]
+                    ).square()
+                    if batch_x_time.shape[1] > 1:
+                        causal_innovation_squared[:, 0, :] = (
+                            causal_innovation_squared[:, 1, :]
+                        )
+                        causal_innovation_scale[:, 0, :] = (
+                            causal_innovation_scale[:, 1, :]
+                        )
                 transition_squared = torch.zeros_like(raw_squared)
                 if isinstance(outputs, dict) and "transition_scale" in outputs:
                     transition_scale = outputs["transition_scale"].detach().clone()
@@ -1097,6 +1225,17 @@ class PatternAD:
                         and "transition_gate" in outputs
                         else torch.zeros_like(component_scale)
                     ),
+                    "causal_innovation_squared_residual": causal_innovation_squared,
+                    "causal_innovation_standardized_squared_residual": (
+                        causal_innovation_squared
+                        / causal_innovation_scale.square()
+                    ),
+                    "predicted_causal_innovation_scale": causal_innovation_scale,
+                }
+                causal_component_names = {
+                    "causal_innovation_squared_residual",
+                    "causal_innovation_standardized_squared_residual",
+                    "predicted_causal_innovation_scale",
                 }
                 if score_mask is None:
                     aggregated_components = {
@@ -1107,8 +1246,12 @@ class PatternAD:
                     component_mask = score_mask.to(dtype=batch_x_time.dtype)
                     component_count = component_mask.sum(dim=-1).clamp_min(1.0)
                     aggregated_components = {
-                        name: (values * component_mask).sum(dim=-1)
-                        / component_count
+                        name: (
+                            values.mean(dim=-1)
+                            if name in causal_component_names
+                            else (values * component_mask).sum(dim=-1)
+                            / component_count
+                        )
                         for name, values in component_values.items()
                     }
                 for name, values in aggregated_components.items():
@@ -1498,6 +1641,30 @@ class PatternAD:
                 masked_x_time, masked_positions = self._mask_input(batch_x_time)
                 outputs = self._forward_backbone(masked_x_time, masked_positions)
                 outputs = self._align_output_to_true(outputs, batch_x_time)
+                if self.config.reconstruction_causal_innovation_loss_weight > 0.0:
+                    # Causal innovation training uses complete past observations.
+                    # Its head is intrinsically x_{<t}-only, so this restores the
+                    # same information set used by the causal diagnostic at test
+                    # time without exposing x_t or future values to that head.
+                    causal_outputs = self._align_output_to_true(
+                        self._forward_backbone(batch_x_time, None), batch_x_time
+                    )
+                    if not (
+                        isinstance(outputs, dict)
+                        and isinstance(causal_outputs, dict)
+                        and "causal_innovation_mean" in causal_outputs
+                        and "causal_innovation_scale" in causal_outputs
+                    ):
+                        raise RuntimeError(
+                            "Causal innovation training requires distribution outputs."
+                        )
+                    outputs = dict(outputs)
+                    outputs["causal_innovation_mean"] = causal_outputs[
+                        "causal_innovation_mean"
+                    ]
+                    outputs["causal_innovation_scale"] = causal_outputs[
+                        "causal_innovation_scale"
+                    ]
                 loss = self._reconstruction_loss(outputs, batch_x_time, masked_positions)
                 epoch_losses.append(float(loss.detach().cpu().item()))
 
