@@ -1,0 +1,95 @@
+{
+  "config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+  "events": [
+    {
+      "end": 1588,
+      "event_id": "same_deviation_pair_0_quiet_context",
+      "label": true,
+      "pair_id": "same_deviation_pair_0",
+      "role": "quiet_context",
+      "start": 1580
+    },
+    {
+      "end": 1684,
+      "event_id": "same_deviation_pair_0_volatile_context",
+      "label": false,
+      "pair_id": "same_deviation_pair_0",
+      "role": "volatile_context",
+      "start": 1676
+    },
+    {
+      "end": 1780,
+      "event_id": "same_deviation_pair_1_quiet_context",
+      "label": true,
+      "pair_id": "same_deviation_pair_1",
+      "role": "quiet_context",
+      "start": 1772
+    },
+    {
+      "end": 1876,
+      "event_id": "same_deviation_pair_1_volatile_context",
+      "label": false,
+      "pair_id": "same_deviation_pair_1",
+      "role": "volatile_context",
+      "start": 1868
+    },
+    {
+      "end": 1972,
+      "event_id": "same_deviation_pair_2_quiet_context",
+      "label": true,
+      "pair_id": "same_deviation_pair_2",
+      "role": "quiet_context",
+      "start": 1964
+    },
+    {
+      "end": 2068,
+      "event_id": "same_deviation_pair_2_volatile_context",
+      "label": false,
+      "pair_id": "same_deviation_pair_2",
+      "role": "volatile_context",
+      "start": 2060
+    }
+  ],
+  "mechanism": "same_deviation_different_context",
+  "npz_file": "same_deviation_different_context.npz",
+  "orderings": [
+    {
+      "higher_event": "same_deviation_pair_0_quiet_context",
+      "hypothesis": "equal observed deviation is more surprising in quiet context",
+      "lower_event": "same_deviation_pair_0_volatile_context",
+      "name": "same_deviation_pair_0"
+    },
+    {
+      "higher_event": "same_deviation_pair_1_quiet_context",
+      "hypothesis": "equal observed deviation is more surprising in quiet context",
+      "lower_event": "same_deviation_pair_1_volatile_context",
+      "name": "same_deviation_pair_1"
+    },
+    {
+      "higher_event": "same_deviation_pair_2_quiet_context",
+      "hypothesis": "equal observed deviation is more surprising in quiet context",
+      "lower_event": "same_deviation_pair_2_volatile_context",
+      "name": "same_deviation_pair_2"
+    }
+  ],
+  "schema_version": 1,
+  "score_contract": {
+    "alignment": "one point score for every row, train then test",
+    "external_key": "score",
+    "fpr_exclusion_guard": 23,
+    "oracle_key": "oracle_context_score",
+    "oracle_semantics": "regime-conditioned squared Mahalanobis surprise; monotone with the conditional chi-square tail probability"
+  },
+  "seed": 3101,
+  "shape": [
+    2304,
+    5
+  ],
+  "source_hashes": {
+    "evaluator": "4e9518a558688a0b9b22c1bfaa47fab2cba111d5e151eb8a3ea15d876b6e6ee2",
+    "generator": "5b6874b4c58ee34dc498a44970f8d77e2b0d46cc5fab99acbd80c732899526df"
+  },
+  "suite_id": "patternad_contextual_v1",
+  "test_length": 768,
+  "train_length": 1536
+}
