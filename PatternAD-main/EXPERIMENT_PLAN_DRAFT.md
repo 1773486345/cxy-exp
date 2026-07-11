@@ -352,6 +352,8 @@ raw-control tie = matched pair 的注入 squared-deviation margin 应近似 0
 
 P1-v2-holdout 已完整执行并满足结果完整性与 provenance 检查，但两个 gate 均失败：`A11-A01` matched-ordering 为 `+0.00667`（95% CI `[-0.100, 0.100]`），maximum regime-FPR gap 相对 A00 的下降为 `5.40%`（CI 覆盖负值）。不得进入 P2。其分解同时显示 same-deviation ordering 增益为 `+0.4556`、slow-drift/abrupt ordering 退化为 `-0.6667`，因此下一开发诊断必须采用只访问 `x_{<t}` 的因果 innovation，而不能继续使用可读未来状态的双向 transition reconstruction。
 
+该 level-space causal innovation 诊断已完成但未通过：其 primary score 按设计未改变；`causal_innovation_standardized_squared_residual` 的 same-deviation 为 `0/3`、abrupt/gradual 为 `1/2`，且 predicted causal scale 近似恒为 `1.0`。因此不得扩展多 seed，也不得组合到最终分数。下一次且仅一次开发诊断改为 difference-space causal innovation：从 `x_{<t}` 预测 `x_t-x_{t-1}`，并仅用先前差分的 rolling RMS 作为尺度先验。先检查 `causal_delta_innovation_standardized_squared_residual` 是否两个 abrupt/gradual pair 都正确，同时报告 same-deviation 与 predicted delta scale；未通过则继续停止 P2、locked confirmation 和真实数据实验。
+
 ### P2：Motivation development，4 个主 cell，3 seeds
 
 用 macro AUC-PR 选择一个候选。若预注册候选为 A11，必须分别检查 `A11-A00`、`A11-A10`、`A11-A01` 三个预声明 comparison；不能定义或选择 observed-best comparator。完整的 context-conditioned distribution 主张要求相应 pair 均满足下列推进条件；若只有某一 pair 成立，则按第 13 节收窄主张：

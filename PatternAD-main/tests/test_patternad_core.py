@@ -134,6 +134,9 @@ class PatternADCoreTest(unittest.TestCase):
                 "causal_innovation_squared_residual",
                 "causal_innovation_standardized_squared_residual",
                 "predicted_causal_innovation_scale",
+                "causal_delta_innovation_squared_residual",
+                "causal_delta_innovation_standardized_squared_residual",
+                "predicted_causal_delta_innovation_scale",
             },
         )
         for values in components.values():
@@ -409,6 +412,7 @@ class PatternADCoreTest(unittest.TestCase):
                 _small_config(
                     distribution_mode=distribution,
                     use_causal_innovation_diagnostics=True,
+                    use_causal_delta_innovation_diagnostics=True,
                 )
             )
             counts.append(sum(parameter.numel() for parameter in model.parameters()))
@@ -426,6 +430,12 @@ class PatternADCoreTest(unittest.TestCase):
                         output["causal_innovation_mean"].shape, (2, 6, 2)
                     )
                     self.assertTrue((output["causal_innovation_scale"] > 0).all())
+                    self.assertEqual(
+                        output["causal_delta_innovation_mean"].shape, (2, 6, 2)
+                    )
+                    self.assertTrue(
+                        (output["causal_delta_innovation_scale"] > 0).all()
+                    )
         self.assertEqual(len(set(counts)), 1)
 
         context_on = JointMultivariateReconstructor(
@@ -682,6 +692,58 @@ class PatternADCoreTest(unittest.TestCase):
             second["causal_innovation_scale"][:, :4, :],
         )
 
+    def test_causal_delta_outputs_and_scale_ignore_current_and_future_values(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                use_causal_delta_innovation_diagnostics=True,
+                causal_delta_innovation_window=3,
+            )
+        )
+        model.eval()
+        source = torch.randn(1, 6, 2)
+        changed = source.clone()
+        changed[:, 3:, :] = changed[:, 3:, :] + 1e4
+
+        first = model(source)
+        second = model(changed)
+        torch.testing.assert_close(
+            first["causal_delta_innovation_mean"][:, :4, :],
+            second["causal_delta_innovation_mean"][:, :4, :],
+        )
+        torch.testing.assert_close(
+            first["causal_delta_innovation_scale"][:, :4, :],
+            second["causal_delta_innovation_scale"][:, :4, :],
+        )
+
+    def test_causal_delta_loss_trains_only_post_initial_innovations(self):
+        detector = PatternAD(
+            reconstruction_distribution="gaussian",
+            reconstruction_full_loss_weight=0.0,
+            reconstruction_causal_delta_innovation_loss_weight=1.0,
+        )
+        target = torch.tensor([[[0.0], [1.0], [3.0]]])
+        main_mean = target.clone().requires_grad_()
+        delta_mean = torch.zeros_like(target, requires_grad=True)
+        delta_scale = torch.ones_like(target, requires_grad=True)
+        outputs = {
+            "mean": main_mean,
+            "scale": torch.ones_like(target),
+            "causal_delta_innovation_mean": delta_mean,
+            "causal_delta_innovation_scale": delta_scale,
+        }
+        loss = detector._reconstruction_loss(
+            outputs, target, torch.ones_like(target, dtype=torch.bool)
+        )
+        loss.backward()
+        self.assertTrue(
+            torch.equal(
+                delta_mean.grad[:, :1, :],
+                torch.zeros_like(delta_mean.grad[:, :1, :]),
+            )
+        )
+        self.assertGreater(float(delta_mean.grad[:, 1:, :].abs().sum()), 0.0)
+
     def test_causal_innovation_loss_trains_only_post_initial_predictions(self):
         detector = PatternAD(
             reconstruction_distribution="gaussian",
@@ -708,6 +770,8 @@ class PatternADCoreTest(unittest.TestCase):
     def test_causal_innovation_loss_rejects_mse_configuration(self):
         with self.assertRaisesRegex(ValueError, "requires gaussian or student_t"):
             PatternADConfig(reconstruction_causal_innovation_loss_weight=0.1)
+        with self.assertRaisesRegex(ValueError, "requires gaussian or student_t"):
+            PatternADConfig(reconstruction_causal_delta_innovation_loss_weight=0.1)
 
 
 if __name__ == "__main__":

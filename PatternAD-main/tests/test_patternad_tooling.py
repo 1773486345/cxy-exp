@@ -20,7 +20,7 @@ from scripts.patternad.summarize_factorial import (
 
 
 class PatternADToolingTest(unittest.TestCase):
-    def test_failed_transition_auxiliary_is_disabled_in_all_cells(self):
+    def test_auxiliary_diagnostics_are_disabled_in_all_formal_cells(self):
         repo_root = Path(__file__).resolve().parents[1]
         manifest = json.loads(
             (repo_root / "config/patternad/factorial_ablation.json").read_text(
@@ -29,9 +29,17 @@ class PatternADToolingTest(unittest.TestCase):
         )
         shared = manifest["shared_hyperparameters"]
         observed = {}
+        causal_level = {}
+        causal_delta = {}
         for variant, definition in manifest["variants"].items():
             merged = {**shared, **definition["hyperparameters"]}
             observed[variant] = merged["reconstruction_transition_loss_weight"]
+            causal_level[variant] = merged[
+                "reconstruction_causal_innovation_loss_weight"
+            ]
+            causal_delta[variant] = merged[
+                "reconstruction_causal_delta_innovation_loss_weight"
+            ]
 
         self.assertEqual(observed["A00"], 0.0)
         self.assertEqual(observed["A10"], 0.0)
@@ -39,6 +47,10 @@ class PatternADToolingTest(unittest.TestCase):
         self.assertEqual(observed["A01"], 0.0)
         self.assertEqual(observed["A11"], 0.0)
         self.assertEqual(observed["B11"], 0.0)
+        self.assertTrue(all(value == 0.0 for value in causal_level.values()))
+        self.assertTrue(all(value == 0.0 for value in causal_delta.values()))
+        self.assertFalse(shared["use_causal_innovation_diagnostics"])
+        self.assertFalse(shared["use_causal_delta_innovation_diagnostics"])
         self.assertEqual(
             manifest["variants"]["A01"]["hyperparameters"]["pattern_score_mode"],
             "contextual_tail_probability",

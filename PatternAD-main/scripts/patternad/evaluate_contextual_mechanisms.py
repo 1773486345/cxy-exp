@@ -167,6 +167,15 @@ def run_patternad_variant(
 
     fix_random_seed(seed)
     model = PatternAD(**hyperparameters)
+    # PatternAD enables causal diagnostics automatically when an associated
+    # auxiliary loss is nonzero. Record the resolved flags rather than only the
+    # raw command-line override so a development run is self-describing.
+    recorded_hyperparameters = dict(hyperparameters)
+    for name in (
+        "use_causal_innovation_diagnostics",
+        "use_causal_delta_innovation_diagnostics",
+    ):
+        recorded_hyperparameters[name] = bool(getattr(model.config, name))
     model.detect_multi_fit(fit_data, fit_text, fit_labels)
     calibration_score = np.asarray(
         model.detect_multi_score(calibration_data, calibration_text)[0], dtype=np.float64
@@ -239,7 +248,7 @@ def run_patternad_variant(
         "fit_range": [0, fit_end],
         "calibration_range": [calibration_start, train_length],
         "test_range": [train_length, train_length + test_length],
-        "hyperparameters": hyperparameters,
+        "hyperparameters": recorded_hyperparameters,
         "score_key": "score",
         "component_keys": sorted(calibration_components),
     }

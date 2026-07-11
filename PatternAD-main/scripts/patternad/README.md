@@ -317,15 +317,23 @@ conda run --no-capture-output -n patternad_env \
   python -u scripts/patternad/evaluate_contextual_mechanisms.py \
   --artifact-dir artifacts/patternad_synthetic/contextual_v1/seed_3101 \
   --patternad-variant A11 --seed 2021 --num-epochs 30 \
-  --hyperparameter-overrides '{"reconstruction_causal_innovation_loss_weight": 1.0}' \
-  --method-name A11_causal_innovation_dev \
-  --output-dir result/patternad_synthetic/dev_causal_innovation
+  --hyperparameter-overrides '{"reconstruction_causal_delta_innovation_loss_weight": 1.0}' \
+  --method-name A11_causal_delta_innovation_dev \
+  --output-dir result/patternad_synthetic/dev_causal_delta_innovation
 ```
 
+The preceding level-innovation run is complete and did not pass: its primary
+score stayed unchanged by design, while its standardized component got only
+`1/2` abrupt/gradual pairs and `0/3` same-deviation pairs right; its learned
+scale was approximately constant at `1.0`. The new run instead predicts
+`x_t - x_{t-1}` from `x_{<t}` and uses a rolling RMS of prior differences only.
+
 Inspect `score_component_orderings.csv` for
-`causal_innovation_standardized_squared_residual`: abrupt/gradual must improve
-without claiming a combined detector. If it does, freeze a multi-seed diagnostic
-grid and a p-value combination rule before any real-data run. Do not open
+`causal_delta_innovation_standardized_squared_residual`. It must get both
+abrupt/gradual pairs right before a multi-seed expansion; also inspect
+`predicted_causal_delta_innovation_scale` for causal context sensitivity. Do
+not claim a combined detector. If it passes, freeze a multi-seed diagnostic grid
+and a p-value combination rule before any real-data run. Do not open
 generator seeds 3111-3120 before the development candidate, score combination,
 and gates are frozen. Locked synthetic confirmation requires the runner's explicit
 `--allow-locked` acknowledgement and the complete predeclared seed grid.

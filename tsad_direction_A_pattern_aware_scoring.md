@@ -1,12 +1,36 @@
 # 方向 A：模式感知的残差语义建模
 
 记录日期：2026-06-30  
-更新日期：2026-07-11
+更新日期：2026-07-12
 
 方向定位：
 
 ```text
 Pattern-Aware Residual Semantics via Conditional Residual Distributions
+
+```
+
+### 2026-07-12 status: causal innovation diagnostic
+
+The prespecified A11 causal diagnostic is complete (generator 3101, model seed
+2021, 30 epochs). It was not combined with the primary score. The level branch
+predicted `x_t` from `x_{<t}`, but its standardized innovation component got
+`0/3` equal-deviation quiet-versus-volatile pairs and only `1/2`
+abrupt-versus-gradual pairs right. Its predicted causal scale stayed
+approximately one in every context. A one-step level forecaster is therefore
+not an adequate change detector in this setting; it will not be expanded or
+used to support a combined detector.
+
+The refined hypothesis is to predict `delta x_t = x_t - x_{t-1}` from
+`x_{<t}` only and normalize it with a rolling RMS of prior innovations only.
+The delta mean and delta scale are target/future blind. This remains a
+diagnostic, not a score-combination claim. Run one A11 delta cell and inspect
+`causal_delta_innovation_standardized_squared_residual`; expansion requires
+both abrupt-versus-gradual pairs to be correct plus review of same-deviation
+ordering and the predicted delta-scale component. P2, confirmation, and
+real-data runs remain closed.
+
+```text
 基于条件残差分布的模式感知残差语义建模
 ```
 

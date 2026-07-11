@@ -826,3 +826,39 @@ A11 - A00 dependency-break AP: +0.007662, CI [0.005228, 0.010457] -> pass
 The failure is structurally informative. Dynamic Gaussian conditioning strongly improves the equal-deviation subproblem (`A11-A01` same-deviation ordering `+0.4556`), but it degrades slow-drift versus abrupt-shift ordering (`-0.6667`). Thus a bidirectional masked reconstructor can use post-transition observations to explain an abrupt shift. The holdout ECDF revision was statistically necessary, but it cannot repair this information-set mismatch. No real-data matrix may start from P1-v2.
 
 The new development-only branch is a causal innovation head. Its GRU receives `x_{<t}` through a one-step right shift and predicts a Gaussian distribution for `x_t`; perturbing `x_t` or future values cannot change the output at `t`. The head is trained on complete past observations by `reconstruction_causal_innovation_loss_weight`, is instantiated in every distribution variant for parameter-count fairness, and is disabled (`0.0`) in all formal A/B cells. At inference it exports raw and standardized innovation residuals as score components but does not alter the primary level-tail score. The first test is one full-epoch A11 run on generator 3101/model seed 2021 with weight `1.0`; inspect its component ordering before freezing any combination or expanded grid.
+
+## 2026-07-12 Causal Level-Innovation Result And Delta-Innovation Revision
+
+The single full-epoch A11 causal level-innovation diagnostic completed at
+`result/patternad_synthetic/dev_causal_innovation`. Its primary score was
+intentionally unchanged (`macro AP 0.104447`, matched ordering `2/5`). The
+diagnostic component did not supply the missing mechanism: standardized causal
+innovation got `0/3` same-deviation orderings and `1/2` abrupt-versus-gradual
+orderings, with margins `-0.2571` and `+0.4072` for the latter. Its predicted
+causal scale was approximately constant at `1.0`. The level-innovation branch
+therefore stops here: no multi-seed grid, score combination, P2, or real-data
+run is authorized from it.
+
+The replacement remains development-only and causal, but moves the target to
+innovation space. A shared past-only GRU predicts `x_t - x_{t-1}`; a separate
+head emits its Gaussian mean and a bounded scale correction. The scale prior is
+the rolling RMS of `x_j - x_{j-1}` for `j < t` only, with a positive floor.
+Thus an abrupt onset is a direct prediction error while an already volatile
+normal regime receives a larger scale without reading the present target or
+future observations. Tests perturbing `x_t` and all future values verify that
+both delta mean and delta scale at `t` remain unchanged.
+
+The branch is instantiated for every variant but is disabled in formal cells:
+
+```text
+reconstruction_causal_delta_innovation_loss_weight = 0.0
+use_causal_delta_innovation_diagnostics = false
+```
+
+One A11 development run only is next, with
+`reconstruction_causal_delta_innovation_loss_weight=1.0`. Inspect
+`causal_delta_innovation_standardized_squared_residual`; it must put both
+abrupt/gradual pairs in the predicted order before any multi-seed expansion.
+The evaluator now records resolved causal-diagnostic flags in
+`score_run_metadata.json`, avoiding the earlier ambiguity where an enabled
+loss implied a diagnostic branch but the raw command override did not list it.
