@@ -39,6 +39,7 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "train_mask_ratio": 0.25,
     "train_variable_mask_ratio": 0.15,
     "reconstruction_full_loss_weight": 0.1,
+    "reconstruction_transition_loss_weight": 0.0,
     "pattern_score_components": ["raw"],
     "pattern_score_local_window": 5,
     "pattern_score_trend_window": 7,
@@ -67,6 +68,11 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "context_scale_prior_mix": 0.5,
     "context_scale_log_residual_limit": 1.5,
     "context_transition_scale_suppression": 0.0,
+    "use_context_scale_normalization": True,
+    "use_context_transition_scale_prior": True,
+    "context_transition_scale_floor": 0.05,
+    "context_transition_scale_prior_mix": 0.5,
+    "context_transition_scale_log_residual_limit": 1.5,
     "student_t_df": 4.0,
     "student_t_learn_df": True,
     "student_t_max_df": 100.0,
@@ -89,6 +95,10 @@ class PatternADConfig:
             self.train_mask_ratio = float(getattr(self, "train_mask_ratio", getattr(self, "mask_ratio", 0.25)))
         self.train_variable_mask_ratio = float(getattr(self, "train_variable_mask_ratio", 0.15))
         self.reconstruction_full_loss_weight = float(getattr(self, "reconstruction_full_loss_weight", 0.1))
+        self.reconstruction_transition_loss_weight = max(
+            float(getattr(self, "reconstruction_transition_loss_weight", 0.0)),
+            0.0,
+        )
         self.use_context_conditioning = bool(getattr(self, "use_context_conditioning", True))
         self.context_window = max(3, int(getattr(self, "context_window", 7)))
         if self.context_window % 2 == 0:
@@ -148,6 +158,31 @@ class PatternADConfig:
         )
         self.context_transition_scale_suppression = max(
             float(getattr(self, "context_transition_scale_suppression", 0.0)),
+            0.0,
+        )
+        self.use_context_scale_normalization = bool(
+            getattr(self, "use_context_scale_normalization", True)
+        )
+        self.use_context_transition_scale_prior = bool(
+            getattr(self, "use_context_transition_scale_prior", True)
+        )
+        self.context_transition_scale_floor = max(
+            float(getattr(self, "context_transition_scale_floor", 0.05)),
+            self.distribution_min_scale,
+        )
+        self.context_transition_scale_prior_mix = min(
+            max(
+                float(getattr(self, "context_transition_scale_prior_mix", 0.5)),
+                0.0,
+            ),
+            1.0,
+        )
+        self.context_transition_scale_log_residual_limit = max(
+            float(
+                getattr(
+                    self, "context_transition_scale_log_residual_limit", 1.5
+                )
+            ),
             0.0,
         )
         self.student_t_df = max(float(getattr(self, "student_t_df", 4.0)), 2.01)
@@ -219,6 +254,21 @@ class JointMultivariateReconstructor(nn.Module):
         self.context_transition_scale_suppression = float(
             getattr(config, "context_transition_scale_suppression", 0.0)
         )
+        self.use_context_scale_normalization = bool(
+            getattr(config, "use_context_scale_normalization", True)
+        )
+        self.use_context_transition_scale_prior = bool(
+            getattr(config, "use_context_transition_scale_prior", True)
+        )
+        self.context_transition_scale_floor = float(
+            getattr(config, "context_transition_scale_floor", 0.05)
+        )
+        self.context_transition_scale_prior_mix = float(
+            getattr(config, "context_transition_scale_prior_mix", 0.5)
+        )
+        self.context_transition_scale_log_residual_limit = float(
+            getattr(config, "context_transition_scale_log_residual_limit", 1.5)
+        )
         self.student_t_df = float(getattr(config, "student_t_df", 4.0))
         self.student_t_learn_df = bool(getattr(config, "student_t_learn_df", True))
         self.student_t_max_df = float(getattr(config, "student_t_max_df", 100.0))
@@ -258,6 +308,7 @@ class JointMultivariateReconstructor(nn.Module):
             # distribution ablations do not change the parameter count.
             nn.Linear(config.d_ff, 3 * self.enc_in),
         )
+        self.transition_output_proj = nn.Linear(config.d_model, 2 * self.enc_in)
         nn.init.trunc_normal_(self.pos_embedding, std=0.02)
         nn.init.trunc_normal_(self.mask_token, std=0.02)
         self._init_distribution_bias(config)
@@ -279,6 +330,20 @@ class JointMultivariateReconstructor(nn.Module):
             else:
                 output_layer.bias[self.enc_in:2 * self.enc_in].fill_(scale_bias)
             output_layer.bias[2 * self.enc_in:].fill_(df_bias)
+            self.transition_output_proj.weight.zero_()
+            self.transition_output_proj.bias[: self.enc_in].zero_()
+            if self.use_context_transition_scale_prior:
+                self.transition_output_proj.bias[self.enc_in:].zero_()
+            else:
+                transition_scale = max(init_scale * math.sqrt(2.0), 1e-6)
+                transition_bias = (
+                    transition_scale
+                    if transition_scale > 20.0
+                    else math.log(math.expm1(transition_scale))
+                )
+                self.transition_output_proj.bias[self.enc_in:].fill_(
+                    transition_bias
+                )
 
     @staticmethod
     def _odd_window(window):
@@ -325,6 +390,62 @@ class JointMultivariateReconstructor(nn.Module):
         )
         time_variance = (local_time_sq - local_time * local_time).clamp_min(1e-6)
         trend = (local_time_value - local_time * local_mean) / time_variance
+        transition = torch.zeros_like(x)
+        transition_valid = torch.zeros_like(valid)
+        transition[:, 1:, :] = x[:, 1:, :] - x[:, :-1, :]
+        transition_valid[:, 1:, :] = valid[:, 1:, :] & valid[:, :-1, :]
+        local_transition_mean = self._masked_rolling_mean(
+            transition, transition_valid, self.context_window
+        )
+        local_transition_mean_sq = self._masked_rolling_mean(
+            transition.square(), transition_valid, self.context_window
+        )
+        local_transition_std = torch.sqrt(
+            (
+                local_transition_mean_sq
+                - local_transition_mean.square()
+            ).clamp_min(0.0)
+            + 1e-6
+        )
+        past_sum = torch.zeros_like(x)
+        past_sum_sq = torch.zeros_like(x)
+        past_count = torch.zeros_like(x)
+        future_sum = torch.zeros_like(x)
+        future_sum_sq = torch.zeros_like(x)
+        future_count = torch.zeros_like(x)
+        for offset in range(1, radius + 1):
+            past_values = x[:, :-offset, :]
+            past_valid = valid[:, :-offset, :].to(dtype=x.dtype)
+            past_sum[:, offset:, :] += past_values * past_valid
+            past_sum_sq[:, offset:, :] += past_values.square() * past_valid
+            past_count[:, offset:, :] += past_valid
+
+            future_values = x[:, offset:, :]
+            future_valid = valid[:, offset:, :].to(dtype=x.dtype)
+            future_sum[:, :-offset, :] += future_values * future_valid
+            future_sum_sq[:, :-offset, :] += future_values.square() * future_valid
+            future_count[:, :-offset, :] += future_valid
+        past_mean = past_sum / past_count.clamp_min(1.0)
+        future_mean = future_sum / future_count.clamp_min(1.0)
+        past_std = torch.sqrt(
+            (past_sum_sq / past_count.clamp_min(1.0) - past_mean.square())
+            .clamp_min(0.0)
+            + 1e-6
+        )
+        future_std = torch.sqrt(
+            (future_sum_sq / future_count.clamp_min(1.0) - future_mean.square())
+            .clamp_min(0.0)
+            + 1e-6
+        )
+        change_point_score = (future_mean - past_mean).abs() / (
+            torch.sqrt(past_std.square() + future_std.square())
+            + self.context_transition_scale_floor
+        )
+        change_point_score = torch.where(
+            (past_count > 0) & (future_count > 0),
+            change_point_score,
+            torch.zeros_like(change_point_score),
+        )
         context_x = torch.where(valid, x, local_mean)
         high_freq = torch.where(valid, x - local_mean, torch.zeros_like(x))
         return {
@@ -333,6 +454,9 @@ class JointMultivariateReconstructor(nn.Module):
             "local_mean": local_mean,
             "local_std": local_std,
             "trend": trend,
+            "local_transition_mean": local_transition_mean,
+            "local_transition_std": local_transition_std,
+            "change_point_score": change_point_score,
             "high_freq": high_freq,
         }
 
@@ -382,6 +506,25 @@ class JointMultivariateReconstructor(nn.Module):
         # its units consistent with the standardized reconstruction target.
         return learned_scale * torch.exp(mix * torch.log(local_scale))
 
+    def _contextual_transition_scale_prior(self, x, statistics):
+        learned_scale = (
+            math.sqrt(2.0) * torch.exp(self.scale_control).expand_as(x)
+        )
+        if not self.use_context_conditioning or statistics is None:
+            return learned_scale
+        local_scale = statistics["local_transition_std"].clamp_min(
+            self.context_transition_scale_floor
+        )
+        mix = self.context_transition_scale_prior_mix
+        if mix <= 0.0:
+            return learned_scale
+        return learned_scale * torch.exp(mix * torch.log(local_scale))
+
+    def _contextual_transition_gate(self, x, statistics):
+        if not self.use_context_conditioning or statistics is None:
+            return torch.zeros_like(x)
+        return torch.tanh(statistics["change_point_score"])
+
     def forward(self, x, mask=None):
         if x.ndim != 3:
             raise ValueError("JointMultivariateReconstructor expects [B, T, D] input.")
@@ -390,11 +533,24 @@ class JointMultivariateReconstructor(nn.Module):
         if x.shape[1] > self.seq_len:
             raise ValueError(f"Expected at most {self.seq_len} time steps, got {x.shape[1]}.")
 
+        statistics = None
+        if self.use_context_conditioning:
+            statistics = self._visible_context_statistics(x, mask)
+        if self.use_context_scale_normalization:
+            normalization_scale = self._contextual_scale_prior(x, statistics).clamp(
+                min=self.distribution_min_scale,
+                max=self.distribution_max_scale,
+            )
+            normalized_x = x / normalization_scale
+        else:
+            normalization_scale = torch.ones_like(x)
+            normalized_x = x
+
         if mask is not None:
             mask = mask.bool()
-            x_in = torch.where(mask, self.mask_token.expand_as(x), x)
+            x_in = torch.where(mask, self.mask_token.expand_as(x), normalized_x)
         else:
-            x_in = x
+            x_in = normalized_x
 
         h = self.input_proj(x_in) + self.pos_embedding[:, : x.shape[1], :]
         if mask is not None:
@@ -402,9 +558,7 @@ class JointMultivariateReconstructor(nn.Module):
 
         # C1 uses target-blind visible context. C0 sends a learned dataset-level
         # constant through the same projection and FiLM path.
-        statistics = None
         if self.use_context_conditioning:
-            statistics = self._visible_context_statistics(x, mask)
             conditioning = self._context_features_from_statistics(statistics, mask)
         else:
             conditioning = self.context_control.expand(x.shape[0], x.shape[1], -1)
@@ -416,7 +570,13 @@ class JointMultivariateReconstructor(nn.Module):
         h = self.pre_encoder_norm(h)
 
         h = self.encoder(h)
-        mean, raw_scale, raw_df = self.output_proj(self.norm(h)).chunk(3, dim=-1)
+        decoded = self.norm(h)
+        mean, raw_scale, raw_df = self.output_proj(decoded).chunk(3, dim=-1)
+        transition_mean, raw_transition_scale = self.transition_output_proj(
+            decoded
+        ).chunk(2, dim=-1)
+        if self.use_context_scale_normalization:
+            mean = mean * normalization_scale
         if self.use_context_scale_prior:
             scale_prior = self._contextual_scale_prior(x, statistics)
             correction = torch.exp(
@@ -427,6 +587,24 @@ class JointMultivariateReconstructor(nn.Module):
             scale = F.softplus(raw_scale) + self.distribution_min_scale
         scale = scale.clamp_min(self.distribution_min_scale)
         scale = scale.clamp(max=self.distribution_max_scale)
+        if self.use_context_transition_scale_prior:
+            transition_scale_prior = self._contextual_transition_scale_prior(
+                x, statistics
+            )
+            transition_mean = transition_mean * transition_scale_prior
+            transition_correction = torch.exp(
+                self.context_transition_scale_log_residual_limit
+                * torch.tanh(raw_transition_scale)
+            )
+            transition_scale = transition_scale_prior * transition_correction
+        else:
+            transition_scale = (
+                F.softplus(raw_transition_scale) + self.distribution_min_scale
+            )
+        transition_scale = transition_scale.clamp(
+            min=self.distribution_min_scale,
+            max=self.distribution_max_scale,
+        )
         if self.student_t_learn_df:
             df = 2.0 + F.softplus(raw_df)
             df = df.clamp(max=self.student_t_max_df)
@@ -434,7 +612,14 @@ class JointMultivariateReconstructor(nn.Module):
             df = torch.full_like(mean, self.student_t_df)
         if self.reconstruction_distribution == "mse":
             return mean
-        return {"mean": mean, "scale": scale, "df": df}
+        result = {"mean": mean, "scale": scale, "df": df}
+        if self.reconstruction_distribution == "gaussian":
+            result["transition_mean"] = transition_mean
+            result["transition_scale"] = transition_scale
+            result["transition_gate"] = self._contextual_transition_gate(
+                x, statistics
+            )
+        return result
 
 
 class PatternAD:
@@ -535,7 +720,17 @@ class PatternAD:
     def _distribution_params(outputs):
         if not isinstance(outputs, dict):
             return None
-        return {name: outputs[name] for name in ("scale", "df") if name in outputs}
+        return {
+            name: outputs[name]
+            for name in (
+                "scale",
+                "df",
+                "transition_mean",
+                "transition_scale",
+                "transition_gate",
+            )
+            if name in outputs
+        }
 
     def _train_mask_generator(self, device):
         key = str(device)
@@ -660,10 +855,44 @@ class PatternAD:
         # term on the conditional mean so scale/df are learned from hidden targets.
         mean = self._output_mean(outputs)
         full_mean_loss = ((mean - target) ** 2).mean()
-        return (
+        loss = (
             masked_loss
             + self.config.reconstruction_full_loss_weight * full_mean_loss
         )
+        transition_weight = self.config.reconstruction_transition_loss_weight
+        if transition_weight > 0.0 and target.shape[1] > 1:
+            if isinstance(outputs, dict) and "transition_mean" in outputs:
+                mean_transition = outputs["transition_mean"][:, 1:, :]
+            else:
+                mean_transition = mean[:, 1:, :] - mean[:, :-1, :]
+            target_transition = target[:, 1:, :] - target[:, :-1, :]
+            transition_squared = (mean_transition - target_transition).square()
+            if masked_positions is None:
+                transition_mask = torch.ones_like(
+                    transition_squared, dtype=torch.bool
+                )
+            else:
+                transition_mask = masked_positions[:, 1:, :]
+            distribution = self.config.reconstruction_distribution
+            if (
+                distribution == "gaussian"
+                and isinstance(outputs, dict)
+                and "transition_scale" in outputs
+            ):
+                transition_scale = outputs["transition_scale"][:, 1:, :].clamp_min(
+                    self.config.distribution_min_scale
+                )
+                transition_elementwise = (
+                    0.5 * transition_squared / transition_scale.square()
+                    + torch.log(transition_scale)
+                    + 0.5 * math.log(2.0 * math.pi)
+                )
+            else:
+                transition_elementwise = transition_squared
+            if transition_mask.any():
+                transition_loss = transition_elementwise[transition_mask].mean()
+                loss = loss + transition_weight * transition_loss
+        return loss
 
     @staticmethod
     def _windows_to_point_scores(window_scores: np.ndarray, total_len: int) -> np.ndarray:
@@ -698,6 +927,10 @@ class PatternAD:
             "standardized_squared_residual": [],
             "predicted_scale": [],
             "log_scale": [],
+            "transition_squared_residual": [],
+            "transition_standardized_squared_residual": [],
+            "predicted_transition_scale": [],
+            "transition_gate": [],
         }
         batch_count = 0
         window_count = 0
@@ -721,12 +954,50 @@ class PatternAD:
                 else:
                     component_scale = torch.ones_like(mean_output)
                 raw_squared = (batch_x_time - mean_output).square()
+                transition_squared = torch.zeros_like(raw_squared)
+                if isinstance(outputs, dict) and "transition_scale" in outputs:
+                    transition_scale = outputs["transition_scale"].detach().clone()
+                else:
+                    transition_scale = torch.ones_like(component_scale)
+                if batch_x_time.shape[1] > 1:
+                    observed_transition = (
+                        batch_x_time[:, 1:, :] - batch_x_time[:, :-1, :]
+                    )
+                    if isinstance(outputs, dict) and "transition_mean" in outputs:
+                        predicted_transition = outputs["transition_mean"][:, 1:, :]
+                    else:
+                        predicted_transition = (
+                            mean_output[:, 1:, :] - mean_output[:, :-1, :]
+                        )
+                    transition_squared[:, 1:, :] = (
+                        observed_transition - predicted_transition
+                    ).square()
+                    if not (
+                        isinstance(outputs, dict)
+                        and "transition_scale" in outputs
+                    ):
+                        transition_scale[:, 1:, :] = torch.sqrt(
+                            component_scale[:, 1:, :].square()
+                            + component_scale[:, :-1, :].square()
+                        )
+                    transition_squared[:, 0, :] = transition_squared[:, 1, :]
+                    transition_scale[:, 0, :] = transition_scale[:, 1, :]
                 component_values = {
                     "raw_squared_residual": raw_squared,
                     "standardized_squared_residual": raw_squared
                     / component_scale.square(),
                     "predicted_scale": component_scale,
                     "log_scale": torch.log(component_scale),
+                    "transition_squared_residual": transition_squared,
+                    "transition_standardized_squared_residual": transition_squared
+                    / transition_scale.square(),
+                    "predicted_transition_scale": transition_scale,
+                    "transition_gate": (
+                        outputs["transition_gate"]
+                        if isinstance(outputs, dict)
+                        and "transition_gate" in outputs
+                        else torch.zeros_like(component_scale)
+                    ),
                 }
                 if score_mask is None:
                     aggregated_components = {

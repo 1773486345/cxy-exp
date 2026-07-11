@@ -62,6 +62,7 @@ D0: deterministic mean
 D1: heteroscedastic Gaussian
     输出：mu(x_visible, c), log_sigma(x_visible, c)
     训练目标：masked Gaussian NLL + 固定权重的 full mean-MSE
+             + masked transition Gaussian NLL（当前开发权重 0.1）
     分数：-log(2 * GaussianSF(|x-mu| / sigma))，即条件双尾罕见度
 ```
 

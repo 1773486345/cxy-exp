@@ -283,10 +283,11 @@ is useful for checking generation semantics, not for claiming learned-model
 performance.
 
 During the current model-development phase, do not launch the full seed grid.
-The completed `dev_local_slope_full` run used density NLL scoring and exposed a
-cross-regime ranking error from its `log(scale)` term. The next requested
-handoff is only the current tail-probability A01/A11 on generator seed 3101 with
-the default epoch count:
+The completed `dev_transition_likelihood_full` run confirmed that a derived
+transition residual contains signal, but its scale was nearly constant and
+could not be safely combined with the level score. The next requested handoff
+is only the current explicit-transition-head A01/A11 on generator seed 3101
+with the default epoch count:
 
 ```bash
 for variant in A01 A11; do
@@ -294,7 +295,7 @@ for variant in A01 A11; do
     python -u scripts/patternad/evaluate_contextual_mechanisms.py \
     --artifact-dir artifacts/patternad_synthetic/contextual_v1/seed_3101 \
     --patternad-variant "$variant" --seed 2021 \
-    --output-dir "result/patternad_synthetic/dev_tail_probability_full/$variant/generator_seed_3101/model_seed_2021"
+    --output-dir "result/patternad_synthetic/dev_explicit_transition_full/$variant/generator_seed_3101/model_seed_2021"
 done
 ```
 

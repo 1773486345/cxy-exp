@@ -70,6 +70,8 @@ student_t -> conditional mean/scale/df + masked Student-t NLL
 
 For MSE, training uses `masked MSE + reconstruction_full_loss_weight * full mean-MSE`. For Gaussian and Student-t, it uses `masked NLL + reconstruction_full_loss_weight * full mean-MSE`. The auxiliary full-window term is intentionally mean-MSE, not full NLL, so visible values cannot drive the predicted scale toward zero by simple copying.
 
+The current Gaussian development path also uses target-blind visible scale to normalize the reconstruction input and de-normalize the conditional mean. A dedicated transition head predicts normalized transition mean and scale correction around a target-blind visible-difference scale prior, and receives a masked transition-NLL auxiliary loss. Transition diagnostics are persisted, but transition surprisal is not yet combined with the primary level-tail anomaly score.
+
 At inference, probabilistic variants default to `pattern_score_mode="tail_probability"`: `-log` of the conditional two-sided tail probability of the absolute standardized residual. Density NLL remains available as an explicit ablation, but its `log(scale)` normalization term is not used as cross-regime anomaly rarity.
 
 Legacy aggregate and reliability-weighted scorers remain available only as explicit ablation paths.

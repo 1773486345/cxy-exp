@@ -79,6 +79,10 @@ class PatternADCoreTest(unittest.TestCase):
                 "standardized_squared_residual",
                 "predicted_scale",
                 "log_scale",
+                "transition_squared_residual",
+                "transition_standardized_squared_residual",
+                "predicted_transition_scale",
+                "transition_gate",
             },
         )
         for values in components.values():
@@ -90,6 +94,14 @@ class PatternADCoreTest(unittest.TestCase):
         )
         np.testing.assert_allclose(components["predicted_scale"], 2.0)
         np.testing.assert_allclose(components["log_scale"], np.log(2.0))
+        np.testing.assert_allclose(components["transition_squared_residual"], 0.0)
+        np.testing.assert_allclose(
+            components["transition_standardized_squared_residual"], 0.0
+        )
+        np.testing.assert_allclose(
+            components["predicted_transition_scale"], np.sqrt(8.0)
+        )
+        np.testing.assert_allclose(components["transition_gate"], 0.0)
 
         detector._collect_multi_scores([(batch[:1], None, None, None)], 6)
         calls = detector.get_diagnostics()["score_calls"]
@@ -215,6 +227,93 @@ class PatternADCoreTest(unittest.TestCase):
         transition_prior = model._contextual_scale_prior(transition, transition_stats)
         self.assertTrue(torch.all(transition_prior[mask] < alternating_prior[mask]))
 
+    def test_context_scale_normalization_denormalizes_conditional_mean(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                use_context_scale_prior=True,
+                use_context_scale_normalization=True,
+                context_window=5,
+                context_scale_prior_mix=1.0,
+                context_transition_scale_suppression=0.0,
+            )
+        )
+        with torch.no_grad():
+            model.output_proj[-1].weight[: model.enc_in].zero_()
+            model.output_proj[-1].bias[: model.enc_in].fill_(1.0)
+        model.eval()
+        quiet = torch.tensor(
+            [[[0.0, 0.0], [0.1, -0.1], [-0.1, 0.1], [0.1, -0.1], [-0.1, 0.1], [0.0, 0.0]]]
+        )
+        volatile = quiet * 8.0
+        mask = torch.zeros_like(quiet, dtype=torch.bool)
+        mask[:, 2, :] = True
+
+        quiet_output = model(quiet.masked_fill(mask, 0.0), mask)
+        volatile_output = model(volatile.masked_fill(mask, 0.0), mask)
+        self.assertTrue(
+            torch.all(
+                volatile_output["mean"][mask]
+                > quiet_output["mean"][mask] * 4.0
+            )
+        )
+
+    def test_transition_scale_prior_is_target_blind_and_regime_sensitive(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                context_window=5,
+                use_context_transition_scale_prior=True,
+                context_transition_scale_prior_mix=0.5,
+            )
+        )
+        model.eval()
+        quiet = torch.tensor(
+            [[[0.0, 0.0], [0.1, -0.1], [-0.1, 0.1], [0.1, -0.1], [-0.1, 0.1], [0.0, 0.0]]]
+        )
+        volatile = quiet * 8.0
+        mask = torch.zeros_like(quiet, dtype=torch.bool)
+        mask[:, 2, :] = True
+
+        quiet_output = model(quiet.masked_fill(mask, 0.0), mask)
+        volatile_output = model(volatile.masked_fill(mask, 0.0), mask)
+        self.assertTrue(
+            torch.all(
+                volatile_output["transition_scale"][mask]
+                > quiet_output["transition_scale"][mask] * 2.0
+            )
+        )
+        changed = quiet.clone()
+        changed[mask] = 1e5
+        changed_output = model(changed.masked_fill(mask, 0.0), mask)
+        torch.testing.assert_close(
+            quiet_output["transition_scale"], changed_output["transition_scale"]
+        )
+
+    def test_transition_gate_prefers_directional_shift_over_oscillation(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                context_window=5,
+            )
+        )
+        oscillation = torch.tensor(
+            [[[-1.0, -1.0], [1.0, 1.0], [-1.0, -1.0], [1.0, 1.0], [-1.0, -1.0], [1.0, 1.0]]]
+        )
+        shift = torch.tensor(
+            [[[-1.0, -1.0], [-1.0, -1.0], [-1.0, -1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]]
+        )
+        mask = torch.zeros_like(shift, dtype=torch.bool)
+        mask[:, 2, :] = True
+        oscillation_output = model(oscillation.masked_fill(mask, 0.0), mask)
+        shift_output = model(shift.masked_fill(mask, 0.0), mask)
+        self.assertTrue(
+            torch.all(
+                shift_output["transition_gate"][mask]
+                > oscillation_output["transition_gate"][mask]
+            )
+        )
+
     def test_d2_complementary_masks_cover_each_position_once(self):
         detector = PatternAD(
             enc_in=2,
@@ -266,6 +365,9 @@ class PatternADCoreTest(unittest.TestCase):
                 self.assertEqual(output["mean"].shape, (2, 6, 2))
                 self.assertTrue((output["scale"] > 0).all())
                 self.assertTrue((output["df"] > 2).all())
+                if distribution == "gaussian":
+                    self.assertEqual(output["transition_mean"].shape, (2, 6, 2))
+                    self.assertTrue((output["transition_scale"] > 0).all())
         self.assertEqual(len(set(counts)), 1)
 
         context_on = JointMultivariateReconstructor(
@@ -407,6 +509,31 @@ class PatternADCoreTest(unittest.TestCase):
             self.assertTrue(torch.isfinite(value).all())
         self.assertTrue(torch.equal(raw_scale.grad[~mask], torch.zeros_like(raw_scale.grad[~mask])))
         self.assertTrue(torch.equal(raw_df.grad[~mask], torch.zeros_like(raw_df.grad[~mask])))
+
+    def test_gaussian_transition_nll_trains_transition_scale(self):
+        detector = PatternAD(
+            reconstruction_distribution="gaussian",
+            reconstruction_transition_loss_weight=0.5,
+            reconstruction_full_loss_weight=0.0,
+        )
+        target = torch.tensor([[[0.0], [2.0], [2.0], [4.0]]])
+        mask = torch.tensor([[[False], [True], [False], [True]]])
+        mean = torch.zeros_like(target, requires_grad=True)
+        scale = torch.ones_like(target, requires_grad=True)
+        transition_scale = torch.ones_like(target, requires_grad=True)
+        outputs = {
+            "mean": mean,
+            "scale": scale,
+            "transition_mean": torch.zeros_like(target, requires_grad=True),
+            "transition_scale": transition_scale,
+            "df": torch.full_like(target, 4.0),
+        }
+
+        loss = detector._reconstruction_loss(outputs, target, mask)
+        self.assertTrue(torch.isfinite(loss))
+        loss.backward()
+        self.assertIsNotNone(transition_scale.grad)
+        self.assertGreater(float(transition_scale.grad.abs().sum()), 0.0)
 
 
 if __name__ == "__main__":
