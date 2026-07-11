@@ -137,6 +137,7 @@ class PatternADCoreTest(unittest.TestCase):
                 "causal_delta_innovation_squared_residual",
                 "causal_delta_innovation_standardized_squared_residual",
                 "predicted_causal_delta_innovation_scale",
+                "causal_delta_contextual_tail_surprisal",
             },
         )
         for values in components.values():
@@ -743,6 +744,31 @@ class PatternADCoreTest(unittest.TestCase):
             )
         )
         self.assertGreater(float(delta_mean.grad[:, 1:, :].abs().sum()), 0.0)
+
+    def test_causal_delta_alignment_duplicates_only_the_nonexistent_initial_delta(self):
+        target = torch.tensor([[[2.0], [5.0], [9.0]]])
+        mean = torch.tensor([[[100.0], [3.0], [4.0]]])
+        scale = torch.tensor([[[100.0], [2.0], [3.0]]])
+        delta, aligned_mean, aligned_scale = (
+            PatternAD._causal_delta_targets_and_params(
+                target,
+                {
+                    "causal_delta_innovation_mean": mean,
+                    "causal_delta_innovation_scale": scale,
+                },
+            )
+        )
+        torch.testing.assert_close(delta, torch.tensor([[[3.0], [3.0], [4.0]]]))
+        torch.testing.assert_close(aligned_mean, torch.tensor([[[3.0], [3.0], [4.0]]]))
+        torch.testing.assert_close(aligned_scale, torch.tensor([[[2.0], [2.0], [3.0]]]))
+
+    def test_causal_delta_loss_enables_contextual_tail_diagnostic(self):
+        config = PatternADConfig(
+            reconstruction_distribution="gaussian",
+            reconstruction_causal_delta_innovation_loss_weight=1.0,
+        )
+        self.assertTrue(config.use_causal_delta_innovation_diagnostics)
+        self.assertTrue(config.use_causal_delta_contextual_tail_diagnostics)
 
     def test_causal_innovation_loss_trains_only_post_initial_predictions(self):
         detector = PatternAD(

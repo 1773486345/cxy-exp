@@ -174,6 +174,7 @@ def run_patternad_variant(
     for name in (
         "use_causal_innovation_diagnostics",
         "use_causal_delta_innovation_diagnostics",
+        "use_causal_delta_contextual_tail_diagnostics",
     ):
         recorded_hyperparameters[name] = bool(getattr(model.config, name))
     model.detect_multi_fit(fit_data, fit_text, fit_labels)

@@ -21,14 +21,19 @@ approximately one in every context. A one-step level forecaster is therefore
 not an adequate change detector in this setting; it will not be expanded or
 used to support a combined detector.
 
-The refined hypothesis is to predict `delta x_t = x_t - x_{t-1}` from
-`x_{<t}` only and normalize it with a rolling RMS of prior innovations only.
-The delta mean and delta scale are target/future blind. This remains a
-diagnostic, not a score-combination claim. Run one A11 delta cell and inspect
-`causal_delta_innovation_standardized_squared_residual`; expansion requires
-both abrupt-versus-gradual pairs to be correct plus review of same-deviation
-ordering and the predicted delta-scale component. P2, confirmation, and
-real-data runs remain closed.
+The delta result refines the hypothesis. Predicting `delta x_t = x_t - x_{t-1}`
+from `x_{<t}` with a rolling RMS of prior innovations fixed abrupt-versus-gradual
+ordering (`2/2`), but the raw standardized delta component reversed all three
+quiet-versus-volatile same-deviation comparisons. The causal scale is larger
+in the volatile regime, but its residual tail remains regime-dependent.
+
+The next diagnostic applies the existing conditional-tail principle to this
+causal delta residual, rather than adding another learned head. A
+scale-stratified empirical survival map is fitted on the disjoint normal
+score-reference segment only and exported as
+`causal_delta_contextual_tail_surprisal`. It must retain abrupt/gradual `2/2`
+and recover positive same-deviation ordering. This remains a diagnostic, not a
+score-combination claim; P2, confirmation, and real-data runs remain closed.
 
 ```text
 基于条件残差分布的模式感知残差语义建模

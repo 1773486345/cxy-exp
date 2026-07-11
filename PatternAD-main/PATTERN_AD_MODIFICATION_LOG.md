@@ -853,6 +853,7 @@ The branch is instantiated for every variant but is disabled in formal cells:
 ```text
 reconstruction_causal_delta_innovation_loss_weight = 0.0
 use_causal_delta_innovation_diagnostics = false
+use_causal_delta_contextual_tail_diagnostics = false
 ```
 
 One A11 development run only is next, with
@@ -862,3 +863,34 @@ abrupt/gradual pairs in the predicted order before any multi-seed expansion.
 The evaluator now records resolved causal-diagnostic flags in
 `score_run_metadata.json`, avoiding the earlier ambiguity where an enabled
 loss implied a diagnostic branch but the raw command override did not list it.
+
+## 2026-07-12 Causal Delta Result And Conditional-Innovation Tail Revision
+
+The completed one-cell delta-innovation diagnostic is stored in
+`result/patternad_synthetic/dev_causal_delta_innovation`. It passed its stated
+onset check: both abrupt-versus-gradual pairs were correct for
+`causal_delta_innovation_standardized_squared_residual`, with margins `+4.2737`
+and `+3.2558`. This confirms that a past-only delta target prevents the
+bidirectional reconstructor from explaining away an abrupt onset.
+
+It did not yet provide a score that can be fused with the level tail. All three
+equal-deviation quiet-versus-volatile comparisons were reversed (`0/3`), even
+though the causal delta scale was larger in the volatile context. The raw delta
+residual and scale-normalized residual therefore still have regime-dependent
+normal tails. No multi-seed expansion, p-value combination, P2, confirmation,
+or real-data run is authorized from this raw component.
+
+The next diagnostic is not a new learned head. It applies the already adopted
+conditional-tail principle to the causal delta residual: fit scale-stratified
+empirical survival references on the disjoint normal score-reference segment
+only, then export `causal_delta_contextual_tail_surprisal`. The map uses the
+strictly past-only delta scale as its conditioning variable; outer calibration,
+test scores, labels, and injected intervals remain excluded from the fit. The
+primary level-tail score remains byte-for-byte separate. One rerun of the same
+A11 identity is required because the previous result did not persist the
+normal-reference windows.
+
+Advancement criterion for this rerun: the new component must retain `2/2`
+abrupt/gradual orderings and produce positive same-deviation ordering. Only
+then can the two normal-calibrated evidence streams enter a predeclared
+multi-seed diagnostic and a fixed p-value-combination proposal.

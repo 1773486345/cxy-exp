@@ -354,6 +354,8 @@ P1-v2-holdout 已完整执行并满足结果完整性与 provenance 检查，但
 
 该 level-space causal innovation 诊断已完成但未通过：其 primary score 按设计未改变；`causal_innovation_standardized_squared_residual` 的 same-deviation 为 `0/3`、abrupt/gradual 为 `1/2`，且 predicted causal scale 近似恒为 `1.0`。因此不得扩展多 seed，也不得组合到最终分数。下一次且仅一次开发诊断改为 difference-space causal innovation：从 `x_{<t}` 预测 `x_t-x_{t-1}`，并仅用先前差分的 rolling RMS 作为尺度先验。先检查 `causal_delta_innovation_standardized_squared_residual` 是否两个 abrupt/gradual pair 都正确，同时报告 same-deviation 与 predicted delta scale；未通过则继续停止 P2、locked confirmation 和真实数据实验。
 
+difference-space 诊断已完成：`causal_delta_innovation_standardized_squared_residual` 的 abrupt/gradual 为 `2/2`（margin `+4.2737`、`+3.2558`），但 same-deviation 为 `0/3`；因果尺度在 volatile context 较大，却未使标准化残差的 normal tail 跨 regime 校准。因此它证明了因果差分对突变 onset 的机制，但仍不能直接融合。下一次且仅一次开发诊断固定模型、训练和种子不变，只在独立 normal score-reference 上按 predicted causal delta scale 分层拟合 empirical tail，导出 `causal_delta_contextual_tail_surprisal`。扩展门槛改为：该分量必须保留 abrupt/gradual `2/2`，且 same-deviation 排序为正；否则继续关闭多 seed、P2、locked confirmation 与真实数据实验。
+
 ### P2：Motivation development，4 个主 cell，3 seeds
 
 用 macro AUC-PR 选择一个候选。若预注册候选为 A11，必须分别检查 `A11-A00`、`A11-A10`、`A11-A01` 三个预声明 comparison；不能定义或选择 observed-best comparator。完整的 context-conditioned distribution 主张要求相应 pair 均满足下列推进条件；若只有某一 pair 成立，则按第 13 节收窄主张：

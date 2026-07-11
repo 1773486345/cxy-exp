@@ -318,22 +318,25 @@ conda run --no-capture-output -n patternad_env \
   --artifact-dir artifacts/patternad_synthetic/contextual_v1/seed_3101 \
   --patternad-variant A11 --seed 2021 --num-epochs 30 \
   --hyperparameter-overrides '{"reconstruction_causal_delta_innovation_loss_weight": 1.0}' \
-  --method-name A11_causal_delta_innovation_dev \
-  --output-dir result/patternad_synthetic/dev_causal_delta_innovation
+  --method-name A11_causal_delta_contextual_tail_dev \
+  --output-dir result/patternad_synthetic/dev_causal_delta_contextual_tail
 ```
 
-The preceding level-innovation run is complete and did not pass: its primary
-score stayed unchanged by design, while its standardized component got only
-`1/2` abrupt/gradual pairs and `0/3` same-deviation pairs right; its learned
-scale was approximately constant at `1.0`. The new run instead predicts
-`x_t - x_{t-1}` from `x_{<t}` and uses a rolling RMS of prior differences only.
+The level-innovation run failed (`1/2` abrupt/gradual, `0/3` same-deviation).
+The difference-space causal innovation run then fixed abrupt/gradual (`2/2`),
+but its raw standardized score was `0/3` on same-deviation: its causal scale
+tracks the volatile regime, yet its standardized residual is still not
+conditionally calibrated. Therefore neither component may be combined or
+expanded yet.
 
-Inspect `score_component_orderings.csv` for
-`causal_delta_innovation_standardized_squared_residual`. It must get both
-abrupt/gradual pairs right before a multi-seed expansion; also inspect
-`predicted_causal_delta_innovation_scale` for causal context sensitivity. Do
-not claim a combined detector. If it passes, freeze a multi-seed diagnostic grid
-and a p-value combination rule before any real-data run. Do not open
+The command above reruns the identical delta model and additionally fits a
+scale-stratified empirical tail map on the disjoint normal score-reference
+segment only. Inspect `score_component_orderings.csv` for
+`causal_delta_contextual_tail_surprisal`. It must retain `2/2` abrupt/gradual
+and recover positive same-deviation ordering before a multi-seed expansion.
+Also inspect `causal_delta_score_calibration` in run diagnostics. Do not claim
+a combined detector. If it passes, freeze a multi-seed diagnostic grid and a
+p-value combination rule before any real-data run. Do not open
 generator seeds 3111-3120 before the development candidate, score combination,
 and gates are frozen. Locked synthetic confirmation requires the runner's explicit
 `--allow-locked` acknowledgement and the complete predeclared seed grid.

@@ -44,6 +44,7 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "use_causal_innovation_diagnostics": False,
     "reconstruction_causal_delta_innovation_loss_weight": 0.0,
     "use_causal_delta_innovation_diagnostics": False,
+    "use_causal_delta_contextual_tail_diagnostics": False,
     "causal_delta_innovation_window": 7,
     "causal_delta_scale_floor": 0.05,
     "causal_delta_scale_prior_mix": 1.0,
@@ -138,6 +139,9 @@ class PatternADConfig:
         )
         self.use_causal_delta_innovation_diagnostics = bool(
             getattr(self, "use_causal_delta_innovation_diagnostics", False)
+        ) or self.reconstruction_causal_delta_innovation_loss_weight > 0.0
+        self.use_causal_delta_contextual_tail_diagnostics = bool(
+            getattr(self, "use_causal_delta_contextual_tail_diagnostics", False)
         ) or self.reconstruction_causal_delta_innovation_loss_weight > 0.0
         self.reconstruction_validation_fraction = float(
             getattr(self, "reconstruction_validation_fraction", 0.1)
@@ -926,6 +930,7 @@ class PatternAD:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.seq_len = self.config.seq_len
         self.pattern_scorer = None
+        self.causal_delta_scorer = None
         self.model = None
         self.early_stopping = None
         self._train_mask_generators = {}
@@ -933,6 +938,7 @@ class PatternAD:
         self._score_call_diagnostics = []
         self._last_score_components = {}
         self._scorer_reference_diagnostics = None
+        self._causal_delta_scorer_reference_diagnostics = None
 
     def get_diagnostics(self):
         diagnostics = {
@@ -950,6 +956,15 @@ class PatternAD:
                     copy.deepcopy(self._scorer_reference_diagnostics or {})
                 )
             diagnostics["score_calibration"] = score_calibration
+        if self.causal_delta_scorer is not None:
+            delta_calibration = self.causal_delta_scorer.contextual_calibration_summary()
+            if delta_calibration is not None:
+                delta_calibration.update(
+                    copy.deepcopy(
+                        self._causal_delta_scorer_reference_diagnostics or {}
+                    )
+                )
+            diagnostics["causal_delta_score_calibration"] = delta_calibration
         return diagnostics
 
     def get_last_score_components(self):
@@ -1007,6 +1022,107 @@ class PatternAD:
                 128.0,
             ),
         )
+
+    def _build_causal_delta_scorer(self):
+        """Normal-only contextual tail map for the causal delta diagnostic."""
+        return PatternAwareScorer(
+            components=("raw",),
+            eps=getattr(self.config, "pattern_score_eps", 1e-6),
+            score_mode="contextual_tail_probability",
+            distribution="gaussian",
+            contextual_calibration_bins=getattr(
+                self.config, "pattern_score_contextual_calibration_bins", 4
+            ),
+            contextual_calibration_min_bin_size=getattr(
+                self.config,
+                "pattern_score_contextual_calibration_min_bin_size",
+                128,
+            ),
+            contextual_calibration_shrinkage=getattr(
+                self.config,
+                "pattern_score_contextual_calibration_shrinkage",
+                128.0,
+            ),
+        )
+
+    @staticmethod
+    def _causal_delta_targets_and_params(batch_x_time, outputs):
+        """Align delta targets with the causal head without scoring t=0."""
+        if not (
+            isinstance(outputs, dict)
+            and "causal_delta_innovation_mean" in outputs
+            and "causal_delta_innovation_scale" in outputs
+        ):
+            raise RuntimeError(
+                "Causal delta calibration requires mean and scale outputs."
+            )
+        target = torch.zeros_like(batch_x_time)
+        if batch_x_time.shape[1] > 1:
+            target[:, 1:, :] = batch_x_time[:, 1:, :] - batch_x_time[:, :-1, :]
+        mean = outputs["causal_delta_innovation_mean"].detach().clone()
+        scale = outputs["causal_delta_innovation_scale"].detach().clone()
+        if batch_x_time.shape[1] > 1:
+            # The first point has no innovation. Duplicate the first valid
+            # causal delta so all overlapping windows have a finite alignment.
+            target[:, 0, :] = target[:, 1, :]
+            mean[:, 0, :] = mean[:, 1, :]
+            scale[:, 0, :] = scale[:, 1, :]
+        return target, mean, scale
+
+    def _fit_causal_delta_scorer(self, data_loader):
+        self.causal_delta_scorer = None
+        self._causal_delta_scorer_reference_diagnostics = None
+        if not self.config.use_causal_delta_contextual_tail_diagnostics:
+            return
+
+        self.model.load_state_dict(self.early_stopping.check_point)
+        self.model.to(self.device)
+        was_training = self.model.training
+        self.model.eval()
+        true_windows, mean_windows, scale_windows = [], [], []
+        max_cells = int(self.config.pattern_score_contextual_calibration_max_cells)
+        cells_per_window = max(1, int(self.config.seq_len) * int(self.config.enc_in))
+        max_windows = max(1, max_cells // cells_per_window)
+        collected_windows = 0
+        with torch.no_grad():
+            for batch_x_time, _, _, _ in data_loader:
+                batch_x_time = batch_x_time.float().to(self.device)
+                outputs = self._align_output_to_true(
+                    self._forward_backbone(batch_x_time, None), batch_x_time
+                )
+                target, mean, scale = self._causal_delta_targets_and_params(
+                    batch_x_time, outputs
+                )
+                take = min(int(batch_x_time.shape[0]), max_windows - collected_windows)
+                if take <= 0:
+                    break
+                true_windows.append(target[:take].detach().cpu().numpy())
+                mean_windows.append(mean[:take].detach().cpu().numpy())
+                scale_windows.append(scale[:take].detach().cpu().numpy())
+                collected_windows += take
+                if collected_windows >= max_windows:
+                    break
+        if not true_windows:
+            raise RuntimeError("No windows collected for causal delta calibration.")
+        self.causal_delta_scorer = self._build_causal_delta_scorer()
+        self.causal_delta_scorer.fit_contextual_tail(
+            np.concatenate(true_windows, axis=0),
+            np.concatenate(mean_windows, axis=0),
+            {"scale": np.concatenate(scale_windows, axis=0)},
+        )
+        summary = self.causal_delta_scorer.contextual_calibration_summary() or {}
+        self._causal_delta_scorer_reference_diagnostics = {
+            "reference_source": "disjoint_temporal_normal_holdout",
+            "reference_points": int(len(self.score_reference_data_value)),
+            "inter_partition_gap_points": int(max(self.config.seq_len - 1, 0)),
+            "windows": int(collected_windows),
+            "cells": int(
+                np.concatenate(true_windows, axis=0).size
+            ),
+            "bin_counts": summary.get("bin_counts", []),
+        }
+        if was_training:
+            self.model.train()
 
     @staticmethod
     def _align_output_to_true(outputs, true):
@@ -1297,6 +1413,7 @@ class PatternAD:
             "causal_delta_innovation_squared_residual": [],
             "causal_delta_innovation_standardized_squared_residual": [],
             "predicted_causal_delta_innovation_scale": [],
+            "causal_delta_contextual_tail_surprisal": [],
         }
         batch_count = 0
         window_count = 0
@@ -1324,6 +1441,7 @@ class PatternAD:
                 causal_innovation_scale = torch.ones_like(component_scale)
                 causal_delta_innovation_squared = torch.zeros_like(raw_squared)
                 causal_delta_innovation_scale = torch.ones_like(component_scale)
+                causal_delta_contextual_tail = torch.zeros_like(raw_squared[:, :, :1])
                 if (
                     isinstance(outputs, dict)
                     and (
@@ -1373,20 +1491,39 @@ class PatternAD:
                         causal_delta_innovation_scale = causal_outputs[
                             "causal_delta_innovation_scale"
                         ].clamp_min(self.config.distribution_min_scale)
-                        if batch_x_time.shape[1] > 1:
-                            observed_delta = (
-                                batch_x_time[:, 1:, :] - batch_x_time[:, :-1, :]
+                        (
+                            causal_delta_target,
+                            causal_delta_mean,
+                            causal_delta_innovation_scale,
+                        ) = self._causal_delta_targets_and_params(
+                            batch_x_time, causal_outputs
+                        )
+                        causal_delta_innovation_scale = (
+                            causal_delta_innovation_scale.clamp_min(
+                                self.config.distribution_min_scale
                             )
+                        )
+                        if batch_x_time.shape[1] > 1:
                             causal_delta_innovation_squared[:, 1:, :] = (
-                                observed_delta
-                                - causal_outputs["causal_delta_innovation_mean"][:, 1:, :]
+                                causal_delta_target[:, 1:, :]
+                                - causal_delta_mean[:, 1:, :]
                             ).square()
                             causal_delta_innovation_squared[:, 0, :] = (
                                 causal_delta_innovation_squared[:, 1, :]
                             )
-                            causal_delta_innovation_scale[:, 0, :] = (
-                                causal_delta_innovation_scale[:, 1, :]
+                        if self.causal_delta_scorer is not None:
+                            tail = self.causal_delta_scorer.score_windows(
+                                causal_delta_target,
+                                causal_delta_mean,
+                                distribution_params={
+                                    "scale": causal_delta_innovation_scale
+                                },
                             )
+                            causal_delta_contextual_tail = torch.as_tensor(
+                                tail,
+                                dtype=batch_x_time.dtype,
+                                device=batch_x_time.device,
+                            ).unsqueeze(-1)
                 transition_squared = torch.zeros_like(raw_squared)
                 if isinstance(outputs, dict) and "transition_scale" in outputs:
                     transition_scale = outputs["transition_scale"].detach().clone()
@@ -1447,6 +1584,9 @@ class PatternAD:
                     "predicted_causal_delta_innovation_scale": (
                         causal_delta_innovation_scale
                     ),
+                    "causal_delta_contextual_tail_surprisal": (
+                        causal_delta_contextual_tail
+                    ),
                 }
                 causal_component_names = {
                     "causal_innovation_squared_residual",
@@ -1455,6 +1595,7 @@ class PatternAD:
                     "causal_delta_innovation_squared_residual",
                     "causal_delta_innovation_standardized_squared_residual",
                     "predicted_causal_delta_innovation_scale",
+                    "causal_delta_contextual_tail_surprisal",
                 }
                 if score_mask is None:
                     aggregated_components = {
@@ -1561,6 +1702,7 @@ class PatternAD:
 
     def _fit_pattern_scorer(self, data_loader):
         self.pattern_scorer = self._build_pattern_scorer()
+        self._fit_causal_delta_scorer(data_loader)
         score_mode = str(getattr(self.config, "pattern_score_mode", "raw")).lower()
         contextual_modes = {
             "contextual_tail_probability",

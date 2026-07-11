@@ -51,6 +51,7 @@ class PatternADToolingTest(unittest.TestCase):
         self.assertTrue(all(value == 0.0 for value in causal_delta.values()))
         self.assertFalse(shared["use_causal_innovation_diagnostics"])
         self.assertFalse(shared["use_causal_delta_innovation_diagnostics"])
+        self.assertFalse(shared["use_causal_delta_contextual_tail_diagnostics"])
         self.assertEqual(
             manifest["variants"]["A01"]["hyperparameters"]["pattern_score_mode"],
             "contextual_tail_probability",
