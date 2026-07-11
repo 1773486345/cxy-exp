@@ -1,0 +1,2 @@
+strategy_args,metric_name,"PatternAD;{""batch_size"": 1024, ""d_ff"": 256, ""d_model"": 128, ""e_layers"": 2, ""enc_in_time"": 15, ""num_epochs"": 30, ""parallel_strategy"": ""DP"", ""seq_len"": 24, ""train_mask_ratio"": 0.25, ""train_variable_mask_ratio"": 0.15}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.8354436894878146
