@@ -157,6 +157,50 @@ class PatternADToolingTest(unittest.TestCase):
                 0.01,
             )
 
+    def test_contextual_tail_requires_disjoint_reference_provenance(self):
+        diagnostics = self._diagnostics("gaussian")
+        diagnostics["score_mode"] = "contextual_tail_probability"
+        diagnostics["training"].update(
+            {
+                "scorer_reference_points": 10,
+                "fit_partition": {
+                    "reference_source": "disjoint_temporal_normal_holdout",
+                    "optimization_points": 80,
+                    "validation_points": 10,
+                    "reference_points": 10,
+                    "inter_partition_gap_points": 23,
+                    "validation_fraction": 0.1,
+                    "reference_fraction": 0.1,
+                },
+            }
+        )
+        diagnostics["score_calibration"] = {
+            "reference_source": "disjoint_temporal_normal_holdout",
+            "reference_points": 10,
+            "global_count": 10,
+            "bin_counts": [5, 5],
+            "minimum_bin_size": 128,
+            "shrinkage": 128.0,
+        }
+        hyperparameters = {
+            "seq_len": 24,
+            "reconstruction_distribution": "gaussian",
+            "pattern_score_mode": "contextual_tail_probability",
+            "reconstruction_validation_fraction": 0.1,
+            "pattern_score_reference_fraction": 0.1,
+            "pattern_score_contextual_calibration_min_bin_size": 128,
+            "pattern_score_contextual_calibration_shrinkage": 128.0,
+        }
+        self.assertEqual(
+            _validate_model_diagnostics(diagnostics, hyperparameters, 0.01)[
+                "score_calibration"
+            ]["global_count"],
+            10,
+        )
+        diagnostics.pop("score_calibration")
+        with self.assertRaisesRegex(RuntimeError, "missing ECDF provenance"):
+            _validate_model_diagnostics(diagnostics, hyperparameters, 0.01)
+
     def test_detailed_artifact_round_trips_model_diagnostics(self):
         diagnostics = self._diagnostics("gaussian")
         row = {

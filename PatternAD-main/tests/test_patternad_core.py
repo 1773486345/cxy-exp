@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 
@@ -38,6 +39,53 @@ class _MaskEchoModel(nn.Module):
 
 
 class PatternADCoreTest(unittest.TestCase):
+    def test_fit_partitions_are_temporally_disjoint_with_window_gaps(self):
+        detector = PatternAD(
+            enc_in=2,
+            seq_len=24,
+            reconstruction_validation_fraction=0.1,
+            pattern_score_reference_fraction=0.1,
+        )
+        values = pd.DataFrame(
+            {"left": np.arange(300), "right": np.arange(300) * 2}
+        )
+        text = pd.DataFrame({"description": ["normal"] * len(values)})
+        (
+            optimization,
+            optimization_text,
+            validation,
+            validation_text,
+            reference,
+            reference_text,
+        ) = detector._split_fit_partitions(values, text)
+
+        self.assertEqual(
+            len(optimization) + len(validation) + len(reference),
+            len(values) - 2 * (detector.seq_len - 1),
+        )
+        self.assertEqual(len(optimization), len(optimization_text))
+        self.assertEqual(len(validation), len(validation_text))
+        self.assertEqual(len(reference), len(reference_text))
+        self.assertEqual(
+            validation.index[0] - optimization.index[-1], detector.seq_len
+        )
+        self.assertEqual(
+            reference.index[0] - validation.index[-1], detector.seq_len
+        )
+        diagnostics = detector.get_diagnostics()
+        self.assertIsNone(diagnostics["training"])
+        self.assertEqual(
+            detector._scorer_reference_diagnostics["reference_source"],
+            "disjoint_temporal_normal_holdout",
+        )
+
+    def test_fit_partition_configuration_rejects_nonpositive_training_share(self):
+        with self.assertRaisesRegex(ValueError, "must be less than one"):
+            PatternADConfig(
+                reconstruction_validation_fraction=0.5,
+                pattern_score_reference_fraction=0.5,
+            )
+
     def test_score_diagnostics_append_and_summarize_scale(self):
         detector = PatternAD(
             enc_in=2,

@@ -95,7 +95,7 @@ The current Gaussian development path also uses target-blind visible scale to no
 
 At inference, probabilistic variants default to `pattern_score_mode="tail_probability"`: `-log` of the conditional two-sided tail probability of the absolute standardized residual. Density NLL remains available as an explicit ablation, but its `log(scale)` normalization term is not used as cross-regime anomaly rarity.
 
-The v2 factorial explicitly selects `pattern_score_mode="contextual_tail_probability"`. It fits a normal-only empirical survival map within target-blind predicted-scale quantile bins, shrinks each bin toward the global ECDF, and never reads outer calibration or test labels. This preserves residual monotonicity while directly targeting cross-regime false-alarm invariance.
+The v2 factorial explicitly selects `pattern_score_mode="contextual_tail_probability"`. It fits a normal-only empirical survival map within target-blind predicted-scale quantile bins, shrinks each bin toward the global ECDF, and never reads outer calibration or test labels. Its reference residuals come from a dedicated temporal holdout, separated by `seq_len - 1` points from both optimization and early stopping. This preserves residual monotonicity while directly targeting cross-regime false-alarm invariance without fitting the ECDF on residuals already used for gradient updates.
 
 Legacy aggregate and reliability-weighted scorers remain available only as explicit ablation paths.
 
@@ -103,7 +103,7 @@ For the factorial context control, `use_context_conditioning=false` does not rem
 
 ## Strict Evaluation Protocol
 
-`config/unfixed_detect_label_multi_config.json` now selects `evaluation_protocol="train_calibration"`. The protocol reserves the temporal tail of official train as an independent calibration split and leaves a gap of `seq_len - 1` points by default between model fit data and calibration data. Test scores and labels do not determine the threshold.
+`config/unfixed_detect_label_multi_config.json` now selects `evaluation_protocol="train_calibration"`. The protocol reserves the temporal tail of official train as an independent calibration split and leaves a gap of `seq_len - 1` points by default between model fit data and calibration data. Within the model-fit prefix, PatternAD uses disjoint optimization, early-stopping validation, and score-reference segments; the latter two boundaries use the same window gap. Test scores and labels do not determine the threshold.
 
 The threshold is a finite-sample calibration-only empirical/conformal-style quantile. Because overlapping time-series scores are not exchangeable, this is not presented as a strict conformal coverage guarantee. The strict factorial manifest predeclares `anomaly_ratios=[1.0]`; different ratios remain separate experiments in the leaderboard and are never collapsed by taking the best test metric. The strict summarizer accepts only threshold-independent ranking/VUS metrics and verifies that repeated score-metric values agree across any ratio rows.
 

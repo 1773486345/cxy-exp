@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "experiment_name": "patternad_factorial_v2",
-  "description": "Minimal C x D ablation with normal-only context-stratified tail calibration and complementary scoring fixed in A cells.",
+  "experiment_name": "patternad_factorial_v2_holdout",
+  "description": "Minimal C x D ablation with disjoint-normal-reference context-stratified tail calibration and complementary scoring fixed in A cells.",
   "benchmark": {
     "script": "scripts/run_benchmark.py",
     "config_path": "unfixed_detect_label_multi_config.json",
@@ -40,6 +40,7 @@
     "train_variable_mask_ratio": 0.15,
     "reconstruction_full_loss_weight": 0.1,
     "reconstruction_transition_loss_weight": 0.0,
+    "reconstruction_validation_fraction": 0.1,
     "use_context_scale_prior": true,
     "context_scale_floor": 0.05,
     "context_scale_prior_mix": 0.5,
@@ -58,6 +59,7 @@
     "pattern_score_contextual_calibration_min_bin_size": 128,
     "pattern_score_contextual_calibration_shrinkage": 128.0,
     "pattern_score_contextual_calibration_max_cells": 500000,
+    "pattern_score_reference_fraction": 0.1,
     "parallel_strategy": "DP"
   },
   "variants": {

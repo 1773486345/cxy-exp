@@ -190,8 +190,28 @@ def _flatten_run_diagnostics(metadata: Mapping[str, Any]) -> Dict[str, Any]:
         "best_validation_loss": training["best_validation_loss"],
         "stopped_early": training["stopped_early"],
         "parameter_count": training["parameter_count"],
+        "optimization_train_points": training["optimization_train_points"],
+        "validation_points": training["validation_points"],
         "benchmark_log": str(metadata["benchmark_log"]),
     }
+    for name in ("scorer_reference_points",):
+        if name in training:
+            flattened[name] = training[name]
+    fit_partition = training.get("fit_partition")
+    if isinstance(fit_partition, dict):
+        for name in (
+            "reference_source",
+            "inter_partition_gap_points",
+            "validation_fraction",
+            "reference_fraction",
+        ):
+            if name in fit_partition:
+                flattened[f"fit_{name}"] = fit_partition[name]
+    score_calibration = diagnostics.get("score_calibration")
+    if isinstance(score_calibration, dict):
+        for name in ("global_count", "minimum_bin_size", "shrinkage"):
+            if name in score_calibration:
+                flattened[f"score_calibration_{name}"] = score_calibration[name]
     for phase in ("calibration", "test"):
         call = calls[phase]
         flattened[f"{phase}_input_length"] = call["input_length"]

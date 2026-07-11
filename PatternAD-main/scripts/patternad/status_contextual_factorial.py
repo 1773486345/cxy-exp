@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 
 DEFAULT_INPUT = Path(
-    "result/patternad_synthetic/p1_contextual_calibrated_v2/development"
+    "result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development"
 )
 TERMINAL_STATUSES = {"completed", "failed", "interrupted"}
 

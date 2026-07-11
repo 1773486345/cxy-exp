@@ -306,13 +306,17 @@ is now disabled in all formal cells. Expanded raw cells are stored in
 summary remain directly readable.
 
 The next full experiment is the strict P1-v2 development grid: ten generator
-seeds crossed with model seeds 2021/2022/2023 and all four A cells. Inspect the
-120-command plan without creating files or processes:
+seeds crossed with model seeds 2021/2022/2023 and all four A cells. P1-v2 uses
+the frozen 80/10/10 temporal model-fit partition: optimization, early stopping,
+and a disjoint normal score-reference segment, with `seq_len - 1` gaps at both
+internal boundaries. The score-reference segment alone fits the scale-stratified
+empirical tail map; the outer calibration segment remains threshold-only.
+Inspect the 120-command plan without creating files or processes:
 
 ```bash
 conda run --no-capture-output -n patternad_env \
   python -u scripts/patternad/run_contextual_factorial.py \
-  --seed-group development --run-name p1_contextual_calibrated_v2 \
+  --seed-group development --run-name p1_contextual_calibrated_v2_holdout \
   --gpus 0 --dry-run
 ```
 
@@ -326,7 +330,7 @@ interrupted identities without overwriting completed ones:
 ```bash
 conda run --no-capture-output -n patternad_env \
   python -u scripts/patternad/run_contextual_factorial.py \
-  --seed-group development --run-name p1_contextual_calibrated_v2 \
+  --seed-group development --run-name p1_contextual_calibrated_v2_holdout \
   --gpus 0 --resume
 ```
 
@@ -337,7 +341,7 @@ epoch lines, failures, and a per-variant ETA when enough timings are available:
 ```bash
 conda run --no-capture-output -n patternad_env \
   python -u scripts/patternad/status_contextual_factorial.py \
-  --input result/patternad_synthetic/p1_contextual_calibrated_v2/development \
+  --input result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development \
   --watch 5
 ```
 
@@ -350,7 +354,7 @@ generator/model-seed bootstrap:
 ```bash
 conda run --no-capture-output -n patternad_env \
   python -u scripts/patternad/summarize_contextual_factorial.py \
-  --input result/patternad_synthetic/p1_contextual_calibrated_v2/development \
+  --input result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development \
   --n-bootstrap 10000 --seed 2021
 ```
 

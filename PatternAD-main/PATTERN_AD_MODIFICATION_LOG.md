@@ -792,6 +792,22 @@ The 30-epoch explicit-transition-head run retained level macro AP `0.1262` and s
 
 The complete P1-v1 crossed grid finished all 120 identities without failures. A11 improved macro AP over A00 by `0.063709` (95% crossed-bootstrap CI `[0.052872, 0.075587]`) and improved A11-A01 matched ordering by `0.186667` (`[0.066667, 0.293333]`). The registered regime-FPR criterion failed: the relative reduction against A00 was only `11.46%`, below `25%`, with a CI spanning zero. A11 also reduced abrupt/gradual ordering to `0.116667`; dependency-break AP remained below prevalence. Direction A therefore has a supported same-deviation mechanism but cannot advance to the real-data matrix in its v1 form.
 
-The failed transition family is now closed. Its auxiliary loss is zero in every formal cell, removing a D1/D0 training-objective confound. P1-v2 replaces the uncalibrated theoretical Gaussian tail with a normal-only context-stratified empirical tail. Target-blind predicted log-scale defines four quantile bins; each bin's empirical survival probability is shrunk toward the global ECDF, with undersized bins falling back completely to the global reference. The map is fitted only on masked residuals from the model fit split. Outer temporal calibration data, test values, and all labels are excluded. Scores remain monotone in absolute standardized residual within each bin and finite for values beyond the reference maximum.
+The failed transition family is now closed. Its auxiliary loss is zero in every formal cell, removing a D1/D0 training-objective confound. P1-v2 replaces the uncalibrated theoretical Gaussian tail with a normal-only context-stratified empirical tail. Target-blind predicted log-scale defines four quantile bins; each bin's empirical survival probability is shrunk toward the global ECDF, with undersized bins falling back completely to the global reference. The map is fitted only on masked residuals from the dedicated normal score-reference segment inside model fit; outer temporal calibration data, test values, and all labels are excluded. Scores remain monotone in absolute standardized residual within each bin and finite for values beyond the reference maximum.
 
 Expanded P1-v1 cells were consolidated from more than 1,300 files into `result/patternad_synthetic/p1_contextual_dev_v1/p1_raw_cells_20260712.tar.gz` (SHA256 `5b1be39f8942251289c7561f5ceac80362f4f0587d944e2cac68b8b5c6f77d34`). The strict summary, run plan, and frozen inputs remain unpacked. Regenerable seeds 3102-3110, obsolete single-seed prototype trees, old Weather P0 expansions, stale label results, and caches were removed. Runtime `result/` and generated synthetic seed directories are now ignored so future experiments do not dirty locked-run provenance.
+
+## 2026-07-12 Disjoint Empirical-Tail Reference Revision
+
+The first P1-v2 implementation used normal residuals from the optimization split to fit its predicted-scale-stratified ECDF. Although labels and outer calibration/test data were excluded, those residuals came from the segment used for gradient updates and could be optimistically narrow or regime-dependent. That weakens the intended claim of calibrated conditional tail rarity.
+
+The model-fit prefix is now split in temporal order into three disjoint normal segments, with `seq_len - 1` points removed at both internal boundaries:
+
+```text
+optimization train  80% of usable model-fit points
+early stopping      10%
+score reference     10%
+```
+
+The scaler is fitted on optimization train only. The score-reference segment alone fits the normal-only contextual-tail ECDF; validation is only for checkpoint selection, and the outer train-calibration tail remains threshold-only. All A/B cells use the same split, so this change does not add a context/distribution confound. Diagnostics now persist the segment sizes, fractions, gap, and reference source. Unit coverage verifies non-overlap, exact window gaps, and invalid fraction rejection.
+
+The stale tracked synthetic fixture `artifacts/patternad_synthetic/contextual_v1/seed_3101` was removed. Its recorded generator hash did not match the current generator, so the fail-closed P1 runner rejected it. The P1-v2-holdout runner regenerates all development fixtures from the frozen current generator instead of silently mixing incompatible synthetic inputs.

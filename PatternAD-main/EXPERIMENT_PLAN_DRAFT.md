@@ -25,7 +25,7 @@
 5. **Context 必须是 target-blind。** 改变被 mask 的目标值不会改变该位置的 context。
 6. **Context rolling statistics 必须排除 mask token。** 统计量只由 visible values 和显式有效计数构成。
 7. **训练 mask 流必须可配对。** 训练 mask 与 DataLoader shuffle 使用独立 seeded generator；严格矩阵固定 `dropout=0`，避免 context 路径额外消耗随机数后破坏配对。
-8. **窗口边界不得共享原始点。** train/validation 由不重叠的连续片段各自生成窗口；model-fit 输入与 calibration 之间另留 `seq_len - 1` 个点的 gap。
+8. **窗口边界不得共享原始点。** optimization train、early-stopping validation 和 empirical-tail score reference 由不重叠的连续片段各自生成窗口；每个内部边界和 model-fit 输入与 outer calibration 之间均留 `seq_len - 1` 个点的 gap。
 
 建议加入自动测试：
 
@@ -72,7 +72,7 @@ D1: heteroscedastic Gaussian
 - 对 `log_sigma` 使用数值边界和 variance floor；记录落到上下界的比例。
 - D0 与 D1 使用相同的 `mu` backbone、训练窗口、mask schedule、epoch budget 和 early-stop patience。
 - transition auxiliary 已在 P1-v1 证明不稳定且不进入最终分数，所有正式 cell 的权重统一为 0，避免污染 distribution 主效应。
-- empirical tail calibration 只使用模型 fit split 的正常 masked residual；外层 temporal calibration 和测试集不参与 calibration map 拟合。
+- empirical tail calibration 只使用模型 fit split 内独立 score-reference segment 的正常 masked residual；optimization、early-stopping validation、外层 temporal calibration 和测试集均不参与 calibration map 拟合。
 - Gaussian 是机制识别版本。只有 D1 明确有效后，再把 Student-t 作为二阶段 robustness 优化；否则无法判断收益来自 conditional scale 还是 heavy tail。
 - Density NLL 只作为训练目标和显式消融保留。异方差 density 的 `log(sigma)` 归一化项会改变跨 regime 排序，不能直接等同于“在当前背景下有多罕见”。
 
@@ -143,17 +143,18 @@ M0 即使指标更高，也不能直接作为“conditional residual distributio
 
 ### 5.1 Official train 内部切分
 
-当前可执行协议对每个实体按时间顺序切分 official train，并要求其标签全部为 0。先留出尾部 20% calibration，并在 model-fit 输入与 calibration 之间删除 `seq_len - 1` 个点；PatternAD 再把 model-fit 输入按 80/20 切为 optimization train 和 validation。因此忽略 gap 与取整时，实际约为：
+当前可执行协议对每个实体按时间顺序切分 official train，并要求其标签全部为 0。先留出尾部 20% outer calibration，并在 model-fit 输入与 calibration 之间删除 `seq_len - 1` 个点。PatternAD 再将 model-fit 输入的可用点按 80/10/10 切为 optimization train、early-stopping validation 和 empirical-tail score reference；optimization/validation 与 validation/reference 两个内部边界也各删除 `seq_len - 1` 个点。因此忽略 gap 与取整时，实际约为：
 
 ```text
-optimization train  64%
-validation          16%
-calibration  20%
+optimization train   64%
+validation            8%
+score reference       8%
+outer calibration    20%
 ```
 
-optimization train 与 validation 是不重叠的原始片段，各自在片段内部生成窗口；model-fit 与 calibration 之间额外保留 gap。Scaler 只在 optimization train 拟合；validation 用于 early stopping；calibration 只用于固定阈值和正常校准诊断。当前代码不实现 label-aware 窗口过滤；若 official train 含已知异常，严格协议会拒绝运行，必须先在数据版本层重定义/清理 official train 并记录 provenance。
+三个内部片段均是不重叠的原始片段，各自在片段内部生成窗口；所有内部边界和 model-fit 与 outer calibration 之间均有 gap。Scaler 只在 optimization train 拟合；validation 只用于 early stopping；score reference 只拟合 normal-only predicted-scale 分层 ECDF；outer calibration 只用于固定阈值和正常校准诊断。当前代码不实现 label-aware 窗口过滤；若 official train 含已知异常，严格协议会拒绝运行，必须先在数据版本层重定义/清理 official train 并记录 provenance。
 
-当前代码只暴露 outer `calibration_fraction`，PatternAD 内部 validation 固定为 model-fit 输入的 20%，因此默认约为 `64/16/20`。若要精确使用 `70/15/15`，需先新增显式 validation-fraction 配置并重做切分测试；不能只改 outer fraction 后把结果写成 `70/15/15`。
+严格 manifest 冻结 `reconstruction_validation_fraction=0.1` 与 `pattern_score_reference_fraction=0.1`。这两个比例只在 outer model-fit 前缀的去 gap 可用点上计算；分数参考不是 threshold calibration，不能把两者合并或用 outer calibration residual 拟合 ECDF。
 
 ### 5.2 固定阈值
 

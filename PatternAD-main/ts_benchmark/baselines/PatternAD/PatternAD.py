@@ -12,7 +12,7 @@ from torch import optim
 
 from ts_benchmark.baselines.PatternAD.utils.pattern_scoring import PatternAwareScorer
 from ts_benchmark.baselines.PatternAD.utils.tools import EarlyStopping, adjust_learning_rate
-from ts_benchmark.baselines.utils import anomaly_detection_multi_data_provider, train_val_split
+from ts_benchmark.baselines.utils import anomaly_detection_multi_data_provider
 
 
 DEFAULT_PATTERN_AD_HYPER_PARAMS = {
@@ -40,6 +40,7 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "train_variable_mask_ratio": 0.15,
     "reconstruction_full_loss_weight": 0.1,
     "reconstruction_transition_loss_weight": 0.0,
+    "reconstruction_validation_fraction": 0.1,
     "pattern_score_components": ["raw"],
     "pattern_score_local_window": 5,
     "pattern_score_trend_window": 7,
@@ -58,6 +59,7 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "pattern_score_contextual_calibration_min_bin_size": 128,
     "pattern_score_contextual_calibration_shrinkage": 128.0,
     "pattern_score_contextual_calibration_max_cells": 500000,
+    "pattern_score_reference_fraction": 0.1,
     "use_context_conditioning": True,
     "context_window": 7,
     "context_film_strength": 0.2,
@@ -103,6 +105,25 @@ class PatternADConfig:
             float(getattr(self, "reconstruction_transition_loss_weight", 0.0)),
             0.0,
         )
+        self.reconstruction_validation_fraction = float(
+            getattr(self, "reconstruction_validation_fraction", 0.1)
+        )
+        self.pattern_score_reference_fraction = float(
+            getattr(self, "pattern_score_reference_fraction", 0.1)
+        )
+        if self.reconstruction_validation_fraction <= 0.0:
+            raise ValueError("reconstruction_validation_fraction must be positive.")
+        if self.pattern_score_reference_fraction <= 0.0:
+            raise ValueError("pattern_score_reference_fraction must be positive.")
+        if (
+            self.reconstruction_validation_fraction
+            + self.pattern_score_reference_fraction
+            >= 1.0
+        ):
+            raise ValueError(
+                "reconstruction_validation_fraction plus "
+                "pattern_score_reference_fraction must be less than one."
+            )
         self.use_context_conditioning = bool(getattr(self, "use_context_conditioning", True))
         self.context_window = max(3, int(getattr(self, "context_window", 7)))
         if self.context_window % 2 == 0:
@@ -694,6 +715,7 @@ class PatternAD:
         self._fit_diagnostics = None
         self._score_call_diagnostics = []
         self._last_score_components = {}
+        self._scorer_reference_diagnostics = None
 
     def get_diagnostics(self):
         diagnostics = {
@@ -705,9 +727,12 @@ class PatternAD:
             "score_calls": copy.deepcopy(self._score_call_diagnostics),
         }
         if self.pattern_scorer is not None:
-            diagnostics["score_calibration"] = copy.deepcopy(
-                self.pattern_scorer.contextual_calibration_summary()
-            )
+            score_calibration = self.pattern_scorer.contextual_calibration_summary()
+            if score_calibration is not None:
+                score_calibration.update(
+                    copy.deepcopy(self._scorer_reference_diagnostics or {})
+                )
+            diagnostics["score_calibration"] = score_calibration
         return diagnostics
 
     def get_last_score_components(self):
@@ -1303,6 +1328,64 @@ class PatternAD:
         )
         self.model.train()
 
+    def _split_fit_partitions(self, data, text):
+        """Build disjoint temporal train, validation, and score-reference splits.
+
+        The empirical conditional-tail map must not be estimated from residuals
+        on the samples used for gradient updates.  A separate normal reference
+        segment also keeps it distinct from early stopping and from the outer
+        calibration segment used only to choose the fixed detection threshold.
+        """
+        if len(data) != len(text):
+            raise ValueError("Data and text inputs must have the same length.")
+
+        total_points = int(len(data))
+        gap = max(int(self.config.seq_len) - 1, 0)
+        usable_points = total_points - 2 * gap
+        validation_points = int(
+            math.floor(
+                usable_points * self.config.reconstruction_validation_fraction
+            )
+        )
+        reference_points = int(
+            math.floor(
+                usable_points * self.config.pattern_score_reference_fraction
+            )
+        )
+        optimization_points = usable_points - validation_points - reference_points
+        minimum_points = int(self.config.seq_len)
+        if min(optimization_points, validation_points, reference_points) < minimum_points:
+            raise ValueError(
+                "Insufficient model-fit data for disjoint optimization, validation, "
+                "and score-reference partitions at the configured seq_len."
+            )
+
+        optimization_end = optimization_points
+        validation_start = optimization_end + gap
+        validation_end = validation_start + validation_points
+        reference_start = validation_end + gap
+        reference_end = reference_start + reference_points
+        if reference_end != total_points:
+            raise RuntimeError("Temporal score-reference partition does not cover the fit tail.")
+
+        self._scorer_reference_diagnostics = {
+            "reference_source": "disjoint_temporal_normal_holdout",
+            "reference_points": int(reference_points),
+            "optimization_points": int(optimization_points),
+            "validation_points": int(validation_points),
+            "inter_partition_gap_points": int(gap),
+            "validation_fraction": float(self.config.reconstruction_validation_fraction),
+            "reference_fraction": float(self.config.pattern_score_reference_fraction),
+        }
+        return (
+            data.iloc[:optimization_end].copy(),
+            text.iloc[:optimization_end].copy(),
+            data.iloc[validation_start:validation_end].copy(),
+            text.iloc[validation_start:validation_end].copy(),
+            data.iloc[reference_start:reference_end].copy(),
+            text.iloc[reference_start:reference_end].copy(),
+        )
+
     def detect_multi_validate(self, valid_data_loader, criterion):
         total_loss = []
         self.model.eval()
@@ -1329,8 +1412,14 @@ class PatternAD:
         self._score_call_diagnostics = []
         self._last_score_components = {}
 
-        train_data_value, valid_data = train_val_split(train_data, 0.8, None)
-        train_data_text, valid_text = train_val_split(train_text, 0.8, None)
+        (
+            train_data_value,
+            train_data_text,
+            valid_data,
+            valid_text,
+            score_reference_data,
+            score_reference_text,
+        ) = self._split_fit_partitions(train_data, train_text)
         self.scaler.fit(train_data_value.values)
 
         device_ids = np.arange(torch.cuda.device_count()).tolist()
@@ -1347,10 +1436,21 @@ class PatternAD:
             columns=valid_data.columns,
             index=valid_data.index,
         )
+        score_reference_data = pd.DataFrame(
+            self.scaler.transform(score_reference_data.values),
+            columns=score_reference_data.columns,
+            index=score_reference_data.index,
+        )
         train_data_text = pd.DataFrame(train_data_text, columns=train_data_text.columns, index=train_data_text.index)
         valid_text = pd.DataFrame(valid_text, columns=valid_text.columns, index=valid_text.index)
         self.train_data_value = train_data_value
         self.train_data_text = train_data_text
+        self.score_reference_data_value = score_reference_data
+        self.score_reference_text = pd.DataFrame(
+            score_reference_text,
+            columns=score_reference_text.columns,
+            index=score_reference_text.index,
+        )
 
         train_loader_generator = torch.Generator()
         train_loader_generator.manual_seed(self.config.train_mask_seed)
@@ -1434,8 +1534,8 @@ class PatternAD:
 
         training_seconds = time.perf_counter() - training_started_at
         pattern_fit_loader = anomaly_detection_multi_data_provider(
-            train_data_value,
-            train_data_text,
+            self.score_reference_data_value,
+            self.score_reference_text,
             batch_size=self.config.batch_size,
             win_size=self.config.seq_len,
             step=1,
@@ -1458,6 +1558,8 @@ class PatternAD:
             ),
             "optimization_train_points": int(len(train_data_value)),
             "validation_points": int(len(valid_data)),
+            "scorer_reference_points": int(len(self.score_reference_data_value)),
+            "fit_partition": copy.deepcopy(self._scorer_reference_diagnostics),
             "epoch_history": epoch_history,
         }
 

@@ -493,7 +493,7 @@ A10 / A11: context-on 时的 distribution 效应
 B00 / B11: 仅用于诊断 conditional mask 的作用
 ```
 
-严格实验设计见 `PatternAD-main/EXPERIMENT_PLAN_DRAFT.md`，可执行配置与工具见 `PatternAD-main/config/patternad/` 和 `PatternAD-main/scripts/patternad/`。P1-v2 的 Gaussian 目标统一为 `masked Gaussian NLL + full mean-MSE`；已失败的 transition auxiliary 在所有正式 cell 中关闭。评分使用正常 fit residual 上的 predicted-scale 分层经验尾概率，并向全局 ECDF 收缩。
+严格实验设计见 `PatternAD-main/EXPERIMENT_PLAN_DRAFT.md`，可执行配置与工具见 `PatternAD-main/config/patternad/` 和 `PatternAD-main/scripts/patternad/`。P1-v2 的 Gaussian 目标统一为 `masked Gaussian NLL + full mean-MSE`；已失败的 transition auxiliary 在所有正式 cell 中关闭。评分使用 model-fit prefix 内独立正常 score-reference segment 的 predicted-scale 分层经验尾概率，并向全局 ECDF 收缩；该段与优化和 early stopping 均按窗口长度隔离，外层 calibration 仍只负责固定阈值。
 
 首个端到端检查建议从仓库根目录运行：
 

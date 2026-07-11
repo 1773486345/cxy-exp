@@ -408,6 +408,110 @@ def _validate_model_diagnostics(
     if not isinstance(training.get("stopped_early"), bool):
         raise RuntimeError("Model diagnostic stopped_early must be boolean.")
 
+    contextual_score_modes = {
+        "contextual_tail_probability",
+        "context_calibrated_tail",
+        "calibrated_tail_probability",
+    }
+    if expected_score_mode.lower() in contextual_score_modes:
+        scorer_reference_points = int(
+            _finite_number(
+                training.get("scorer_reference_points"),
+                "training.scorer_reference_points",
+                minimum=1,
+            )
+        )
+        fit_partition = training.get("fit_partition")
+        if not isinstance(fit_partition, dict):
+            raise RuntimeError(
+                "Contextual-tail diagnostics are missing fit partition provenance."
+            )
+        if fit_partition.get("reference_source") != "disjoint_temporal_normal_holdout":
+            raise RuntimeError(
+                "Contextual-tail ECDF must use the disjoint temporal normal holdout."
+            )
+        expected_gap = max(int(hyperparameters.get("seq_len", 1)) - 1, 0)
+        if int(
+            _finite_number(
+                fit_partition.get("inter_partition_gap_points"),
+                "fit_partition.inter_partition_gap_points",
+                minimum=0,
+            )
+        ) != expected_gap:
+            raise RuntimeError("Contextual-tail reference gap differs from the frozen seq_len.")
+        for name in ("optimization_points", "validation_points", "reference_points"):
+            _finite_number(fit_partition.get(name), f"fit_partition.{name}", minimum=1)
+        if int(fit_partition["reference_points"]) != scorer_reference_points:
+            raise RuntimeError(
+                "Contextual-tail reference point counts disagree between diagnostics."
+            )
+        expected_validation_fraction = float(
+            hyperparameters.get("reconstruction_validation_fraction", 0.1)
+        )
+        expected_reference_fraction = float(
+            hyperparameters.get("pattern_score_reference_fraction", 0.1)
+        )
+        for name, expected in (
+            ("validation_fraction", expected_validation_fraction),
+            ("reference_fraction", expected_reference_fraction),
+        ):
+            observed = _finite_number(
+                fit_partition.get(name), f"fit_partition.{name}", minimum=0.0
+            )
+            if not math.isclose(observed, expected, abs_tol=1e-12):
+                raise RuntimeError(
+                    f"Contextual-tail {name} differs from the frozen cell."
+                )
+        score_calibration = diagnostics.get("score_calibration")
+        if not isinstance(score_calibration, dict):
+            raise RuntimeError("Contextual-tail diagnostics are missing ECDF provenance.")
+        if score_calibration.get("reference_source") != "disjoint_temporal_normal_holdout":
+            raise RuntimeError("Contextual-tail ECDF provenance is not a disjoint holdout.")
+        if int(
+            _finite_number(
+                score_calibration.get("reference_points"),
+                "score_calibration.reference_points",
+                minimum=1,
+            )
+        ) != scorer_reference_points:
+            raise RuntimeError("Contextual-tail ECDF reference point counts disagree.")
+        global_count = int(
+            _finite_number(
+                score_calibration.get("global_count"),
+                "score_calibration.global_count",
+                minimum=2,
+            )
+        )
+        bin_counts = score_calibration.get("bin_counts")
+        if not isinstance(bin_counts, list) or not bin_counts:
+            raise RuntimeError("Contextual-tail ECDF bin counts are missing.")
+        if sum(
+            int(_finite_number(count, "score_calibration.bin_count", minimum=0))
+            for count in bin_counts
+        ) != global_count:
+            raise RuntimeError("Contextual-tail ECDF bin counts do not match its reference.")
+        expected_minimum_bin_size = int(
+            hyperparameters.get("pattern_score_contextual_calibration_min_bin_size", 128)
+        )
+        if int(
+            _finite_number(
+                score_calibration.get("minimum_bin_size"),
+                "score_calibration.minimum_bin_size",
+                minimum=1,
+            )
+        ) != expected_minimum_bin_size:
+            raise RuntimeError("Contextual-tail ECDF minimum bin size differs from the frozen cell.")
+        expected_shrinkage = float(
+            hyperparameters.get("pattern_score_contextual_calibration_shrinkage", 128.0)
+        )
+        observed_shrinkage = _finite_number(
+            score_calibration.get("shrinkage"),
+            "score_calibration.shrinkage",
+            minimum=0.0,
+        )
+        if not math.isclose(observed_shrinkage, expected_shrinkage, abs_tol=1e-12):
+            raise RuntimeError("Contextual-tail ECDF shrinkage differs from the frozen cell.")
+
     score_calls = diagnostics.get("score_calls")
     if not isinstance(score_calls, list) or len(score_calls) != 2:
         raise RuntimeError(
