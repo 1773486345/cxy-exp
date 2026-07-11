@@ -1,0 +1,72 @@
+{
+  "calibration_range": [
+    1228,
+    1536
+  ],
+  "component_keys": [
+    "log_scale",
+    "predicted_scale",
+    "predicted_transition_scale",
+    "raw_squared_residual",
+    "standardized_squared_residual",
+    "transition_gate",
+    "transition_squared_residual",
+    "transition_standardized_squared_residual"
+  ],
+  "factorial_manifest": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/frozen_inputs/factorial_ablation.json",
+  "factorial_manifest_hash": "7eb2625d6e34a3c75afc5eed91ea269dab47af2ad132e7b13793eda378fa3764",
+  "fit_range": [
+    0,
+    1205
+  ],
+  "hyperparameters": {
+    "batch_size": 64,
+    "context_scale_floor": 0.05,
+    "context_scale_log_residual_limit": 1.5,
+    "context_scale_prior_mix": 0.5,
+    "context_transition_scale_floor": 0.05,
+    "context_transition_scale_log_residual_limit": 1.5,
+    "context_transition_scale_prior_mix": 0.5,
+    "context_transition_scale_suppression": 0.0,
+    "d_ff": 256,
+    "d_model": 128,
+    "dropout": 0.0,
+    "e_layers": 2,
+    "num_epochs": 30,
+    "parallel_strategy": "DP",
+    "pattern_score_aggregation": "mean",
+    "pattern_score_components": [
+      "raw"
+    ],
+    "pattern_score_contextual_calibration_bins": 4,
+    "pattern_score_contextual_calibration_max_cells": 500000,
+    "pattern_score_contextual_calibration_min_bin_size": 128,
+    "pattern_score_contextual_calibration_shrinkage": 128.0,
+    "pattern_score_mode": "raw",
+    "pattern_score_reference_fraction": 0.1,
+    "pattern_score_use_calibration": false,
+    "reconstruction_distribution": "mse",
+    "reconstruction_full_loss_weight": 0.1,
+    "reconstruction_transition_loss_weight": 0.0,
+    "reconstruction_validation_fraction": 0.1,
+    "score_mask_ratio": 0.3333333333333333,
+    "seq_len": 24,
+    "train_mask_ratio": 0.25,
+    "train_mask_seed": 2021,
+    "train_variable_mask_ratio": 0.15,
+    "use_conditional_scoring": true,
+    "use_context_conditioning": false,
+    "use_context_scale_normalization": true,
+    "use_context_scale_prior": true,
+    "use_context_transition_scale_prior": true
+  },
+  "schema_version": 1,
+  "score_key": "score",
+  "seed": 2021,
+  "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+  "test_range": [
+    1536,
+    2304
+  ],
+  "variant": "A00"
+}

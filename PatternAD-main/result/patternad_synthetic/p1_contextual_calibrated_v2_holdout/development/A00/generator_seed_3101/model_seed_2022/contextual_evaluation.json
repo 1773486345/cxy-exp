@@ -1,0 +1,228 @@
+{
+  "config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+  "gates": {
+    "mechanism_ap_over_prevalence": {
+      "dependency_break": {
+        "observed": -0.06122089893414655,
+        "pass": false,
+        "required": 0.05
+      },
+      "same_deviation_different_context": {
+        "observed": 0.019782172151484922,
+        "pass": false,
+        "required": 0.5
+      },
+      "slow_drift_vs_abrupt_shift": {
+        "observed": 0.017380374358616796,
+        "pass": false,
+        "required": 0.1
+      }
+    },
+    "ordering": {
+      "observed": 0.2,
+      "pass": false,
+      "required": 0.75
+    },
+    "raw_magnitude_negative_control": {
+      "observed": 3.333902043323178e-08,
+      "pass": true,
+      "required_maximum_abs_margin": 1e-05
+    },
+    "regime_fpr_gap": {
+      "observed": 0.018018018018018018,
+      "pass": true,
+      "required_maximum": 0.05
+    },
+    "scope": "Contract checks for matched ordering and normal-regime FPR only; they do not certify per-mechanism detectability. Inspect every AP and AP-minus-prevalence value. Context OOD is intentionally a negative control for a conditional-only score."
+  },
+  "macro_average_precision": 0.08401792822339371,
+  "matched_ordering_rate": 0.2,
+  "matched_orderings": [
+    {
+      "correct": false,
+      "higher_event": "same_deviation_pair_0_quiet_context",
+      "higher_score": 1.470820619318129,
+      "hypothesis": "equal observed deviation is more surprising in quiet context",
+      "lower_event": "same_deviation_pair_0_volatile_context",
+      "lower_score": 3.2333238868990284,
+      "margin": -1.7625032675808994,
+      "mechanism": "same_deviation_different_context",
+      "ordering": "same_deviation_pair_0",
+      "raw_control_margin": 4.441244039199432e-09,
+      "raw_control_tied": true
+    },
+    {
+      "correct": false,
+      "higher_event": "same_deviation_pair_1_quiet_context",
+      "higher_score": 1.4675765979998041,
+      "hypothesis": "equal observed deviation is more surprising in quiet context",
+      "lower_event": "same_deviation_pair_1_volatile_context",
+      "lower_score": 3.9048583516634023,
+      "margin": -2.4372817536635982,
+      "mechanism": "same_deviation_different_context",
+      "ordering": "same_deviation_pair_1",
+      "raw_control_margin": 3.0454239130506267e-09,
+      "raw_control_tied": true
+    },
+    {
+      "correct": false,
+      "higher_event": "same_deviation_pair_2_quiet_context",
+      "higher_score": 1.6714767510103536,
+      "hypothesis": "equal observed deviation is more surprising in quiet context",
+      "lower_event": "same_deviation_pair_2_volatile_context",
+      "lower_score": 2.77113119967492,
+      "margin": -1.0996544486645665,
+      "mechanism": "same_deviation_different_context",
+      "ordering": "same_deviation_pair_2",
+      "raw_control_margin": -3.333902043323178e-08,
+      "raw_control_tied": true
+    },
+    {
+      "correct": false,
+      "higher_event": "drift_shift_pair_0_abrupt_anomaly",
+      "higher_score": 1.4295091035496017,
+      "hypothesis": "abrupt shift outranks a matched gradual excursion",
+      "lower_event": "drift_shift_pair_0_gradual_plateau_reference",
+      "lower_score": 1.6714057059574745,
+      "margin": -0.2418966024078728,
+      "mechanism": "slow_drift_vs_abrupt_shift",
+      "ordering": "drift_shift_pair_0",
+      "raw_control_margin": -2.4026958311829105e-08,
+      "raw_control_tied": true
+    },
+    {
+      "correct": true,
+      "higher_event": "drift_shift_pair_1_abrupt_anomaly",
+      "higher_score": 1.9271071336146042,
+      "hypothesis": "abrupt shift outranks a matched gradual excursion",
+      "lower_event": "drift_shift_pair_1_gradual_plateau_reference",
+      "lower_score": 1.5051644715514652,
+      "margin": 0.421942662063139,
+      "mechanism": "slow_drift_vs_abrupt_shift",
+      "ordering": "drift_shift_pair_1",
+      "raw_control_margin": -2.2128224252959683e-08,
+      "raw_control_tied": true
+    }
+  ],
+  "maximum_abs_raw_control_margin": 3.333902043323178e-08,
+  "maximum_regime_fpr_gap": 0.018018018018018018,
+  "mechanism_ap_diagnostics": {
+    "context_ood": {
+      "ap_over_prevalence": -0.025286601349047005,
+      "average_precision": 0.15179673198428634,
+      "interpretation": "negative_control_for_conditional_only_score",
+      "test_prevalence": 0.17708333333333334
+    },
+    "dependency_break": {
+      "ap_over_prevalence": -0.06122089893414655,
+      "average_precision": 0.09502910106585345,
+      "interpretation": "must_be_reported_not_hidden_by_contract_checks",
+      "test_prevalence": 0.15625
+    },
+    "same_deviation_different_context": {
+      "ap_over_prevalence": 0.019782172151484922,
+      "average_precision": 0.05103217215148492,
+      "interpretation": "must_be_reported_not_hidden_by_contract_checks",
+      "test_prevalence": 0.03125
+    },
+    "slow_drift_vs_abrupt_shift": {
+      "ap_over_prevalence": 0.017380374358616796,
+      "average_precision": 0.03821370769195013,
+      "interpretation": "must_be_reported_not_hidden_by_contract_checks",
+      "test_prevalence": 0.020833333333333332
+    }
+  },
+  "mechanisms": [
+    {
+      "ap_over_prevalence": 0.019782172151484922,
+      "average_precision": 0.05103217215148492,
+      "calibration_count": 308,
+      "calibration_threshold": 5.046619170653089,
+      "fit_end": 1205,
+      "matched_ordering_rate": 0.0,
+      "mechanism": "same_deviation_different_context",
+      "method": "A00_seed_2022",
+      "regime_0_count": 222,
+      "regime_0_fpr": 0.0,
+      "regime_1_count": 222,
+      "regime_1_fpr": 0.018018018018018018,
+      "regime_fpr_gap": 0.018018018018018018,
+      "score_file": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/A00/generator_seed_3101/model_seed_2022/scores/same_deviation_different_context.npz",
+      "score_key": "score",
+      "score_sha256": "a8256b3cf7765545654ecc177cf9b34da2e4f427271f998fd3572ab51875fa28",
+      "test_prevalence": 0.03125
+    },
+    {
+      "ap_over_prevalence": 0.017380374358616796,
+      "average_precision": 0.03821370769195013,
+      "calibration_count": 308,
+      "calibration_threshold": 5.046619170653089,
+      "fit_end": 1205,
+      "matched_ordering_rate": 0.5,
+      "mechanism": "slow_drift_vs_abrupt_shift",
+      "method": "A00_seed_2022",
+      "regime_0_count": 90,
+      "regime_0_fpr": 0.0,
+      "regime_1_count": 369,
+      "regime_1_fpr": 0.016260162601626018,
+      "regime_fpr_gap": 0.016260162601626018,
+      "score_file": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/A00/generator_seed_3101/model_seed_2022/scores/slow_drift_vs_abrupt_shift.npz",
+      "score_key": "score",
+      "score_sha256": "fdfd5d76baae2508e9572603621059ba9efd121abe4dc32f6ed35eddbea70237",
+      "test_prevalence": 0.020833333333333332
+    },
+    {
+      "ap_over_prevalence": -0.06122089893414655,
+      "average_precision": 0.09502910106585345,
+      "calibration_count": 308,
+      "calibration_threshold": 5.046619170653089,
+      "fit_end": 1205,
+      "matched_ordering_rate": null,
+      "mechanism": "dependency_break",
+      "method": "A00_seed_2022",
+      "regime_0_count": 126,
+      "regime_0_fpr": 0.0,
+      "regime_1_count": 384,
+      "regime_1_fpr": 0.015625,
+      "regime_fpr_gap": 0.015625,
+      "score_file": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/A00/generator_seed_3101/model_seed_2022/scores/dependency_break.npz",
+      "score_key": "score",
+      "score_sha256": "96114ff27cb5614d6a4c8a39f97f4709df03f13a81165c830bd638987ce18bfd",
+      "test_prevalence": 0.15625
+    },
+    {
+      "ap_over_prevalence": -0.025286601349047005,
+      "average_precision": 0.15179673198428634,
+      "calibration_count": 308,
+      "calibration_threshold": 5.046619170653089,
+      "fit_end": 1205,
+      "matched_ordering_rate": null,
+      "mechanism": "context_ood",
+      "method": "A00_seed_2022",
+      "regime_0_count": 270,
+      "regime_0_fpr": 0.0,
+      "regime_1_count": 270,
+      "regime_1_fpr": 0.014814814814814815,
+      "regime_fpr_gap": 0.014814814814814815,
+      "score_file": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/A00/generator_seed_3101/model_seed_2022/scores/context_ood.npz",
+      "score_key": "score",
+      "score_sha256": "ef913731a4f821ac2c85817c2cdfaa20a119b1eee3d7b7fe218b8cb956cf4166",
+      "test_prevalence": 0.17708333333333334
+    }
+  ],
+  "method": "A00_seed_2022",
+  "schema_version": 1,
+  "score_key": "score",
+  "score_source": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/A00/generator_seed_3101/model_seed_2022/scores",
+  "suite_id": "patternad_contextual_v1",
+  "threshold_provenance": {
+    "calibration_end": 1536,
+    "calibration_start": 1228,
+    "fit_end": 1205,
+    "fpr_exclusion_guard": 23,
+    "gap": 23,
+    "source": "official_train_calibration_tail_only",
+    "target_fpr": 0.01,
+    "test_scores_used_for_threshold": false
+  }
+}

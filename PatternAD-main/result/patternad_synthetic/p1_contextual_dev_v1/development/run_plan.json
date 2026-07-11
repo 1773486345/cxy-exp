@@ -1,0 +1,1139 @@
+{
+  "artifact_root": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/artifacts/patternad_synthetic/contextual_v1",
+  "complete_phase_grid": true,
+  "created_at": "2026-07-11T16:39:48+00:00",
+  "expected_identities": [
+    {
+      "config_hash": "2ba959f4b29cb714f76f6342579339640c84a4491cb6bb20f33aae1b3e9c17e3",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3101/model_seed_2021",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "860acea808108d8873c6463276952c226957c3464131816120da6f0e43ef3fdd",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3101/model_seed_2022",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "d284dbeb1bea68990082bedf2329db274e380fd55a83f0b6e07ef6a13038869d",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3101/model_seed_2023",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "5cc9876f37a362d6bba6daa0e341d4d2fab16f64e6e06c71f92465ae01a0715f",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3102/model_seed_2021",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "992a51eea4646868bebef24e9f746b72fe44d351b456e28872bad7d673d5119f",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3102/model_seed_2022",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "47f9dc066c5a5f8557ed004024bf1d8c250ce2434f5b9b67fb6ffd95c9afc4ff",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3102/model_seed_2023",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "3f6f151fa5671fa7f1995c3d2666a7a7886dbc3b056f62d0766a98984a1948a1",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3103/model_seed_2021",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "1cb0eebc2382bf74130399cbd3ae5f0a830c3791c77ccb49571b43a4f1303f5e",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3103/model_seed_2022",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "7b779e8cbbe0c52e338d4199c92f89981502cfd5ffa73ca3271cc7c5ecdaa96f",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3103/model_seed_2023",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "6a73237599c6ae48284894c8ae73b4fd260f166b3a39be8a45c3c28984605959",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3104/model_seed_2021",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "ca2425eeb67795d23f29ebc130897b7036f8324d978617930d464e941c3e96af",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3104/model_seed_2022",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "f51156e8a57d81c49edde21ce0100c23ca174acd0dbab7f1b5e8aab7b5e2d001",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3104/model_seed_2023",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "104ae357a21624cca0bb22e5254f692f08341f315a5fddb7805be332df81edd7",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3105/model_seed_2021",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "c8cb4c3746c8fc25fb1a962804568b7b6cabc0f1ce411aded7fbb81d9b74ac28",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3105/model_seed_2022",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "0c4cce9f689813123259aab8f7a14c9a42f5b01aa12eedfd65513771cffaa021",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3105/model_seed_2023",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "93f56a50c8950512db7d3dbd22bac97d0bad840ad9bfeb5d0321ce12f89bedef",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3106/model_seed_2021",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "b1596c6ffc1cda11a8040c40ddd8610edf6410dad956b434fd1e2fcf69d42418",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3106/model_seed_2022",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "46499280476906e4b98d0ea81ac1b8126ed6ff5ee5ff7fb09042f33d65939a17",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3106/model_seed_2023",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "e92f67092331f860fe79866ec2469dc95471dfb346ad5a92f31c866dcdbdc6ed",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3107/model_seed_2021",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "bb86539d42084dcd92e38bf8cbb7b69fcd354a7b8266e02c603ed49a7a856337",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3107/model_seed_2022",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "08431e3698070b53a81d0ba06b85ddbb3c3b200156d8de6f02b3534515873d8c",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3107/model_seed_2023",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "eb07467d81cf624b9da47354c6025bff3f2a1b71e944c4632482a691585d0925",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3108/model_seed_2021",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "c02bba83917fef732666861a5d5087f5261246157a9a77c6b24951eb3212e8c0",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3108/model_seed_2022",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "cf66f5bc4ade22cc6b0979865ce3b175c203ef83e904bc6e68e8a025d686c48d",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3108/model_seed_2023",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "18ac52b216d4e26992f765de38f661deec8a960ea3f9248a3d74dc12a9533768",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3109/model_seed_2021",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "f85820f254a4323b2911bf9b1c0c7fd6b469568776633f64dab0520b48b12f6a",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3109/model_seed_2022",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "c3f9805aacdccff6c3950763454402b07fed2b02bdd1dd4840c6dae7d1ab4d15",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3109/model_seed_2023",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "78fc9953bbd2c663b9aada248fcf5c57c84d648f8efa4360a9a7407384569313",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "7ea915e61aba9d47091766a37304618a7cc589e2eee7c01392eafb62c2c7155a",
+      "model_seed": 2021,
+      "result_dir": "A00/generator_seed_3110/model_seed_2021",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "2510a29c496d95f032e6d99d50b95740b62ac8a7d9ef0722c669fa22a43d93ef",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "c19113bf4a2d71489c95cabf0f0714fbf6ae4c7601bda2d653d19b308e08f2be",
+      "model_seed": 2022,
+      "result_dir": "A00/generator_seed_3110/model_seed_2022",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "92328c4342b927b4a6c14e69170a2f814ef3927d7dae8b0a1097b46445c54857",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "61cb39dbda3b6219608d3be75a006592eb1f9bbb8c5fbd7083404daa99a1951a",
+      "model_seed": 2023,
+      "result_dir": "A00/generator_seed_3110/model_seed_2023",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A00"
+    },
+    {
+      "config_hash": "3fc23f5b0886887f3b00f165ba65a02f8104bc4a91b4966106662e9cd29ab440",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3101/model_seed_2021",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "2c82961b179e010c56703ab77bb364400cb9dd0f4da69eacc7dc0f3a17af2284",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3101/model_seed_2022",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "40e003893df208103a1fcb0d3ad9f656c4315c0305b3d20a00dce5d1f92c43c6",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3101/model_seed_2023",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "17d929000380df68d05cb1799605198a783e1e1243743c4d29a6d08324638e8c",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3102/model_seed_2021",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "969309b56b94522e97f8ff539fb0635e64e7a3b2be266a8967004c93f353e34f",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3102/model_seed_2022",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "e8a3c1a45e270b7275b648add40dc7757084bbe6eb92e16c764a5803f9197b0a",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3102/model_seed_2023",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "bd10715f44666346fb9c39aa4c8d800a3b6ee0d1ed1018051c58510486e438fa",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3103/model_seed_2021",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "f330556e2cee25cfc817046b7c0eaead81da0a6f5521d794e0ec2d1bfbbc35d0",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3103/model_seed_2022",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "878f93a412fa2eca9f9ff0089a4a82cfb60e6f5cceb36deb2cc532dd619687d1",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3103/model_seed_2023",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "e7edcd29d45c4a106d2758c1c4b8a501806b54a098ea830b034fcb3077e6efff",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3104/model_seed_2021",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "2d78ee3ac2ef8e3c235b620e20069381894c38e3b38f592e681d00720cc537f8",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3104/model_seed_2022",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "06ae364008a496436b988f95789f9adca909c585508373df65bf82ec162f1de5",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3104/model_seed_2023",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "afb7da7b9e82643e7eaa19b4ae0effd8ca2dab2890be31f687db9b79744692c6",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3105/model_seed_2021",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "82d8c7ec18ad2274bdb2d28e4ec7159dd0b6cf10a8f3e3ecbcc57ac94d909cdc",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3105/model_seed_2022",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "e4e60da4c5622c000a410da6e13afdb522c9eca10274e4caf625b8c142b92da1",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3105/model_seed_2023",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "c49f7455102c48947da885616303239172508dd7dd134c5d4ce6e49325b45fff",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3106/model_seed_2021",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "a837db405e83f75e67e12ca58a9b28facd20044dd220e055e2d932aed1a7f821",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3106/model_seed_2022",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "fb8f26b094e721c9d03b0243220228b846fdbeaf6493921cbc6130801aa172b7",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3106/model_seed_2023",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "70956dbd25bbd6bd3bb8279c9590cf00127d28bbf9b86b6fdaa08d20f6121889",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3107/model_seed_2021",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "263c2781a20b4c52a2109fd9d70f94a3da1f3c2b4b1dd5c8a0602b777278cfd2",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3107/model_seed_2022",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "2dd7561cadd0e2b01a9b9e92cf780c7e1bdff214ba66121b503c891a49f0488d",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3107/model_seed_2023",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "d9e880620eeaf3439458a02ae1d1a53fabd3f6b0d1647a7dfd03749c683fc0a3",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3108/model_seed_2021",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "cd50128a430dedd80c17277045f01bf1be33ebc97b781509a08d8ec77774d77f",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3108/model_seed_2022",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "22eb2363baede68bb42bf9d49c3682bb7f6500a19ad0a10274d964075ddef183",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3108/model_seed_2023",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "e1761e5c7676edd3a4353c05288cfa063db7ba51a45a10c1ee7179f50a379a86",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3109/model_seed_2021",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "9032755e8bed447b658f499711a6426f44201c6e3412b3390cfaec1c191cb976",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3109/model_seed_2022",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "f8aea5b3ebfd3275a98431b81cc93aebded758352d47a54dbdae4bffa343f64c",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3109/model_seed_2023",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "0d79520ece038c7193aed1251e34339bfae6b8f6898ad740775f87a758e3ae10",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "e293a66924ed22902c2a84b50cd13d413f734082c4ad42748db845a6a5b7ca1e",
+      "model_seed": 2021,
+      "result_dir": "A10/generator_seed_3110/model_seed_2021",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "ba2ecaab352988768bd520912403fe060edca395b2c64458196edddad3d2fcf8",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "2c985a60ee6957b0d3223158d40b9ff8badbf4e670ef4c7edd51f7860e341bc9",
+      "model_seed": 2022,
+      "result_dir": "A10/generator_seed_3110/model_seed_2022",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "1c6f5e01ceea748848b0fa2c1a8f9e08db3c29f7930db2e1c2ef13ead9faae5d",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "1dbe44fcda459909eda7839837ee39664df1cd09c7ccfc5c12873be016403848",
+      "model_seed": 2023,
+      "result_dir": "A10/generator_seed_3110/model_seed_2023",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A10"
+    },
+    {
+      "config_hash": "f20ac604e6ea4480eb0c33d156f1a4706d6df6eee2243a7e7578f0195d6980bf",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3101/model_seed_2021",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "27b0b22c25f1b8882ddef76894ce142151afca4e299a0449abd7ad4a12b9a821",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3101/model_seed_2022",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "c3ca813de3b37e1806c5846c2f59e688112486a1cdab010f510b7d6e8fe988da",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3101/model_seed_2023",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "783f3ce19844d47de6b35be2fb53170760a672e330be31f001f14be9984d155c",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3102/model_seed_2021",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "35c5c037dd1ce934f60d63f6a03ba84398d560cf17ca7584bd73e8694de05ce3",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3102/model_seed_2022",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "4b3d7100f73b6c997dd0278a09fc7ec9b1a85fa43412b126f8610c273a61d57b",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3102/model_seed_2023",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "dcb841f7d2c266a2470101e84f79ee0a6321b955f95dd4cc57e705a98a3270d4",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3103/model_seed_2021",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "239e518e05714cd60123cd426469c911bbd3a5c1154f6adfedfabb8593aca20a",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3103/model_seed_2022",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "62612de5ab199a1e0204e5453308bae980b68f118de6f79d7690623ff95c1f69",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3103/model_seed_2023",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "e4457c5bf0248788b2aafc7464b3be97ca7d8dbbad8c51f19affbb16a6baf0b4",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3104/model_seed_2021",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "3a9fdf3a6e674d6f0a6c05d94667376afa2cf3634e263e06fccd29a9900bcb14",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3104/model_seed_2022",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "e033234fad4ab11afd93b7810abc6bc6fdd300a0aa10160a138fb568ab7ca120",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3104/model_seed_2023",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "5b20fa255fbfefce753efe9a60b0c911fc690b8926ce471100eefe10fda61874",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3105/model_seed_2021",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "afdef2b406dbae4d32fc58a3aef817dccd0fc667415e51c1bf17206bd8e20b9e",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3105/model_seed_2022",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "2bfe9dc11e4cb0cf6e5894b2ac925ee12f41d1a403a238ca8066f8103268d193",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3105/model_seed_2023",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "fdd95d9f2a8e4c92ff9d93d9c32719426d9be3ebf32f950936d98c1405097a2c",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3106/model_seed_2021",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "d04eb7b0a8bfc7fa9be91abe7db00af46b9c83b5afde0e0983d48740e9428ca4",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3106/model_seed_2022",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "c40ac6765b801bae43d02fb80317fb6f9c73dc1c85becd1cf9b1c2a80d57c64f",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3106/model_seed_2023",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "dbc1bd927c046e432c2174642676c29846de6ba177394841dc812e9f39691d38",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3107/model_seed_2021",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "e6a1abd713624cadd673333149d8ffc5e74143cd2fff38ac13da5cce45fb034a",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3107/model_seed_2022",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "caae694fe24785be04825d695aaf39234153086a4153c5de580ded69d5a5c182",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3107/model_seed_2023",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "196ba133aa1a3b98e694130e6d0a61d0e7d80924de109b144fbb664a11ec123d",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3108/model_seed_2021",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "a5a25f31336354559d0c17155dcf71f0a897f9c33438b74f985beebf3c09d5c6",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3108/model_seed_2022",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "f877dcdd3a5d42691e9ba767826c2ab164c27010b18e48ddbd3d396bf1e8ea96",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3108/model_seed_2023",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "b1fd3320546f4ef237122e270db2a3738780ad101ad893e295403d86f849cdf5",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3109/model_seed_2021",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "6d732500067fafb2791e58711f19e182c55ef7a61dbf8e8c7b56151d87ca7065",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3109/model_seed_2022",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "804bbaadaff7be5e25ce5829025b68f2b218b530da834ea5c1222ffaabc8401b",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3109/model_seed_2023",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "7deb462aa2ffd0dbd6369bc7cd538f9028b62b26c20eef601632f0b30b011edd",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "ab113b53dde55ec6f87e5620c20184846f465db45d0038ce6bb7d3a6c2e35edc",
+      "model_seed": 2021,
+      "result_dir": "A01/generator_seed_3110/model_seed_2021",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "08f217ab4bd713631b245bacba1a8149acd900d9f8f21383dfbdfe5a66336c93",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "2a400c1a668fb593012408f6659437b2316ce06d4324b8f369c32a77af4f00de",
+      "model_seed": 2022,
+      "result_dir": "A01/generator_seed_3110/model_seed_2022",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "7328f9d9a22b0f550b1d8a9ccccc0646c00682e40590815a37131b66077694ae",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "abb149d7cd7f1d8ef577289707508838d94ef83cb678b3d65c19b400be28acfc",
+      "model_seed": 2023,
+      "result_dir": "A01/generator_seed_3110/model_seed_2023",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A01"
+    },
+    {
+      "config_hash": "e361624a8a0df3b1423fd7c1618d788b19db9a0b04c8841d69dc24a23d1c398a",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3101/model_seed_2021",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "4214bdc7b46c2e843cb263fe1586981a7025c160c4ee5b105fc13a5807bad0ff",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3101/model_seed_2022",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "3d0db88881d302173994d5db8ce4979528852b916ecad26108d0b8c88f370bd4",
+      "generator_seed": 3101,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3101/model_seed_2023",
+      "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "4bedbf44881eb3df9a897f2e558b476f93a3edbff5f99c5bf5b67e58070ac499",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3102/model_seed_2021",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "27a09d75ea5729cdb1fe53d1eb4956cce4ce2b84af2c0cc564309448531d90e6",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3102/model_seed_2022",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "803f2f45d1f5935bf4ed9923030009d4ab96d575d7d468872ccaf2650eeccc71",
+      "generator_seed": 3102,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3102/model_seed_2023",
+      "synthetic_config_hash": "bf433a40ac8326f1891144dd4127b4a123a1932cfe763abbd6c51760e5f73d79",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "c8218fc764b33e2598c4932cbae447091cb75e5f2031cf243afba4b010eebb67",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3103/model_seed_2021",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "7f268ac2d5a342c89803d62eff50cf67675232681310eed748c6114ce11be6da",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3103/model_seed_2022",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "835071aa5856445ae1dd13ee83d6e0c7b523b42d83dbe3798bcc9e1c1a40d325",
+      "generator_seed": 3103,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3103/model_seed_2023",
+      "synthetic_config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "a993ffef3263580006b9b11fe00fb2de94d72cb697c76dec9efe171f016b5a15",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3104/model_seed_2021",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "5e54bf4172ffa04e9ce328f56f659ec053fa13d95e7c934fdebe6e706827b2c8",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3104/model_seed_2022",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "7803683346c38d76b032ee769f3951590e137ff913fcb3b5de8b80252f12059a",
+      "generator_seed": 3104,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3104/model_seed_2023",
+      "synthetic_config_hash": "d66487f6b7a01fe8de7b124ba2ce8270ab32702602b38adf9b96e396c67c305b",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "7db031df11edb12ff17fd147f5cdc449a5aee41bbed61a7c792c3ef486cbea74",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3105/model_seed_2021",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "c45467218f20cef86609304d85bfc8b275a2d31caabdb324adc9821998c88652",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3105/model_seed_2022",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "588a390ed51ba5505fb1beaf16592304b432aef5a3f19b25c344d545618e0eb9",
+      "generator_seed": 3105,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3105/model_seed_2023",
+      "synthetic_config_hash": "2b17fe43d2cc8bf302289239f38705ee1a65362976086ff38ec5ca67c548ed9e",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "3dea7c9e2194aec6d7a11d61f0f95c5adf261e9ad4502d1ab8711452ddb35010",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3106/model_seed_2021",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "534222376003f1f5e45dc9d0d80faf0ab0ee5a03bd0fa9dd44e41541aca0f6e7",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3106/model_seed_2022",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "294cb1cb49f4c631f605a10fa9cc8770f3dc3a00974bc0b21b389e47750229e6",
+      "generator_seed": 3106,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3106/model_seed_2023",
+      "synthetic_config_hash": "b63318420525bb847677de73d934dd6ad369ae1c9a632305c7ac8e77c230ec77",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "61d381c91e2f11bfcab90aac9532e897738a19b0367c63932c7a90179685cc0a",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3107/model_seed_2021",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "50840ebb0909f763f9ad766b17a23a97ec4665d60b0543ceb020cf7a1ef3e3a1",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3107/model_seed_2022",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "526e276c5114a4e76820a724f3202d6ac3a64c16a9a771d8eba21228da8db9d6",
+      "generator_seed": 3107,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3107/model_seed_2023",
+      "synthetic_config_hash": "ede04bea5a0b9fbc360bda23eece7d8fbc4ddf7b0569290e5a52c0d733d66ca7",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "8f96ed9bd7295e8c57522445466750e010dff0cc1067da0b077a41a284dbaf7f",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3108/model_seed_2021",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "8b615e0dfd7c8eedf7b79c73c0319bbbdc6f71f877e917259ecf2cc1e067b10b",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3108/model_seed_2022",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "0f23c2a9eeee4f9600eec990d052a92fb10cde6d5eade1dcccef1c098bbc22fa",
+      "generator_seed": 3108,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3108/model_seed_2023",
+      "synthetic_config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "7650406140fe5c25602b0569118a349fe06bf2c8c6a8c6fb2032f4fc179c8034",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3109/model_seed_2021",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "13b214521d0b785cedba492c198e2bfe8eb240195a394c6a7d28530a0310ec3c",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3109/model_seed_2022",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "4dea86328acfbfad9247fdcc8bd445bb0093601b855408227d18ee27499f5e3f",
+      "generator_seed": 3109,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3109/model_seed_2023",
+      "synthetic_config_hash": "9b36fa119f0ac3404970aa4ec80c4a7d1c142c8dc3be041d7db65d1e77d63e0d",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "2872308bf74ee050ee50cf2adc7e12d5f43ac27905dbe1b02c1b221a08e5bd65",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "3f0ffb6e696da947e894a11f696fb3b0ccc832ba9c063e65a6e8af8c31b2ddc6",
+      "model_seed": 2021,
+      "result_dir": "A11/generator_seed_3110/model_seed_2021",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "25ad8bf755b35b00eb559207fca9cb2b45fa1d3339cc8ebc283036f4a301b801",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "92bd5898a6f21620a764457d3809bcad563ee8728c9075a9e133a7ee1d9aa0f5",
+      "model_seed": 2022,
+      "result_dir": "A11/generator_seed_3110/model_seed_2022",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A11"
+    },
+    {
+      "config_hash": "36974b5942a5e9a0a84bd149557f62aae4680c3e30630082318aa3cb2bafb12b",
+      "generator_seed": 3110,
+      "hyperparameters_hash": "e7d9eb11cba261df854aa848e4e4acba511b802ad05f1efcbf23d508c20c5e9b",
+      "model_seed": 2023,
+      "result_dir": "A11/generator_seed_3110/model_seed_2023",
+      "synthetic_config_hash": "ada1015b3569e9881e6caf55209accd0f1b2555669886bc4b97c44c84525aee8",
+      "variant": "A11"
+    }
+  ],
+  "experiment": "patternad_contextual_factorial_v1",
+  "factorial_manifest_hash": "7a6825cc3bfa8c5dc008ae9ce4226a4befacf2862635c4fff3c43cc00522fb70",
+  "factorial_manifest_path": "frozen_inputs/factorial_ablation.json",
+  "generator_seeds": [
+    3101,
+    3102,
+    3103,
+    3104,
+    3105,
+    3106,
+    3107,
+    3108,
+    3109,
+    3110
+  ],
+  "git_commit": "0f6f5481e87675bcbf48f0d8d8111287c8477bc7",
+  "git_dirty": true,
+  "gpus": [
+    0
+  ],
+  "locked_phase": false,
+  "model_seeds": [
+    2021,
+    2022,
+    2023
+  ],
+  "phase": "development",
+  "plan_hash": "4d706d6f252771374423fea779a42769d2b97acd6e7ab3a30f9075b07f79187d",
+  "run_name": "p1_contextual_dev_v1",
+  "schema_version": 1,
+  "source_bundle_hash": "f7cc84d37de9d8abfd2dbe539c1aad3858d8928eba3b2c59b1a6eb00b4a6d367",
+  "source_hashes": {
+    "scripts/patternad/evaluate_contextual_mechanisms.py": "4e9518a558688a0b9b22c1bfaa47fab2cba111d5e151eb8a3ea15d876b6e6ee2",
+    "scripts/patternad/generate_contextual_synthetic.py": "5b6874b4c58ee34dc498a44970f8d77e2b0d46cc5fab99acbd80c732899526df",
+    "scripts/patternad/run_contextual_factorial.py": "cccc23919fd513c91639e1e92c1d51e4148013db04d952a99c1a0b10e99fb6f9",
+    "scripts/patternad/summarize_contextual_factorial.py": "4e9ac89f410fea9e161f70fce9ad87858c1c4b2d189b1972f760a252ba0731a9",
+    "ts_benchmark/baselines/PatternAD/PatternAD.py": "09cca17b6756849db1c6ca00abf1ddfdff4c255dc4f164721afe9e6334888bcb",
+    "ts_benchmark/baselines/PatternAD/__init__.py": "96a531e5baefa6fa17328d0255b0c66f37cd98753575c0a522e67c0e91e27317",
+    "ts_benchmark/baselines/PatternAD/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ts_benchmark/baselines/PatternAD/utils/pattern_scoring.py": "90b8932b94f72a19a275822182e13cb57ae9189af21f8911e025e773eecad7e9",
+    "ts_benchmark/baselines/PatternAD/utils/tools.py": "e63dcc882bc3e018ffa6d0d6fe3ec681062432e1efde765448a2215d684c1798",
+    "ts_benchmark/baselines/utils.py": "b56eabf66fd3a96fd1629f1a615aa2cad1e268939497095d4602c3b2e2ffb92a",
+    "ts_benchmark/utils/random_utils.py": "3ae1061de3ad1ef61b8b380a7539f5aec99f282e8a98e57fc8ea0b634b7ae363"
+  },
+  "synthetic_config_hash": "761d11a27a42f271a84f75df4fa856ed28f67a6b0385ccf94a11590fa048eb33",
+  "synthetic_config_path": "frozen_inputs/synthetic_suite.json",
+  "variants": [
+    "A00",
+    "A10",
+    "A01",
+    "A11"
+  ]
+}

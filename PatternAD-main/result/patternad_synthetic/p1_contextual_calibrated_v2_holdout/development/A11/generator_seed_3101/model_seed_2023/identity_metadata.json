@@ -1,0 +1,40 @@
+{
+  "command": [
+    "/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python",
+    "-u",
+    "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/scripts/patternad/evaluate_contextual_mechanisms.py",
+    "--artifact-dir",
+    "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/artifacts/patternad_synthetic/contextual_v1/seed_3101",
+    "--factorial-manifest",
+    "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/frozen_inputs/factorial_ablation.json",
+    "--patternad-variant",
+    "A11",
+    "--seed",
+    "2023",
+    "--output-dir",
+    "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/A11/generator_seed_3101/model_seed_2023"
+  ],
+  "completed_at": "2026-07-11T20:43:55+00:00",
+  "config_hash": "b2cdd5acb944340ac65ad5a6efeaf51996746eacf6a265c1a2a52bf17649cfd9",
+  "factorial_manifest_hash": "7eb2625d6e34a3c75afc5eed91ea269dab47af2ad132e7b13793eda378fa3764",
+  "generator_seed": 3101,
+  "gpus": [
+    0
+  ],
+  "model_seed": 2023,
+  "output_hashes": {
+    "contextual_evaluation.json": "cdc752dd42291eaf06b41ab3bdc7969769e083ae48231195f767c4ab5952f9d6",
+    "matched_orderings.csv": "c6a3aac6adae6ee495a6b78b8d2aead05fd02f150e1988eaed87b15f447f50d7",
+    "mechanism_metrics.csv": "e244c595551aee91324235e7ccfa03c22cb4db1ac98f992e9294a4ddeb76968d",
+    "score_component_orderings.csv": "9156eceb239745fad92251f0cc136c8bdd22987301e5efc05a81e4ca64316791",
+    "scores/score_run_metadata.json": "34eaaf4251f34e1d4a7a069a3d52ff12f45882b37bffd8667b6d75d18238853f"
+  },
+  "plan_hash": "b01454c5bd6d2d7d3fbd9fa6bd42e6f9091c555c21a5aca420fdaea89559b824",
+  "run_log": "run.log",
+  "runner_wall_seconds": 61.249001951888204,
+  "schema_version": 1,
+  "started_at": "2026-07-11T20:42:53+00:00",
+  "status": "completed",
+  "synthetic_config_hash": "53b2b583ff460da92fc4d8d96f2a766954b8768aaa7c2776f6cf0479eb9b7ceb",
+  "variant": "A11"
+}
