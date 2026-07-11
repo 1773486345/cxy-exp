@@ -1,0 +1,437 @@
+{
+  "config": {
+    "burn_in": 128,
+    "channel_names": [
+      "x0",
+      "x1",
+      "x2",
+      "x3",
+      "x4"
+    ],
+    "description": "Deterministic switching-VAR suite for conditional anomaly scoring.",
+    "dimensions": 5,
+    "evaluation": {
+      "calibration_fraction": 0.2,
+      "calibration_gap": 23,
+      "maximum_abs_raw_control_margin": 1e-05,
+      "maximum_regime_fpr_gap": 0.05,
+      "minimum_ap_over_prevalence": {
+        "dependency_break": 0.05,
+        "same_deviation_different_context": 0.5,
+        "slow_drift_vs_abrupt_shift": 0.1
+      },
+      "minimum_ordering_rate": 0.75,
+      "score_key": "score",
+      "score_window_length": 24,
+      "target_fpr": 0.01
+    },
+    "mechanisms": {
+      "context_ood": {
+        "event_count": 2,
+        "event_length": 64,
+        "event_offset": 16,
+        "recovery_length": 4
+      },
+      "dependency_break": {
+        "candidate_permutations": 64,
+        "circular_offsets": [
+          11,
+          23
+        ],
+        "event_count": 3,
+        "event_length": 40,
+        "event_offset": 28,
+        "shifted_channels": [
+          1,
+          3
+        ]
+      },
+      "same_deviation_different_context": {
+        "deviation": [
+          1.35,
+          -1.1,
+          0.85,
+          0.0,
+          0.0
+        ],
+        "event_length": 8,
+        "event_offset": 44,
+        "pair_count": 3
+      },
+      "slow_drift_vs_abrupt_shift": {
+        "abrupt_length": 8,
+        "endpoint_shift": [
+          1.2,
+          0.0,
+          -0.95,
+          0.65,
+          0.0
+        ],
+        "event_offset": 20,
+        "gradual_length": 56,
+        "pair_count": 2
+      }
+    },
+    "normal_regimes": [
+      {
+        "innovation_correlation": [
+          [
+            1.0,
+            0.28,
+            0.0,
+            0.0,
+            0.12
+          ],
+          [
+            0.28,
+            1.0,
+            0.18,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.18,
+            1.0,
+            0.22,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.22,
+            1.0,
+            0.2
+          ],
+          [
+            0.12,
+            0.0,
+            0.0,
+            0.2,
+            1.0
+          ]
+        ],
+        "innovation_std": [
+          0.24,
+          0.28,
+          0.22,
+          0.26,
+          0.25
+        ],
+        "name": "quiet_coupled",
+        "transition": [
+          [
+            0.52,
+            0.18,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.46,
+            0.16,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.42,
+            0.18,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.48,
+            0.14
+          ],
+          [
+            0.12,
+            0.0,
+            0.0,
+            0.0,
+            0.44
+          ]
+        ]
+      },
+      {
+        "innovation_correlation": [
+          [
+            1.0,
+            -0.18,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            -0.18,
+            1.0,
+            0.0,
+            0.16,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            -0.2
+          ],
+          [
+            0.0,
+            0.16,
+            0.0,
+            1.0,
+            0.12
+          ],
+          [
+            0.0,
+            0.0,
+            -0.2,
+            0.12,
+            1.0
+          ]
+        ],
+        "innovation_std": [
+          0.82,
+          0.94,
+          0.76,
+          0.88,
+          0.8
+        ],
+        "name": "volatile_rewired",
+        "transition": [
+          [
+            0.3,
+            0.0,
+            0.24,
+            0.0,
+            0.0
+          ],
+          [
+            0.2,
+            0.38,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.34,
+            0.0,
+            0.22
+          ],
+          [
+            0.0,
+            0.18,
+            0.0,
+            0.4,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.2,
+            0.36
+          ]
+        ]
+      }
+    ],
+    "ood_regime": {
+      "innovation_correlation": [
+        [
+          1.0,
+          0.0,
+          -0.3,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          -0.24,
+          0.0
+        ],
+        [
+          -0.3,
+          0.0,
+          1.0,
+          0.0,
+          0.18
+        ],
+        [
+          0.0,
+          -0.24,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.18,
+          0.0,
+          1.0
+        ]
+      ],
+      "innovation_std": [
+        0.42,
+        0.48,
+        0.4,
+        0.46,
+        0.44
+      ],
+      "name": "unseen_sign_reversal",
+      "transition": [
+        [
+          -0.28,
+          0.0,
+          0.0,
+          0.34,
+          0.0
+        ],
+        [
+          0.0,
+          -0.24,
+          0.0,
+          0.0,
+          -0.3
+        ],
+        [
+          0.26,
+          0.0,
+          -0.22,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.28,
+          0.0,
+          -0.2,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.32,
+          0.0,
+          -0.26
+        ]
+      ]
+    },
+    "output": {
+      "artifact_dir": "artifacts/patternad_synthetic/contextual_v1",
+      "benchmark_data_dir": "dataset/anomaly_detect/data",
+      "benchmark_metadata": "dataset/anomaly_detect/DETECT_META.csv",
+      "file_prefix": "PatternADContextualV1"
+    },
+    "regime_segment_length": 96,
+    "replicate_seeds": [
+      3101,
+      3102,
+      3103,
+      3104,
+      3105,
+      3106,
+      3107,
+      3108,
+      3109,
+      3110,
+      3111,
+      3112,
+      3113,
+      3114,
+      3115,
+      3116,
+      3117,
+      3118,
+      3119,
+      3120
+    ],
+    "schema_version": 1,
+    "seed": 3103,
+    "seed_groups": {
+      "confirmation": [
+        3111,
+        3112,
+        3113,
+        3114,
+        3115,
+        3116,
+        3117,
+        3118,
+        3119,
+        3120
+      ],
+      "development": [
+        3101,
+        3102,
+        3103,
+        3104,
+        3105,
+        3106,
+        3107,
+        3108,
+        3109,
+        3110
+      ]
+    },
+    "suite_id": "patternad_contextual_v1",
+    "test_length": 768,
+    "train_length": 1536
+  },
+  "config_hash": "301dc1d30d06cb3dc5212c093cdca57cb23c387f1c5bfd3c253721a856f004ee",
+  "entries": [
+    {
+      "benchmark_csv_sha256": "0d25a67a54a1bb10c9fef0cd5e6d4df050c68319dee3e1680930a4c75d6fd9a1",
+      "benchmark_data_name": "PatternADContextualV1_Seed3103_SameDeviationDifferentContext.csv",
+      "benchmark_text_name": "PatternADContextualV1_Seed3103_SameDeviationDifferentContext_text.csv",
+      "mechanism": "same_deviation_different_context",
+      "metadata": "same_deviation_different_context.metadata.json",
+      "npz": "same_deviation_different_context.npz",
+      "npz_sha256": "758837703e2155a50ceaf3df62fd87b92c4edfc68be3e6aa3c498b63d6aa4349"
+    },
+    {
+      "benchmark_csv_sha256": "03abcddf0f5824afd7d2f5c7cbc99f53f8528a9f1805c8a565912129478cec62",
+      "benchmark_data_name": "PatternADContextualV1_Seed3103_SlowDriftVsAbruptShift.csv",
+      "benchmark_text_name": "PatternADContextualV1_Seed3103_SlowDriftVsAbruptShift_text.csv",
+      "mechanism": "slow_drift_vs_abrupt_shift",
+      "metadata": "slow_drift_vs_abrupt_shift.metadata.json",
+      "npz": "slow_drift_vs_abrupt_shift.npz",
+      "npz_sha256": "243e6766ef80e7e7fa171343151f7322d8cdad37a4dc4797c340c261f3c7347e"
+    },
+    {
+      "benchmark_csv_sha256": "e9f795fe016c44bc7846841788f7be6446d6547992051ce23d531d6821fbf404",
+      "benchmark_data_name": "PatternADContextualV1_Seed3103_DependencyBreak.csv",
+      "benchmark_text_name": "PatternADContextualV1_Seed3103_DependencyBreak_text.csv",
+      "mechanism": "dependency_break",
+      "metadata": "dependency_break.metadata.json",
+      "npz": "dependency_break.npz",
+      "npz_sha256": "dd9312fc7c3e7f7ec7aa5f36bdf887385b2f793838db12ca6c2796d2bb365eab"
+    },
+    {
+      "benchmark_csv_sha256": "617df9d9d7784a699dbe51cbe1e00f1b7e03a7b7d684c963b93e0dd9e003db4b",
+      "benchmark_data_name": "PatternADContextualV1_Seed3103_ContextOod.csv",
+      "benchmark_text_name": "PatternADContextualV1_Seed3103_ContextOod_text.csv",
+      "mechanism": "context_ood",
+      "metadata": "context_ood.metadata.json",
+      "npz": "context_ood.npz",
+      "npz_sha256": "7754a1c7af4be20733820f2c034fc11f559c94a87a0105c6572cd6c2210c14db"
+    }
+  ],
+  "registered_with_benchmark": false,
+  "resolved_config": "resolved_config.json",
+  "schema_version": 1,
+  "source_hashes": {
+    "evaluator": "4e9518a558688a0b9b22c1bfaa47fab2cba111d5e151eb8a3ea15d876b6e6ee2",
+    "generator": "5b6874b4c58ee34dc498a44970f8d77e2b0d46cc5fab99acbd80c732899526df"
+  },
+  "suite_id": "patternad_contextual_v1"
+}

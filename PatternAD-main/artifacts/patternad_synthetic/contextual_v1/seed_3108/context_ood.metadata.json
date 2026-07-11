@@ -1,0 +1,42 @@
+{
+  "config_hash": "3fc1649ac33a4995a3c54ed8a87a62161f1a9b25f9e1a2868569ae9e6108eda9",
+  "events": [
+    {
+      "end": 1716,
+      "event_id": "context_ood_0",
+      "label": true,
+      "role": "unseen_coherent_regime_anomaly",
+      "start": 1648
+    },
+    {
+      "end": 2196,
+      "event_id": "context_ood_1",
+      "label": true,
+      "role": "unseen_coherent_regime_anomaly",
+      "start": 2128
+    }
+  ],
+  "mechanism": "context_ood",
+  "npz_file": "context_ood.npz",
+  "orderings": [],
+  "schema_version": 1,
+  "score_contract": {
+    "alignment": "one point score for every row, train then test",
+    "external_key": "score",
+    "fpr_exclusion_guard": 23,
+    "oracle_key": "oracle_context_score",
+    "oracle_semantics": "regime-conditioned squared Mahalanobis surprise; monotone with the conditional chi-square tail probability"
+  },
+  "seed": 3108,
+  "shape": [
+    2304,
+    5
+  ],
+  "source_hashes": {
+    "evaluator": "4e9518a558688a0b9b22c1bfaa47fab2cba111d5e151eb8a3ea15d876b6e6ee2",
+    "generator": "5b6874b4c58ee34dc498a44970f8d77e2b0d46cc5fab99acbd80c732899526df"
+  },
+  "suite_id": "patternad_contextual_v1",
+  "test_length": 768,
+  "train_length": 1536
+}
