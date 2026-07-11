@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from scripts.patternad.evaluate_contextual_mechanisms import (
+    component_ordering_rows,
     conformal_upper_threshold,
     evaluate_scores,
 )
@@ -246,6 +247,32 @@ class PatternADSyntheticTest(unittest.TestCase):
         self.assertTrue(
             np.isinf(conformal_upper_threshold(np.arange(9, dtype=float), 0.01))
         )
+
+    def test_component_orderings_are_exported_from_aligned_score_arrays(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary = Path(temporary)
+            artifact_dir = temporary / "suite"
+            score_dir = temporary / "scores"
+            score_dir.mkdir()
+            write_suite(
+                self.config, self.artifacts, artifact_dir, register_benchmark=False
+            )
+            total_length = self.config["train_length"] + self.config["test_length"]
+            component = np.linspace(0.0, 1.0, total_length)
+            for mechanism in MECHANISM_ORDER:
+                np.savez_compressed(
+                    score_dir / f"{mechanism}.npz",
+                    score=component,
+                    raw_squared_residual=component,
+                )
+
+            rows = component_ordering_rows(
+                self.config, artifact_dir, score_dir, "score"
+            )
+            self.assertEqual(len(rows), 5)
+            self.assertEqual(
+                {row["component"] for row in rows}, {"raw_squared_residual"}
+            )
 
 
 if __name__ == "__main__":

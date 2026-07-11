@@ -156,6 +156,62 @@ def _verify_run_rows(
                 f"Artifact/metadata seed mismatch in {artifact}: "
                 f"{strategy_args.get('seed')} != {metadata['seed']}."
             )
+    diagnostic_payloads = {
+        row.get("model_diagnostics", "").strip()
+        for row in rows
+        if row.get("model_diagnostics", "").strip()
+    }
+    if len(diagnostic_payloads) != 1:
+        raise ValueError(
+            f"Artifact diagnostics are missing or inconsistent in {artifact}."
+        )
+    try:
+        artifact_diagnostics = json.loads(next(iter(diagnostic_payloads)))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Invalid model diagnostics JSON in {artifact}.") from error
+    if artifact_diagnostics != metadata.get("model_diagnostics"):
+        raise ValueError(
+            f"Artifact/metadata model diagnostics mismatch in {artifact}."
+        )
+
+
+def _flatten_run_diagnostics(metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    diagnostics = metadata["model_diagnostics"]
+    training = diagnostics["training"]
+    calls = {call["phase"]: call for call in diagnostics["score_calls"]}
+    flattened: Dict[str, Any] = {
+        "runner_wall_seconds": metadata["runner_wall_seconds"],
+        "fit_seconds": training["fit_seconds"],
+        "training_seconds": training["training_seconds"],
+        "scorer_fit_seconds": training["scorer_fit_seconds"],
+        "epochs_requested": training["epochs_requested"],
+        "epochs_completed": training["epochs_completed"],
+        "best_epoch": training["best_epoch"],
+        "best_validation_loss": training["best_validation_loss"],
+        "stopped_early": training["stopped_early"],
+        "parameter_count": training["parameter_count"],
+        "benchmark_log": str(metadata["benchmark_log"]),
+    }
+    for phase in ("calibration", "test"):
+        call = calls[phase]
+        flattened[f"{phase}_input_length"] = call["input_length"]
+        flattened[f"{phase}_score_seconds"] = call["elapsed_seconds"]
+        flattened[f"{phase}_score_min"] = call["score"]["min"]
+        flattened[f"{phase}_score_max"] = call["score"]["max"]
+        flattened[f"{phase}_score_mean"] = call["score"]["mean"]
+        scale = call["scale"]
+        for statistic in (
+            "min",
+            "max",
+            "mean",
+            "std",
+            "lower_bound_fraction",
+            "upper_bound_fraction",
+        ):
+            flattened[f"{phase}_scale_{statistic}"] = (
+                "" if scale is None else scale[statistic]
+            )
+    return flattened
 
 
 def _scan_completed_runs(
@@ -186,6 +242,9 @@ def _scan_completed_runs(
             "seed",
             "config_hash",
             "plan_hash",
+            "runner_wall_seconds",
+            "benchmark_log",
+            "model_diagnostics",
         }
         missing = sorted(required - set(metadata))
         if missing:
@@ -231,6 +290,7 @@ def _scan_completed_runs(
             "source_anomaly_ratios": ";".join(ratios),
             "detail_artifact": str(artifact),
         }
+        result.update(_flatten_run_diagnostics(metadata))
         for metric in score_metrics:
             result[metric] = _constant_score_metric(rows, metric, artifact)
         result_rows.append(result)
@@ -480,6 +540,58 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ]
     _write_csv(
         output_dir / "entity_seed_score_metrics.csv", entity_rows, entity_fields
+    )
+    diagnostic_fields = [
+        "run_name",
+        "group",
+        "family",
+        "entity",
+        "dataset_id",
+        "variant",
+        "seed",
+        "context",
+        "distribution",
+        "mask",
+        "config_hash",
+        "plan_hash",
+        "runner_wall_seconds",
+        "fit_seconds",
+        "training_seconds",
+        "scorer_fit_seconds",
+        "epochs_requested",
+        "epochs_completed",
+        "best_epoch",
+        "best_validation_loss",
+        "stopped_early",
+        "parameter_count",
+        "calibration_input_length",
+        "calibration_score_seconds",
+        "calibration_score_min",
+        "calibration_score_max",
+        "calibration_score_mean",
+        "calibration_scale_min",
+        "calibration_scale_max",
+        "calibration_scale_mean",
+        "calibration_scale_std",
+        "calibration_scale_lower_bound_fraction",
+        "calibration_scale_upper_bound_fraction",
+        "test_input_length",
+        "test_score_seconds",
+        "test_score_min",
+        "test_score_max",
+        "test_score_mean",
+        "test_scale_min",
+        "test_scale_max",
+        "test_scale_mean",
+        "test_scale_std",
+        "test_scale_lower_bound_fraction",
+        "test_scale_upper_bound_fraction",
+        "benchmark_log",
+    ]
+    _write_csv(
+        output_dir / "entity_seed_run_diagnostics.csv",
+        entity_rows,
+        diagnostic_fields,
     )
     _write_csv(
         output_dir / "family_seed_macro.csv",

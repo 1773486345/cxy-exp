@@ -296,7 +296,7 @@ for mask in mask_groups:
     distribution = ContextConditionedReconstructor(
         x_visible, context_visible, mask
     )
-    score[mask] = NLL(distribution, x)[mask]
+    score[mask] = -log two_sided_tail(distribution, x)[mask]
 
 score_t = mean_over_variables(score[t, :])
 ```
@@ -352,8 +352,8 @@ L = masked_NLL(mu, scale[, df], x) + lambda * full_mean_MSE(mu, x)
 ```text
 A00: context off + MSE + complementary conditional masks
 A10: context on  + MSE + complementary conditional masks
-A01: context off + Gaussian NLL + complementary conditional masks
-A11: context on  + Gaussian NLL + complementary conditional masks
+A01: context off + Gaussian training NLL + conditional tail score + complementary masks
+A11: context on  + Gaussian training NLL + conditional tail score + complementary masks
 B00/B11: unmasked diagnostics, not the main conditional-density claim
 ```
 
@@ -403,7 +403,11 @@ high-frequency residual: 去局部均值后的短时扰动
 mask indicator: 当前哪些变量被遮蔽
 ```
 
-这些上下文特征经过轻量 MLP 编码后，通过 FiLM-style gamma/beta 调制注入 Transformer 输入表示。rolling mean/std 使用显式有效计数，trend 只使用相邻两点均可见的差分，masked target 不参与 context。也就是说，趋势、波动和高频活动不是在最后改变分数，而是在重构过程中改变模型如何解释当前窗口。
+这些上下文特征经过轻量 MLP 编码后，通过 FiLM-style gamma/beta 调制注入 Transformer 输入表示。rolling mean/std 使用显式有效计数，trend 使用局部可见点线性回归，masked target 不参与 context。也就是说，趋势、波动和高频活动不是在最后改变分数，而是在重构过程中改变模型如何解释当前窗口。
+
+当前开发版进一步把 visible local std 作为概率尺度的显式弱先验，而不是只期待通用 MLP 隐式学出该关系：`sigma = dataset_scale * local_visible_std^0.5 * bounded_learned_correction`。0.5 次幂用于保守地注入 regime scale，避免异常邻域直接把尺度完全抬高。该路径只影响 Gaussian/Student-t 的 `sigma`；MSE 路径不使用它，并可通过 `use_context_scale_prior=false` 回退到旧 learned-scale head。
+
+trend 已从“仅相邻可见点差分”改为局部可见点线性回归斜率，从而在 target 位于跳变边缘时仍能跨过 masked gap 描述变化速度。曾尝试用该斜率直接压低 transition 附近的 `sigma`，但单 seed/单 epoch 诊断显示它虽改善一组 abrupt/gradual ordering，却破坏 same-residual ordering 与整体 AP，因此默认关闭；当前只把 slope 用作条件重构特征，不直接手工改变尺度。
 
 训练阶段继续采用 denoising reconstruction：随机遮蔽部分变量点，并额外随机遮蔽整条变量轨迹，使模型不能只复制单变量自身历史，而要利用时间上下文和其他变量共同恢复被遮蔽值。
 
@@ -413,7 +417,7 @@ mask indicator: 当前哪些变量被遮蔽
 
 ```text
 MSE: S_t = mean_d (x_td - mu_td)^2
-NLL: S_t = mean_d -log q_theta(x_td | x_visible_in_its_pass, context_visible)
+Tail: S_t = mean_d -log P(|X-mu_td| >= |x_td-mu_td| | visible context)
 ```
 
 其中每个 `mu_td / q_theta` 都来自遮蔽 `(t,d)` 的对应 pass。这样做的含义是：模型不能直接看到被评分的值，但最终每个变量都有分数；实现还会检查 coverage 是否逐位置严格等于 1。
@@ -429,11 +433,11 @@ PatternAD default = context-conditioned mean reconstruction
 概率路径通过以下参数显式启用：
 
 ```json
-{"reconstruction_distribution": "gaussian", "pattern_score_mode": "nll"}
-{"reconstruction_distribution": "student_t", "pattern_score_mode": "nll"}
+{"reconstruction_distribution": "gaussian", "pattern_score_mode": "tail_probability"}
+{"reconstruction_distribution": "student_t", "pattern_score_mode": "tail_probability"}
 ```
 
-若选择非 MSE 分布且没有显式设置 `pattern_score_mode`，配置会自动切换为 `nll`。首轮严格主实验只使用 Gaussian 识别 conditional-scale 机制；Student-t 已实现，但应在 Gaussian 获得支持后作为重尾鲁棒性实验。
+若选择非 MSE 分布且没有显式设置 `pattern_score_mode`，配置会自动切换为 `tail_probability`。训练目标仍为 masked NLL；`nll` 评分保留为显式消融。首轮开发只使用 Gaussian 识别 conditional-scale 机制；Student-t 已实现，但应在 Gaussian 获得支持后作为重尾鲁棒性实验。
 
 ### 8.4 与旧版本的区别
 
@@ -480,7 +484,7 @@ threshold = kth order statistic of calibration scores
 
 ```text
 A00 / A10: 在 MSE 下隔离 context 效应
-A01 / A11: 在 Gaussian NLL 下隔离 context 效应
+A01 / A11: 在相同 Gaussian NLL 训练、conditional-tail 评分下隔离 context 效应
 A00 / A01: context-off 时的 distribution 效应
 A10 / A11: context-on 时的 distribution 效应
 B00 / B11: 仅用于诊断 conditional mask 的作用
@@ -729,8 +733,9 @@ TEP 是经典化工过程故障检测 benchmark。它的优势是过程变量多
 下一步不应盲目扩大数据集数量，而应按严格 factorial runner 的阶段推进：
 
 ```text
-Step 0：运行自动测试，并对 Weather A00/A10/A01/A11 做 one-seed dry-run/smoke。
-Step 1：用 `config/patternad/synthetic_suite.json` 与 `scripts/patternad/generate_contextual_synthetic.py` / `evaluate_contextual_mechanisms.py` 验证“同 residual、不同 scale”的机制；3101-3110 用于开发，3111-3120 保持未查看确认。
+Step 0（旧模型工具链已完成）：Weather smoke 与 machine-readable scale 诊断通过，但结果早于 visible-context scale-prior 原型，只保留为 pipeline evidence。
+Step 1（当前）：用单 seed、低 epoch 的 synthetic sanity check 迭代模型，优先验证 same-residual ordering、regime FPR 与 dependency break；此阶段不扩真实数据矩阵。
+30-epoch generator-seed-3101 的 density-NLL 诊断中，A11 相对 A01 提升了 macro AP（0.0931 vs 0.0835）并略微缩小 regime FPR gap，但 matched ordering 从 1/5 降至 0/5。分解结果表明 `sigma` 方向正确，标准化残差已使 same-deviation 的 2/3 对排序正确，错误主要来自 density NLL 的 `log(sigma)` 项。改用 conditional two-sided tail surprisal 后，单 epoch A11 macro AP 达到 0.1224、same-deviation AP 达到 0.1573、ordering 提升到 2/5。当前下一步只需确认 30-epoch tail 结果；若 abrupt/gradual 仍为 0/2，再进入局部尺度归一化重构或独立 transition 建模。
 Step 2：运行 motivation 组的三 seed 主消融，只依据预声明的 paired comparison 判断机制。
 Step 3：用 `bootstrap_factorial.py` 对三个预声明的 A11 comparator 分别做 paired CI，再冻结候选并运行 robustness 组；MetroPT3 主要用于长序列时间/内存压力测试。
 Step 4：保存代码、配置和数据 hash 后，只运行一次 locked confirmation 组。

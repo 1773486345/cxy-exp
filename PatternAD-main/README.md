@@ -6,7 +6,7 @@
 
 PatternAD is a multivariate time-series anomaly detection model for context-conditioned residual semantics. Each time step is encoded as a full multivariate state, and training masks both individual variable points and whole variable traces inside a window.
 
-The current research path no longer uses temporal context as a post-hoc score multiplier. Local scale, trend, high-frequency activity, and mask structure are encoded inside the reconstruction backbone through FiLM-style conditioning. The model can estimate either a deterministic conditional mean or a conditional Gaussian/Student-t distribution. The repository keeps `reconstruction_distribution="mse"` as the backward-compatible default; the strict factorial experiment opts into Gaussian NLL to test conditional residual distributions directly.
+The current research path no longer uses temporal context as a post-hoc score multiplier. Local scale, trend, high-frequency activity, and mask structure are encoded inside the reconstruction backbone through FiLM-style conditioning. The model can estimate either a deterministic conditional mean or a conditional Gaussian/Student-t distribution. The repository keeps `reconstruction_distribution="mse"` as the backward-compatible default; probabilistic variants train with masked NLL and score conditional two-sided tail surprisal.
 
 ## Installation
 
@@ -70,6 +70,8 @@ student_t -> conditional mean/scale/df + masked Student-t NLL
 
 For MSE, training uses `masked MSE + reconstruction_full_loss_weight * full mean-MSE`. For Gaussian and Student-t, it uses `masked NLL + reconstruction_full_loss_weight * full mean-MSE`. The auxiliary full-window term is intentionally mean-MSE, not full NLL, so visible values cannot drive the predicted scale toward zero by simple copying.
 
+At inference, probabilistic variants default to `pattern_score_mode="tail_probability"`: `-log` of the conditional two-sided tail probability of the absolute standardized residual. Density NLL remains available as an explicit ablation, but its `log(scale)` normalization term is not used as cross-regime anomaly rarity.
+
 Legacy aggregate and reliability-weighted scorers remain available only as explicit ablation paths.
 
 For the factorial context control, `use_context_conditioning=false` does not remove the context modules. It sends a learned dataset-level constant through the same `context_proj` and FiLM path as the visible-context variant. Thus A00/A01 differ from A10/A11 in dynamic context information rather than in the presence of the conditioning route.
@@ -83,6 +85,8 @@ The threshold is a finite-sample calibration-only empirical/conformal-style quan
 Historical behavior is retained only behind the explicit `evaluation_protocol="legacy_test_contaminated"`. That path is for reproduction and can still depend on test scores and choose a test-metric maximum across ratios. Its output is test-label oracle evidence and must not be reported as an unbiased result.
 
 The strategy now applies the requested seed before each model-series pair is constructed. Factorial runs record the dataset, variant, seed, exact source/config/data hashes, complete expected grid, and attempt number. Resume and summary both fail if the frozen identity changes or the grid is incomplete.
+
+Strict attempts also persist `benchmark.log` and machine-readable model diagnostics. The detailed artifact and `run_metadata.json` must agree on epoch train/validation losses, best epoch, runtime, ordered calibration/test score calls, and Gaussian scale statistics. The runner rejects missing/non-finite diagnostics and calibration scale boundary fractions at or above the frozen 1% limit; test boundary fractions are report-only. The summarizer exposes these fields in `entity_seed_run_diagnostics.csv`.
 
 ## Strict Experiment Workflow
 
@@ -117,8 +121,8 @@ The primary matrix holds complementary masking fixed and isolates the two resear
 ```text
 A00: context off + MSE
 A10: context on  + MSE
-A01: context off + Gaussian NLL
-A11: context on  + Gaussian NLL
+A01: context off + Gaussian training NLL + conditional tail score
+A11: context on  + Gaussian training NLL + conditional tail score
 ```
 
 `B00/B11` are unmasked diagnostics. Student-t is implemented but deferred until Gaussian establishes that conditional-scale modeling is useful.

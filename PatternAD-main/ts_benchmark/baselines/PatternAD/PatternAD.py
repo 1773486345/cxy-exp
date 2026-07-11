@@ -1,3 +1,4 @@
+import copy
 import math
 import time
 
@@ -61,6 +62,11 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "distribution_min_scale": 1e-3,
     "distribution_max_scale": 100.0,
     "distribution_init_scale": 1.0,
+    "use_context_scale_prior": True,
+    "context_scale_floor": 0.05,
+    "context_scale_prior_mix": 0.5,
+    "context_scale_log_residual_limit": 1.5,
+    "context_transition_scale_suppression": 0.0,
     "student_t_df": 4.0,
     "student_t_learn_df": True,
     "student_t_max_df": 100.0,
@@ -111,7 +117,7 @@ class PatternADConfig:
                 "reconstruction_distribution must be one of: mse, gaussian, student_t."
             )
         if "pattern_score_mode" not in kwargs and self.reconstruction_distribution != "mse":
-            self.pattern_score_mode = "nll"
+            self.pattern_score_mode = "tail_probability"
         self.distribution_min_scale = max(
             float(getattr(self, "distribution_min_scale", 1e-3)), 1e-8
         )
@@ -125,6 +131,24 @@ class PatternADConfig:
                 self.distribution_min_scale,
             ),
             self.distribution_max_scale,
+        )
+        self.use_context_scale_prior = bool(
+            getattr(self, "use_context_scale_prior", True)
+        )
+        self.context_scale_floor = max(
+            float(getattr(self, "context_scale_floor", 0.05)),
+            self.distribution_min_scale,
+        )
+        self.context_scale_prior_mix = min(
+            max(float(getattr(self, "context_scale_prior_mix", 0.5)), 0.0),
+            1.0,
+        )
+        self.context_scale_log_residual_limit = max(
+            float(getattr(self, "context_scale_log_residual_limit", 1.5)), 0.0
+        )
+        self.context_transition_scale_suppression = max(
+            float(getattr(self, "context_transition_scale_suppression", 0.0)),
+            0.0,
         )
         self.student_t_df = max(float(getattr(self, "student_t_df", 4.0)), 2.01)
         self.student_t_learn_df = bool(getattr(self, "student_t_learn_df", True))
@@ -182,6 +206,19 @@ class JointMultivariateReconstructor(nn.Module):
         )
         self.distribution_min_scale = float(getattr(config, "distribution_min_scale", 1e-3))
         self.distribution_max_scale = float(getattr(config, "distribution_max_scale", 100.0))
+        self.use_context_scale_prior = bool(
+            getattr(config, "use_context_scale_prior", True)
+        )
+        self.context_scale_floor = float(getattr(config, "context_scale_floor", 0.05))
+        self.context_scale_prior_mix = float(
+            getattr(config, "context_scale_prior_mix", 0.5)
+        )
+        self.context_scale_log_residual_limit = float(
+            getattr(config, "context_scale_log_residual_limit", 1.5)
+        )
+        self.context_transition_scale_suppression = float(
+            getattr(config, "context_transition_scale_suppression", 0.0)
+        )
         self.student_t_df = float(getattr(config, "student_t_df", 4.0))
         self.student_t_learn_df = bool(getattr(config, "student_t_learn_df", True))
         self.student_t_max_df = float(getattr(config, "student_t_max_df", 100.0))
@@ -191,6 +228,7 @@ class JointMultivariateReconstructor(nn.Module):
         self.mask_proj = nn.Linear(self.enc_in, config.d_model)
         context_dim = self.enc_in * 6
         self.context_control = nn.Parameter(torch.zeros(1, 1, context_dim))
+        self.scale_control = nn.Parameter(torch.zeros(1, 1, self.enc_in))
         self.context_proj = nn.Sequential(
             nn.Linear(context_dim, config.d_ff),
             _activation_module(config.activation),
@@ -233,7 +271,13 @@ class JointMultivariateReconstructor(nn.Module):
         df_bias = df_offset if df_offset > 20.0 else math.log(math.expm1(df_offset))
         with torch.no_grad():
             output_layer.weight[self.enc_in:, :].zero_()
-            output_layer.bias[self.enc_in:2 * self.enc_in].fill_(scale_bias)
+            self.scale_control.fill_(math.log(max(init_scale, 1e-8)))
+            if self.use_context_scale_prior:
+                # The scale head learns a bounded log correction around the
+                # visible-context prior. Zero therefore means no correction.
+                output_layer.bias[self.enc_in:2 * self.enc_in].zero_()
+            else:
+                output_layer.bias[self.enc_in:2 * self.enc_in].fill_(scale_bias)
             output_layer.bias[2 * self.enc_in:].fill_(df_bias)
 
     @staticmethod
@@ -261,28 +305,82 @@ class JointMultivariateReconstructor(nn.Module):
         mean = torch.where(weight_sum > 0, mean, torch.zeros_like(mean))
         return mean.transpose(1, 2)
 
-    def _context_features(self, x, mask):
+    def _visible_context_statistics(self, x, mask):
         valid = torch.ones_like(x, dtype=torch.bool) if mask is None else ~mask.bool()
         local_mean = self._masked_rolling_mean(x, valid, self.context_window)
         local_mean_sq = self._masked_rolling_mean(x * x, valid, self.context_window)
         local_std = torch.sqrt(torch.clamp(local_mean_sq - local_mean * local_mean, min=0.0) + 1e-6)
 
-        diff = torch.zeros_like(x)
-        diff[:, 1:, :] = x[:, 1:, :] - x[:, :-1, :]
-        diff_valid = torch.zeros_like(valid)
-        diff_valid[:, 1:, :] = valid[:, 1:, :] & valid[:, :-1, :]
-        trend = self._masked_rolling_mean(diff, diff_valid, self.context_window)
+        radius = max(self.context_window // 2, 1)
+        time_index = torch.arange(
+            x.shape[1], dtype=x.dtype, device=x.device
+        ).reshape(1, -1, 1) / float(radius)
+        time_index = time_index.expand_as(x)
+        local_time = self._masked_rolling_mean(time_index, valid, self.context_window)
+        local_time_sq = self._masked_rolling_mean(
+            time_index * time_index, valid, self.context_window
+        )
+        local_time_value = self._masked_rolling_mean(
+            time_index * x, valid, self.context_window
+        )
+        time_variance = (local_time_sq - local_time * local_time).clamp_min(1e-6)
+        trend = (local_time_value - local_time * local_mean) / time_variance
         context_x = torch.where(valid, x, local_mean)
         high_freq = torch.where(valid, x - local_mean, torch.zeros_like(x))
+        return {
+            "valid": valid,
+            "context_x": context_x,
+            "local_mean": local_mean,
+            "local_std": local_std,
+            "trend": trend,
+            "high_freq": high_freq,
+        }
+
+    def _context_features_from_statistics(self, statistics, mask):
+        x = statistics["context_x"]
         mask_float = torch.zeros_like(x) if mask is None else mask.float()
         return torch.cat(
-            [context_x, local_mean, local_std, trend, high_freq, mask_float], dim=-1
+            [
+                statistics["context_x"],
+                statistics["local_mean"],
+                statistics["local_std"],
+                statistics["trend"],
+                statistics["high_freq"],
+                mask_float,
+            ],
+            dim=-1,
         )
+
+    def _context_features(self, x, mask):
+        statistics = self._visible_context_statistics(x, mask)
+        return self._context_features_from_statistics(statistics, mask)
 
     def _conditioning_features(self, x, mask):
         if self.use_context_conditioning:
             return self._context_features(x, mask)
         return self.context_control.expand(x.shape[0], x.shape[1], -1)
+
+    def _contextual_scale_prior(self, x, statistics):
+        learned_scale = torch.exp(self.scale_control).expand_as(x)
+        if not self.use_context_conditioning or statistics is None:
+            return learned_scale
+
+        local_scale = statistics["local_std"].clamp_min(self.context_scale_floor)
+        suppression = self.context_transition_scale_suppression
+        if suppression > 0.0:
+            transition_ratio = statistics["trend"].abs() / (
+                local_scale + self.context_scale_floor
+            )
+            stationary_fraction = torch.exp(-suppression * transition_ratio)
+            local_scale = self.context_scale_floor + (
+                local_scale - self.context_scale_floor
+            ) * stationary_fraction
+        mix = self.context_scale_prior_mix
+        if mix <= 0.0:
+            return learned_scale
+        # Geometric interpolation makes the prior multiplicative and keeps
+        # its units consistent with the standardized reconstruction target.
+        return learned_scale * torch.exp(mix * torch.log(local_scale))
 
     def forward(self, x, mask=None):
         if x.ndim != 3:
@@ -304,7 +402,13 @@ class JointMultivariateReconstructor(nn.Module):
 
         # C1 uses target-blind visible context. C0 sends a learned dataset-level
         # constant through the same projection and FiLM path.
-        context = self.context_proj(self._conditioning_features(x, mask))
+        statistics = None
+        if self.use_context_conditioning:
+            statistics = self._visible_context_statistics(x, mask)
+            conditioning = self._context_features_from_statistics(statistics, mask)
+        else:
+            conditioning = self.context_control.expand(x.shape[0], x.shape[1], -1)
+        context = self.context_proj(conditioning)
         gamma, beta = self.film(context).chunk(2, dim=-1)
         strength = self.context_film_strength
         h = h + context
@@ -313,7 +417,15 @@ class JointMultivariateReconstructor(nn.Module):
 
         h = self.encoder(h)
         mean, raw_scale, raw_df = self.output_proj(self.norm(h)).chunk(3, dim=-1)
-        scale = F.softplus(raw_scale) + self.distribution_min_scale
+        if self.use_context_scale_prior:
+            scale_prior = self._contextual_scale_prior(x, statistics)
+            correction = torch.exp(
+                self.context_scale_log_residual_limit * torch.tanh(raw_scale)
+            )
+            scale = scale_prior * correction
+        else:
+            scale = F.softplus(raw_scale) + self.distribution_min_scale
+        scale = scale.clamp_min(self.distribution_min_scale)
         scale = scale.clamp(max=self.distribution_max_scale)
         if self.student_t_learn_df:
             df = 2.0 + F.softplus(raw_df)
@@ -338,6 +450,25 @@ class PatternAD:
         self.model = None
         self.early_stopping = None
         self._train_mask_generators = {}
+        self._fit_diagnostics = None
+        self._score_call_diagnostics = []
+        self._last_score_components = {}
+
+    def get_diagnostics(self):
+        return {
+            "schema_version": 1,
+            "model": "PatternAD",
+            "distribution": self.config.reconstruction_distribution,
+            "score_mode": str(self.config.pattern_score_mode),
+            "training": copy.deepcopy(self._fit_diagnostics),
+            "score_calls": copy.deepcopy(self._score_call_diagnostics),
+        }
+
+    def get_last_score_components(self):
+        return {
+            name: np.asarray(values, dtype=np.float64).copy()
+            for name, values in self._last_score_components.items()
+        }
 
     @staticmethod
     def required_hyper_params() -> dict:
@@ -560,21 +691,141 @@ class PatternAD:
         if self.pattern_scorer is None or not self.pattern_scorer.fitted:
             raise RuntimeError("Pattern scorer is not fitted. Call detect_multi_fit before scoring.")
 
+        started_at = time.perf_counter()
         window_scores = []
+        window_components = {
+            "raw_squared_residual": [],
+            "standardized_squared_residual": [],
+            "predicted_scale": [],
+            "log_scale": [],
+        }
+        batch_count = 0
+        window_count = 0
+        scale_count = 0
+        scale_finite_count = 0
+        scale_sum = 0.0
+        scale_sum_sq = 0.0
+        scale_min = math.inf
+        scale_max = -math.inf
+        scale_lower_count = 0
+        scale_upper_count = 0
         with torch.no_grad():
             for batch_x_time, _, _, _ in data_loader:
                 batch_x_time = batch_x_time.float().to(self.device)
                 outputs, score_mask = self._predict_for_scoring(batch_x_time)
+                mean_output = self._output_mean(outputs)
+                if isinstance(outputs, dict) and "scale" in outputs:
+                    component_scale = outputs["scale"].clamp_min(
+                        self.config.distribution_min_scale
+                    )
+                else:
+                    component_scale = torch.ones_like(mean_output)
+                raw_squared = (batch_x_time - mean_output).square()
+                component_values = {
+                    "raw_squared_residual": raw_squared,
+                    "standardized_squared_residual": raw_squared
+                    / component_scale.square(),
+                    "predicted_scale": component_scale,
+                    "log_scale": torch.log(component_scale),
+                }
+                if score_mask is None:
+                    aggregated_components = {
+                        name: values.mean(dim=-1)
+                        for name, values in component_values.items()
+                    }
+                else:
+                    component_mask = score_mask.to(dtype=batch_x_time.dtype)
+                    component_count = component_mask.sum(dim=-1).clamp_min(1.0)
+                    aggregated_components = {
+                        name: (values * component_mask).sum(dim=-1)
+                        / component_count
+                        for name, values in component_values.items()
+                    }
+                for name, values in aggregated_components.items():
+                    window_components[name].append(values.detach().cpu().numpy())
+                batch_count += 1
+                window_count += int(batch_x_time.shape[0])
+                if isinstance(outputs, dict) and "scale" in outputs:
+                    scale = outputs["scale"].detach()
+                    finite = torch.isfinite(scale)
+                    finite_count = int(finite.sum().item())
+                    scale_count += int(scale.numel())
+                    scale_finite_count += finite_count
+                    if finite_count:
+                        finite_scale = scale[finite].double()
+                        scale_sum += float(finite_scale.sum().item())
+                        scale_sum_sq += float(finite_scale.square().sum().item())
+                        scale_min = min(scale_min, float(finite_scale.min().item()))
+                        scale_max = max(scale_max, float(finite_scale.max().item()))
+                        lower_cutoff = self.config.distribution_min_scale * (1.0 + 1e-6)
+                        upper_cutoff = self.config.distribution_max_scale * (1.0 - 1e-7)
+                        scale_lower_count += int(
+                            (finite_scale <= lower_cutoff).sum().item()
+                        )
+                        scale_upper_count += int(
+                            (finite_scale >= upper_cutoff).sum().item()
+                        )
                 window_scores.append(
                     self.pattern_scorer.score_windows(
                         batch_x_time,
-                        self._output_mean(outputs),
+                        mean_output,
                         score_mask=score_mask,
                         distribution_params=self._distribution_params(outputs),
                     )
                 )
 
-        return self._windows_to_point_scores(np.concatenate(window_scores, axis=0), total_len)
+        point_scores = self._windows_to_point_scores(
+            np.concatenate(window_scores, axis=0), total_len
+        )
+        self._last_score_components = {
+            name: self._windows_to_point_scores(
+                np.concatenate(values, axis=0), total_len
+            )
+            for name, values in window_components.items()
+        }
+        finite_scores = point_scores[np.isfinite(point_scores)]
+        score_diagnostics = {
+            "call_index": len(self._score_call_diagnostics),
+            "phase": None,
+            "input_length": int(total_len),
+            "batch_count": int(batch_count),
+            "window_count": int(window_count),
+            "elapsed_seconds": float(time.perf_counter() - started_at),
+            "score": {
+                "count": int(point_scores.size),
+                "finite_count": int(finite_scores.size),
+                "nonfinite_count": int(point_scores.size - finite_scores.size),
+                "min": float(finite_scores.min()) if finite_scores.size else None,
+                "max": float(finite_scores.max()) if finite_scores.size else None,
+                "mean": float(finite_scores.mean()) if finite_scores.size else None,
+            },
+            "scale": None,
+        }
+        if scale_count:
+            nonfinite_count = scale_count - scale_finite_count
+            mean = scale_sum / scale_finite_count if scale_finite_count else None
+            variance = (
+                max(scale_sum_sq / scale_finite_count - mean * mean, 0.0)
+                if scale_finite_count
+                else None
+            )
+            score_diagnostics["scale"] = {
+                "count": int(scale_count),
+                "finite_count": int(scale_finite_count),
+                "nonfinite_count": int(nonfinite_count),
+                "min": float(scale_min) if scale_finite_count else None,
+                "max": float(scale_max) if scale_finite_count else None,
+                "mean": float(mean) if mean is not None else None,
+                "std": float(math.sqrt(variance)) if variance is not None else None,
+                "lower_bound": float(self.config.distribution_min_scale),
+                "upper_bound": float(self.config.distribution_max_scale),
+                "lower_bound_count": int(scale_lower_count),
+                "upper_bound_count": int(scale_upper_count),
+                "lower_bound_fraction": float(scale_lower_count / scale_count),
+                "upper_bound_fraction": float(scale_upper_count / scale_count),
+            }
+        self._score_call_diagnostics.append(score_diagnostics)
+        return point_scores
 
     def _fit_pattern_scorer(self, data_loader):
         self.pattern_scorer = self._build_pattern_scorer()
@@ -584,6 +835,10 @@ class PatternAD:
             "nll",
             "distribution_nll",
             "conditional_nll",
+            "tail",
+            "tail_probability",
+            "tail_surprisal",
+            "conditional_tail",
             "auto",
         }:
             # Raw residual and distribution NLL do not use fitted legacy
@@ -640,10 +895,13 @@ class PatternAD:
         return np.mean(total_loss)
 
     def detect_multi_fit(self, train_data: pd.DataFrame, train_text: pd.DataFrame, train_label: pd.DataFrame):
+        fit_started_at = time.perf_counter()
         self.detect_hyper_param_tune(train_data)
         setattr(self.config, "task_name", "anomaly_detection")
         self.model = JointMultivariateReconstructor(self.config)
         self._train_mask_generators = {}
+        self._score_call_diagnostics = []
+        self._last_score_components = {}
 
         train_data_value, valid_data = train_val_split(train_data, 0.8, None)
         train_data_text, valid_text = train_val_split(train_text, 0.8, None)
@@ -698,8 +956,13 @@ class PatternAD:
         self.model.to(self.device)
 
         time_now = time.time()
+        training_started_at = time.perf_counter()
+        epoch_history = []
+        best_epoch = None
         for epoch in range(self.config.num_epochs):
+            epoch_started_at = time.perf_counter()
             iter_count = 0
+            epoch_losses = []
             self.model.train()
             for i, (batch_x_time, _, _, _) in enumerate(self.train_data_loader):
                 iter_count += 1
@@ -710,6 +973,7 @@ class PatternAD:
                 outputs = self._forward_backbone(masked_x_time, masked_positions)
                 outputs = self._align_output_to_true(outputs, batch_x_time)
                 loss = self._reconstruction_loss(outputs, batch_x_time, masked_positions)
+                epoch_losses.append(float(loss.detach().cpu().item()))
 
                 if (i + 1) % 10 == 0:
                     speed = (time.time() - time_now) / iter_count
@@ -722,12 +986,27 @@ class PatternAD:
                 loss.backward()
                 optimizer.step()
 
-            valid_loss = self.detect_multi_validate(self.valid_data_loader, criterion)
+            valid_loss = float(
+                self.detect_multi_validate(self.valid_data_loader, criterion)
+            )
+            previous_best = float(self.early_stopping.val_loss_min)
             self.early_stopping(valid_loss, self.model)
+            if float(self.early_stopping.val_loss_min) < previous_best:
+                best_epoch = epoch + 1
+            epoch_history.append(
+                {
+                    "epoch": int(epoch + 1),
+                    "train_loss": float(np.mean(epoch_losses)),
+                    "validation_loss": valid_loss,
+                    "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                    "elapsed_seconds": float(time.perf_counter() - epoch_started_at),
+                }
+            )
             if self.early_stopping.early_stop:
                 break
             adjust_learning_rate(optimizer, epoch + 1, self.config)
 
+        training_seconds = time.perf_counter() - training_started_at
         pattern_fit_loader = anomaly_detection_multi_data_provider(
             train_data_value,
             train_data_text,
@@ -736,7 +1015,25 @@ class PatternAD:
             step=1,
             mode="test",
         )
+        scorer_started_at = time.perf_counter()
         self._fit_pattern_scorer(pattern_fit_loader)
+        scorer_fit_seconds = time.perf_counter() - scorer_started_at
+        self._fit_diagnostics = {
+            "fit_seconds": float(time.perf_counter() - fit_started_at),
+            "training_seconds": float(training_seconds),
+            "scorer_fit_seconds": float(scorer_fit_seconds),
+            "epochs_requested": int(self.config.num_epochs),
+            "epochs_completed": int(len(epoch_history)),
+            "best_epoch": int(best_epoch) if best_epoch is not None else None,
+            "best_validation_loss": float(self.early_stopping.val_loss_min),
+            "stopped_early": bool(self.early_stopping.early_stop),
+            "parameter_count": int(
+                sum(parameter.numel() for parameter in self.model.parameters())
+            ),
+            "optimization_train_points": int(len(train_data_value)),
+            "validation_points": int(len(valid_data)),
+            "epoch_history": epoch_history,
+        }
 
     def detect_multi_score(self, test_data: pd.DataFrame, test_text: pd.DataFrame) -> np.ndarray:
         if self.model is None:

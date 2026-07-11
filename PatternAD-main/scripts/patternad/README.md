@@ -9,8 +9,9 @@ commands and summarize only threshold-independent score metrics.
   defines `A00/A10/A01/A11/B00/B11`, shared training settings, score metrics,
   seeds, and paired comparisons.
 - All A cells use complementary conditional scoring with
-  `score_mask_ratio=1/3` (three passes). D1 uses a heteroscedastic Gaussian and
-  NLL; Student-t is intentionally deferred.
+  `score_mask_ratio=1/3` (three passes). D1 trains a heteroscedastic Gaussian
+  with masked NLL and scores conditional two-sided tail surprisal; Student-t is
+  intentionally deferred.
 - `config/patternad/dataset_groups.json` defines `smoke`, `motivation`,
   `robustness`, and locked `confirmation` groups. SMD entities share one family,
   so they do not receive extra weight in the overall family macro.
@@ -42,6 +43,16 @@ Each identity is stored below:
 ```text
 result/patternad_strict/<run-name>/<group>/<dataset>/<variant>/seed_<seed>/attempt_NNN/
 ```
+
+Each completed attempt contains the detailed CSV archive, `benchmark.log`, and
+`run_metadata.json`. PatternAD diagnostics are written into the detailed result
+first, validated by the runner, and then copied into metadata. A completed cell
+must contain ordered calibration/test score calls, finite epoch losses and
+scores, best epoch, fit/scoring runtime, and scale boundary statistics. Gaussian
+cells fail before `status=completed` when a calibration scale-boundary fraction
+reaches the frozen 1% limit. Test boundary fractions remain report-only so they
+cannot become a hidden tuning signal. Resume does not accept older completed
+attempts without validated diagnostics.
 
 An existing identity is never appended to. Use `--resume` with the same
 `--run-name` to skip completed identities and create a new attempt directory for
@@ -89,6 +100,7 @@ conda run --no-capture-output -n patternad_env \
 The summarizer reads only detailed `*.csv.tar.gz` artifacts and writes:
 
 - `entity_seed_score_metrics.csv`
+- `entity_seed_run_diagnostics.csv` with epoch/runtime/score/scale diagnostics
 - `family_seed_macro.csv` and `family_macro.csv`
 - `overall_family_seed_macro.csv`
 - entity/seed, family/seed, family-macro, and overall paired delta CSVs
@@ -199,9 +211,11 @@ of this summarizer. The current tests cover strict fit/calibration separation,
 static-text handling, target blindness, complete mask coverage, seeded
 initialization/mask streams, calibration-only thresholds, and runner contracts.
 A tiny GPU smoke produced bitwise-identical scores for the same seed, changed
-scores for a different seed, and zero lower/upper scale-clamp hits. Repeat the
-runtime and scale diagnostics on the real Weather four-cell P0 before formal
-multi-seed execution.
+scores for a different seed, and zero lower/upper scale-boundary hits. The first
+real Weather four-cell P0 and its diagnostic A01/A11 rerun completed, but both
+predate the visible-context scale-prior prototype and are now pipeline evidence
+only. During model development, use one generator seed and an explicit low
+`--num-epochs` value before requesting a full experiment.
 
 ## P1 contextual synthetic suite
 
@@ -267,6 +281,26 @@ success there requires the
 separate rare-context score proposed in the research plan. The embedded oracle
 is useful for checking generation semantics, not for claiming learned-model
 performance.
+
+During the current model-development phase, do not launch the full seed grid.
+The completed `dev_local_slope_full` run used density NLL scoring and exposed a
+cross-regime ranking error from its `log(scale)` term. The next requested
+handoff is only the current tail-probability A01/A11 on generator seed 3101 with
+the default epoch count:
+
+```bash
+for variant in A01 A11; do
+  conda run --no-capture-output -n patternad_env \
+    python -u scripts/patternad/evaluate_contextual_mechanisms.py \
+    --artifact-dir artifacts/patternad_synthetic/contextual_v1/seed_3101 \
+    --patternad-variant "$variant" --seed 2021 \
+    --output-dir "result/patternad_synthetic/dev_tail_probability_full/$variant/generator_seed_3101/model_seed_2021"
+done
+```
+
+Return the two `contextual_evaluation.json`, `mechanism_metrics.csv`,
+`matched_orderings.csv`, and `score_component_orderings.csv` artifacts. Do not
+run additional generator seeds before this pair is interpreted.
 
 External methods can instead provide one `<mechanism>.npz` per mechanism, each
 with a finite `score` vector aligned to the full train-then-test series, and use

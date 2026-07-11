@@ -38,6 +38,64 @@ class _MaskEchoModel(nn.Module):
 
 
 class PatternADCoreTest(unittest.TestCase):
+    def test_score_diagnostics_append_and_summarize_scale(self):
+        detector = PatternAD(
+            enc_in=2,
+            seq_len=6,
+            score_mask_ratio=0.5,
+            reconstruction_distribution="gaussian",
+            pattern_score_mode="nll",
+        )
+        detector.device = torch.device("cpu")
+        detector.model = _MaskEchoModel()
+        detector.pattern_scorer = PatternAwareScorer(
+            score_mode="nll", distribution="gaussian"
+        )
+        detector.pattern_scorer.fitted = True
+        batch = torch.zeros(2, 6, 2)
+        loader = [
+            (batch, None, None, None),
+            (batch, None, None, None),
+        ]
+
+        score = detector._collect_multi_scores(loader, total_len=9)
+        self.assertEqual(score.shape, (9,))
+        first = detector.get_diagnostics()["score_calls"][0]
+        self.assertEqual(first["call_index"], 0)
+        self.assertEqual(first["batch_count"], 2)
+        self.assertEqual(first["window_count"], 4)
+        self.assertEqual(first["scale"]["count"], 48)
+        self.assertEqual(first["scale"]["finite_count"], 48)
+        self.assertAlmostEqual(first["scale"]["min"], 2.0)
+        self.assertAlmostEqual(first["scale"]["max"], 2.0)
+        self.assertAlmostEqual(first["scale"]["mean"], 2.0)
+        self.assertEqual(first["scale"]["lower_bound_count"], 0)
+        self.assertEqual(first["scale"]["upper_bound_count"], 0)
+        components = detector.get_last_score_components()
+        self.assertEqual(
+            set(components),
+            {
+                "raw_squared_residual",
+                "standardized_squared_residual",
+                "predicted_scale",
+                "log_scale",
+            },
+        )
+        for values in components.values():
+            self.assertEqual(values.shape, (9,))
+            self.assertTrue(np.isfinite(values).all())
+        np.testing.assert_allclose(components["raw_squared_residual"], 1.0)
+        np.testing.assert_allclose(
+            components["standardized_squared_residual"], 0.25
+        )
+        np.testing.assert_allclose(components["predicted_scale"], 2.0)
+        np.testing.assert_allclose(components["log_scale"], np.log(2.0))
+
+        detector._collect_multi_scores([(batch[:1], None, None, None)], 6)
+        calls = detector.get_diagnostics()["score_calls"]
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1]["call_index"], 1)
+
     def test_context_features_ignore_values_at_masked_positions(self):
         model = JointMultivariateReconstructor(_small_config())
         x = torch.arange(12, dtype=torch.float32).reshape(1, 6, 2)
@@ -73,6 +131,89 @@ class PatternADCoreTest(unittest.TestCase):
 
         model(torch.randn(2, 6, 2)).sum().backward()
         self.assertIsNotNone(model.context_control.grad)
+
+    def test_context_scale_prior_is_target_blind_and_regime_sensitive(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                use_context_scale_prior=True,
+                context_scale_floor=0.01,
+                context_scale_prior_mix=0.5,
+            )
+        )
+        model.eval()
+        quiet = torch.tensor(
+            [[[0.00, 0.00], [0.10, -0.10], [0.00, 0.00], [-0.10, 0.10], [0.00, 0.00], [0.10, -0.10]]]
+        )
+        volatile = quiet * 8.0
+        mask = torch.zeros_like(quiet, dtype=torch.bool)
+        mask[:, 2, :] = True
+
+        quiet_output = model(quiet.masked_fill(mask, 0.0), mask)
+        volatile_output = model(volatile.masked_fill(mask, 0.0), mask)
+        self.assertTrue(
+            torch.all(volatile_output["scale"][mask] > quiet_output["scale"][mask] * 2.0)
+        )
+
+        changed = quiet.clone()
+        changed[mask] = 1e5
+        changed_output = model(changed.masked_fill(mask, 0.0), mask)
+        torch.testing.assert_close(quiet_output["scale"], changed_output["scale"])
+
+    def test_context_off_scale_prior_is_regime_invariant(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                use_context_conditioning=False,
+                use_context_scale_prior=True,
+            )
+        )
+        model.eval()
+        mask = torch.zeros(1, 6, 2, dtype=torch.bool)
+        mask[:, 2, :] = True
+        quiet = torch.randn(1, 6, 2) * 0.1
+        volatile = quiet * 10.0
+
+        quiet_output = model(quiet.masked_fill(mask, 0.0), mask)
+        volatile_output = model(volatile.masked_fill(mask, 0.0), mask)
+        torch.testing.assert_close(quiet_output["scale"], volatile_output["scale"])
+
+    def test_visible_trend_bridges_masked_transition_and_suppresses_scale(self):
+        model = JointMultivariateReconstructor(
+            _small_config(
+                reconstruction_distribution="gaussian",
+                use_context_scale_prior=True,
+                context_window=5,
+                context_scale_prior_mix=1.0,
+                context_transition_scale_suppression=2.0,
+            )
+        )
+        alternating = torch.tensor(
+            [[[-1.0, -1.0], [1.0, 1.0], [-1.0, -1.0], [1.0, 1.0], [-1.0, -1.0], [1.0, 1.0]]]
+        )
+        transition = torch.tensor(
+            [[[-1.0, -1.0], [-1.0, -1.0], [-1.0, -1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]]
+        )
+        mask = torch.zeros_like(transition, dtype=torch.bool)
+        mask[:, 2, :] = True
+
+        alternating_stats = model._visible_context_statistics(
+            alternating.masked_fill(mask, 0.0), mask
+        )
+        transition_stats = model._visible_context_statistics(
+            transition.masked_fill(mask, 0.0), mask
+        )
+        self.assertTrue(
+            torch.all(
+                transition_stats["trend"][mask].abs()
+                > alternating_stats["trend"][mask].abs()
+            )
+        )
+        alternating_prior = model._contextual_scale_prior(
+            alternating, alternating_stats
+        )
+        transition_prior = model._contextual_scale_prior(transition, transition_stats)
+        self.assertTrue(torch.all(transition_prior[mask] < alternating_prior[mask]))
 
     def test_d2_complementary_masks_cover_each_position_once(self):
         detector = PatternAD(
@@ -140,7 +281,8 @@ class PatternADCoreTest(unittest.TestCase):
 
         self.assertEqual(PatternADConfig().pattern_score_mode, "raw")
         self.assertEqual(
-            PatternADConfig(distribution_mode="gaussian").pattern_score_mode, "nll"
+            PatternADConfig(distribution_mode="gaussian").pattern_score_mode,
+            "tail_probability",
         )
 
     def test_train_masks_use_a_dedicated_seeded_rng(self):
@@ -198,6 +340,28 @@ class PatternADCoreTest(unittest.TestCase):
         )
 
         self.assertLess(float(wide.item()), float(narrow.item()))
+
+    def test_gaussian_tail_scores_rarity_instead_of_cross_scale_density(self):
+        true = np.array([[[0.1]]], dtype=np.float64)
+        pred = np.zeros_like(true)
+        narrow_scale = {"scale": np.full_like(true, 0.25)}
+        wide_scale = {"scale": np.full_like(true, 1.0)}
+
+        nll = PatternAwareScorer(score_mode="nll", distribution="gaussian")
+        nll.fit(true, pred)
+        tail = PatternAwareScorer(
+            score_mode="tail_probability", distribution="gaussian"
+        )
+        tail.fit(true, pred)
+
+        self.assertGreater(
+            float(nll.score_windows(true, pred, distribution_params=wide_scale).item()),
+            float(nll.score_windows(true, pred, distribution_params=narrow_scale).item()),
+        )
+        self.assertLess(
+            float(tail.score_windows(true, pred, distribution_params=wide_scale).item()),
+            float(tail.score_windows(true, pred, distribution_params=narrow_scale).item()),
+        )
 
     def test_raw_score_matches_masked_mean_squared_error(self):
         scorer = PatternAwareScorer(score_mode="raw")

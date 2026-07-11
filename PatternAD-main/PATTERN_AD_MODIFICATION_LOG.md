@@ -735,3 +735,38 @@ conda run --no-capture-output -n patternad_env \
 ```
 
 The primary comparison is now `A00/A10/A01/A11`, not PatternAD versus `PatternAD_raw`, because the latter changes both context conditioning and conditional scoring. `B00/B11` remain unmasked diagnostics and cannot support the target-blind conditional-density claim by themselves.
+
+### P0 Diagnostic Persistence
+
+The first strict Weather P0 completed all A00/A10/A01/A11 cells and produced a complete score summary, but its artifact could not audit the planned Gaussian scale-boundary or training-curve checks. The result remains valid as a pipeline smoke and is not rewritten.
+
+PatternAD now records epoch train/validation loss, best epoch, early-stop state, parameter count, fit/scorer time, and ordered calibration/test score calls. Probabilistic calls additionally record scale min/max/mean/std, finite counts, and lower/upper boundary counts and fractions. These diagnostics enter the detailed CSV, are validated against the frozen distribution/score mode, and are copied into `run_metadata.json`; the runner also persists combined stdout/stderr in `benchmark.log`. Missing diagnostics, non-finite values, phase overwrite, or a calibration scale boundary fraction at or above 1% prevent completion and resume. Test boundary fractions are retained for disclosure but never drive this gate. The strict summarizer verifies detail/metadata equality and writes `entity_seed_run_diagnostics.csv`.
+
+The diagnostic rerun `p0_weather_diag_v2` completed A01/A11 on 2026-07-11. Both calibration and test calls reported zero lower/upper scale-boundary hits. A01 stopped after 12 epochs with best epoch 9; A11 stopped after 7 epochs with best epoch 4. Their six threshold-independent metrics exactly matched the corresponding first-P0 values, providing a same-seed persistence check. P0 is therefore closed; no further Weather reruns are required before P1.
+
+## 2026-07-11 Visible-Context Scale-Prior Prototype
+
+Model development is now prioritized over expanding the formal experiment matrix. The previous Gaussian head received local scale only through a generic context MLP and was otherwise free to learn `sigma` from the shared decoder. That did not structurally encode the core mechanism that equal residuals should use different reference scales in quiet and volatile contexts.
+
+The probabilistic head now uses:
+
+```text
+sigma_prior = dataset_scale * local_visible_std ** context_scale_prior_mix
+sigma       = sigma_prior * exp(limit * tanh(learned_log_correction))
+```
+
+`local_visible_std` excludes masked targets. C0 uses the same learned dataset-scale parameter but no dynamic local prior. The default prior mix is 0.5 rather than 1.0: local dynamics affect the reference scale, but anomalous neighboring points cannot fully dictate `sigma`. The decoder correction is bounded in log space. `use_context_scale_prior=false` retains the previous softplus head for a direct development comparison.
+
+New unit contracts cover target blindness, larger initial scale in a volatile visible context, regime invariance of the C0 prior, and equal parameter counts. The old Weather P0 predates this prototype and is now pipeline evidence only. A partially launched generator-seed-3101 pilot was stopped and deleted; its sole completed A00 result belonged to the old model and had matched-ordering rate 0.2, so it was not retained as a comparable artifact. Deterministic synthetic input artifacts remain reusable.
+
+One-epoch CPU diagnostics on generator seed 3101 showed that the scale prior improved A11 versus A01 in macro AP (`0.1054` versus `0.0819`) and maximum normal-regime FPR gap (`0.0045` versus `0.0190`). Same-deviation ordering improved from `0/3` to `1/3`, but abrupt-versus-gradual ordering remained `0/2`. These are development signals, not reported results.
+
+An attempted transition-dependent scale suppression used the target-blind local slope to reduce `sigma` around rapid directed changes. It recovered one abrupt/gradual pair, but reduced same-deviation ordering to `0/3`, lowered macro AP to `0.0942`, and raised the calibration threshold from `5.80` to `12.83`. This coupling was rejected: `context_transition_scale_suppression` now defaults to `0.0`. The useful part, replacing adjacent-only trend with a visible-point local linear-regression slope that bridges masked gaps, remains as a context feature and will be evaluated separately.
+
+The cleaned current-code one-epoch pair is `result/patternad_synthetic/dev_local_slope_v1/{A01,A11}`. A11 versus A01 has macro AP `0.1053` versus `0.0819` and maximum regime FPR gap `0.0045` versus `0.0190`; overall ordering remains `0.2`. This supports retaining the scale prior for further development, but it does not support expanding datasets or claiming that transition semantics are solved. The next useful experiment is a full-epoch A01/A11 run on generator seed 3101 only; broader grids remain deferred.
+
+The requested 30-epoch generator-seed-3101 run completed in `result/patternad_synthetic/dev_local_slope_full`. A11 improved macro AP from A01's `0.0835` to `0.0931`; AP increased on all four generated mechanisms, and maximum regime FPR gap decreased from `0.00542` to `0.00450`. However, A11 matched ordering fell from `1/5` to `0/5`: all three equal-deviation quiet events remained below their volatile counterparts, and both abrupt events remained below gradual references. Dependency-break AP remained below prevalence (`0.0979` versus `0.1563`). The current model therefore improves coarse ranking/calibration but fails the defining residual-semantics contract. Do not expand seeds or real datasets. The next model-development step is to persist raw residual, standardized residual, predicted scale, and log-scale components so mean and scale failures can be separated before changing the architecture.
+
+Score decomposition showed that A11 predicted the intended scale direction: quiet-event scale was about `0.65-0.73`, versus `0.97-1.09` for matched volatile events. Standardized squared residual correctly ordered two of three same-deviation pairs, but Gaussian density NLL reversed them because its `log(sigma)` normalization penalized the wider normal regime. Density is not the same estimand as conditional tail rarity across heteroscedastic contexts.
+
+Probabilistic scoring now defaults to two-sided tail surprisal while training remains masked NLL. A one-epoch generator-seed-3101 sanity check increased A11 macro AP from the NLL version's `0.1053` to `0.1224`, same-deviation AP from `0.0976` to `0.1573`, and matched ordering from `1/5` to `2/5`; maximum regime FPR gap remained `0.00450`. A01 macro AP was `0.0815`. Both abrupt/gradual pairs and dependency-break detectability remain unresolved, so the next full run is limited to current A01/A11 on seed 3101.

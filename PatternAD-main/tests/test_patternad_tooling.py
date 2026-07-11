@@ -1,13 +1,210 @@
+import csv
+import io
 import json
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.patternad.run_factorial_ablation import _build_command, _next_attempt_dir
-from scripts.patternad.summarize_factorial import _verify_complete_plan
+from scripts.patternad.run_factorial_ablation import (
+    _build_command,
+    _completed_attempt,
+    _next_attempt_dir,
+    _validate_artifact,
+    _validate_model_diagnostics,
+)
+from scripts.patternad.summarize_factorial import (
+    _flatten_run_diagnostics,
+    _verify_complete_plan,
+)
 
 
 class PatternADToolingTest(unittest.TestCase):
+    @staticmethod
+    def _diagnostics(distribution):
+        scale = None
+        if distribution != "mse":
+            scale = {
+                "count": 10,
+                "finite_count": 10,
+                "nonfinite_count": 0,
+                "min": 0.5,
+                "max": 1.5,
+                "mean": 1.0,
+                "std": 0.2,
+                "lower_bound": 0.001,
+                "upper_bound": 100.0,
+                "lower_bound_count": 0,
+                "upper_bound_count": 0,
+                "lower_bound_fraction": 0.0,
+                "upper_bound_fraction": 0.0,
+            }
+        calls = []
+        for index, phase in enumerate(("calibration", "test")):
+            calls.append(
+                {
+                    "call_index": index,
+                    "phase": phase,
+                    "input_length": 10,
+                    "batch_count": 1,
+                    "window_count": 5,
+                    "elapsed_seconds": 0.1,
+                    "score": {
+                        "count": 10,
+                        "finite_count": 10,
+                        "nonfinite_count": 0,
+                        "min": 0.1,
+                        "max": 1.0,
+                        "mean": 0.4,
+                    },
+                    "scale": scale,
+                }
+            )
+        return {
+            "schema_version": 1,
+            "model": "PatternAD",
+            "distribution": distribution,
+            "score_mode": "raw" if distribution == "mse" else "nll",
+            "training": {
+                "fit_seconds": 1.0,
+                "training_seconds": 0.8,
+                "scorer_fit_seconds": 0.01,
+                "epochs_requested": 2,
+                "epochs_completed": 2,
+                "best_epoch": 2,
+                "best_validation_loss": 0.3,
+                "stopped_early": False,
+                "parameter_count": 100,
+                "optimization_train_points": 50,
+                "validation_points": 10,
+                "epoch_history": [
+                    {
+                        "epoch": 1,
+                        "train_loss": 0.6,
+                        "validation_loss": 0.5,
+                        "learning_rate": 0.001,
+                        "elapsed_seconds": 0.4,
+                    },
+                    {
+                        "epoch": 2,
+                        "train_loss": 0.4,
+                        "validation_loss": 0.3,
+                        "learning_rate": 0.0005,
+                        "elapsed_seconds": 0.4,
+                    },
+                ],
+            },
+            "score_calls": calls,
+        }
+
+    def test_runner_validates_mse_and_gaussian_diagnostics(self):
+        mse = self._diagnostics("mse")
+        gaussian = self._diagnostics("gaussian")
+        self.assertEqual(
+            _validate_model_diagnostics(
+                mse, {"reconstruction_distribution": "mse"}, 0.01
+            )["distribution"],
+            "mse",
+        )
+        self.assertEqual(
+            _validate_model_diagnostics(
+                gaussian,
+                {
+                    "reconstruction_distribution": "gaussian",
+                    "pattern_score_mode": "nll",
+                },
+                0.01,
+            )["distribution"],
+            "gaussian",
+        )
+        gaussian["score_calls"][0]["scale"]["upper_bound_count"] = 1
+        gaussian["score_calls"][0]["scale"]["upper_bound_fraction"] = 0.1
+        with self.assertRaisesRegex(RuntimeError, "exceeds the frozen limit"):
+            _validate_model_diagnostics(
+                gaussian,
+                {
+                    "reconstruction_distribution": "gaussian",
+                    "pattern_score_mode": "nll",
+                },
+                0.01,
+            )
+
+    def test_detailed_artifact_round_trips_model_diagnostics(self):
+        diagnostics = self._diagnostics("gaussian")
+        row = {
+            "strategy_args": json.dumps(
+                {
+                    "evaluation_protocol": "train_calibration",
+                    "calibration_fraction": 0.2,
+                    "seed": 2021,
+                }
+            ),
+            "typical_anomaly_ratio": "1.0",
+            "auc_pr": "0.5",
+            "model_diagnostics": json.dumps(diagnostics, allow_nan=False),
+            "log_info": "",
+        }
+        stream = io.StringIO()
+        writer = csv.DictWriter(stream, fieldnames=list(row))
+        writer.writeheader()
+        writer.writerow(row)
+        payload = stream.getvalue().encode("utf-8")
+
+        with tempfile.TemporaryDirectory() as directory:
+            attempt = Path(directory)
+            archive_path = attempt / "result.csv.tar.gz"
+            with tarfile.open(archive_path, "w:gz") as archive:
+                member = tarfile.TarInfo("result.csv")
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+            artifact, loaded = _validate_artifact(
+                attempt,
+                {
+                    "evaluation_protocol": "train_calibration",
+                    "calibration_fraction": 0.2,
+                    "anomaly_ratios": [1.0],
+                    "max_scale_boundary_fraction": 0.01,
+                },
+                ["auc_pr"],
+                2021,
+                {
+                    "reconstruction_distribution": "gaussian",
+                    "pattern_score_mode": "nll",
+                },
+            )
+            self.assertEqual(artifact, archive_path)
+            self.assertEqual(loaded["score_calls"][1]["phase"], "test")
+
+    def test_summary_flattens_machine_readable_run_diagnostics(self):
+        flattened = _flatten_run_diagnostics(
+            {
+                "runner_wall_seconds": 2.0,
+                "benchmark_log": "benchmark.log",
+                "model_diagnostics": self._diagnostics("gaussian"),
+            }
+        )
+        self.assertEqual(flattened["epochs_completed"], 2)
+        self.assertEqual(flattened["test_scale_mean"], 1.0)
+        self.assertEqual(flattened["benchmark_log"], "benchmark.log")
+
+    def test_resume_rejects_completed_attempt_without_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            seed_dir = Path(directory)
+            attempt = seed_dir / "attempt_001"
+            attempt.mkdir()
+            (attempt / "result.csv.tar.gz").write_bytes(b"placeholder")
+            (attempt / "run_metadata.json").write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "config_hash": "frozen",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "lacks validated"):
+                _completed_attempt(seed_dir, "frozen")
+
     def test_runner_allocates_the_next_attempt_on_python38(self):
         with tempfile.TemporaryDirectory() as directory:
             seed_dir = Path(directory)

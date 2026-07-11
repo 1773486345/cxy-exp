@@ -37,6 +37,14 @@ class RecordingMultiModel:
     def detect_multi_label(self, data, text):
         raise AssertionError("Strict protocol must not call detect_multi_label")
 
+    def get_diagnostics(self):
+        return {
+            "score_calls": [
+                {"call_index": index, "input_length": len(data), "phase": None}
+                for index, data in enumerate(self.score_inputs)
+            ]
+        }
+
 
 class AnomalyProtocolTest(unittest.TestCase):
     def _strict_strategy(self):
@@ -72,7 +80,7 @@ class AnomalyProtocolTest(unittest.TestCase):
         with patch(
             "ts_benchmark.evaluation.strategy.anomaly_detect.fix_random_seed"
         ) as seed_mock:
-            strategy.multi_execute("series", "text", lambda: model)
+            result = strategy.multi_execute("series", "text", lambda: model)
 
         seed_mock.assert_called_once_with(13)
         self.assertEqual(model.fit_data["value"].tolist(), list(range(10)))
@@ -82,6 +90,18 @@ class AnomalyProtocolTest(unittest.TestCase):
             model.score_inputs[0]["value"].tolist(), [12.0, 13.0, 14.0]
         )
         self.assertEqual(model.score_inputs[1]["value"].tolist(), [20.0, 21.0])
+        diagnostics_index = strategy.field_names.index(
+            "model_diagnostics"
+        )
+        diagnostics = json.loads(result[0][diagnostics_index])
+        self.assertEqual(
+            [call["phase"] for call in diagnostics["score_calls"]],
+            ["calibration", "test"],
+        )
+        self.assertEqual(
+            [call["input_length"] for call in diagnostics["score_calls"]],
+            [3, 2],
+        )
 
     def test_static_text_is_reused_without_materializing_time_length_rows(self):
         static_text = pd.DataFrame({"text": ["global system description"]})

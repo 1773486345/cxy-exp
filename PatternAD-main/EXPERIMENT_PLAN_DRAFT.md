@@ -1,6 +1,6 @@
 # PatternAD 下一轮严格实验计划
 
-> 状态：严格协议与执行工具已实现；核心 P0 单测、Weather dry-run、最小 GPU 训练 smoke、同 seed 精确重跑及 tiny Gaussian sigma 边界诊断已通过。正式多 seed 前先执行一次真实 Weather 四格 one-seed P0；P1 synthetic suite 与 hierarchical bootstrap 见对应脚本。
+> 状态：当前处于模型开发期，正式阶段化实验暂停。2026-07-11 的 Weather P0 已验证严格工具链和旧 learned-scale 版本的数值复现，但随后加入的 visible-context scale prior 改变了概率模型，因此旧 P0 不能作为当前模型效果证据。近期只运行单 seed、低 epoch 的机制实验来驱动结构修改；模型机制稳定后再冻结新 protocol，完整实验由研究者单独执行。
 
 本文档只承担实验协议与预注册职责：冻结因子、切分、seed、运行顺序、推进门槛和结果判读。研究动机、方法演进与论文叙事仍以 `../tsad_direction_A_pattern_aware_scoring.md` 为主，工程接口以 `README.md` 和 `scripts/patternad/README.md` 为准，三处不重复维护大段实现说明。P2 开始前应将审定版本固化为带版本号的 protocol，记录文件 hash；后续想法进入下一版，不回写已经看过结果的冻结协议。
 
@@ -62,7 +62,7 @@ D0: deterministic mean
 D1: heteroscedastic Gaussian
     输出：mu(x_visible, c), log_sigma(x_visible, c)
     训练目标：masked Gaussian NLL + 固定权重的 full mean-MSE
-    分数：0.5 * ((x-mu)^2 / sigma^2 + 2*log(sigma))
+    分数：-log(2 * GaussianSF(|x-mu| / sigma))，即条件双尾罕见度
 ```
 
 实现约束：
@@ -71,6 +71,7 @@ D1: heteroscedastic Gaussian
 - 对 `log_sigma` 使用数值边界和 variance floor；记录落到上下界的比例。
 - D0 与 D1 使用相同的 `mu` backbone、训练窗口、mask schedule、epoch budget 和 early-stop patience。
 - Gaussian 是机制识别版本。只有 D1 明确有效后，再把 Student-t 作为二阶段 robustness 优化；否则无法判断收益来自 conditional scale 还是 heavy tail。
+- Density NLL 只作为训练目标和显式消融保留。异方差 density 的 `log(sigma)` 归一化项会改变跨 regime 排序，不能直接等同于“在当前背景下有多罕见”。
 
 ### 3.3 Mask 因子 M
 
@@ -331,6 +332,7 @@ raw-control tie = matched pair 的注入 squared-deviation margin 应近似 0
 - 修改测试标签或附加测试 score 不改变 threshold；
 - 输出 score 与 label 等长且没有尾部复制造成的系统偏差；
 - 无 NaN/Inf，`sigma` 落边界比例低于 1%。
+- attempt 必须保存 `benchmark.log`，详细 artifact 与 `run_metadata.json` 中的 diagnostics 必须一致；至少包含 epoch train/validation loss、best epoch、fit/calibration/test 分项耗时和 scale min/max/mean/std/boundary fraction。
 
 任一项失败：停止正式实验并修协议。
 

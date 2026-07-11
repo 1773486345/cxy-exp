@@ -1,7 +1,8 @@
 import math
 
 import numpy as np
-from scipy.special import gammaln
+from scipy.special import gammaln, log_ndtr
+from scipy.stats import t as student_t_distribution
 
 
 class PatternAwareScorer:
@@ -237,6 +238,44 @@ class PatternAwareScorer:
             + 0.5 * (df + 1.0) * np.log1p(standardized ** 2 / df)
         )
 
+    def _distribution_tail_surprisal(
+        self, true_windows, pred_windows, distribution_params
+    ):
+        true = self._as_numpy(true_windows)
+        pred = self._as_numpy(pred_windows)
+        if true.shape != pred.shape:
+            raise ValueError(
+                "PatternAwareScorer true/pred shape mismatch: "
+                f"{true.shape} vs {pred.shape}"
+            )
+        if not distribution_params or "scale" not in distribution_params:
+            raise ValueError(
+                f"{self.distribution} tail scoring requires scale parameters."
+            )
+        scale = self._as_numpy(distribution_params["scale"])
+        if scale.shape != true.shape:
+            raise ValueError(
+                "PatternAwareScorer scale shape mismatch: "
+                f"{scale.shape} vs {true.shape}"
+            )
+        if np.any(scale <= 0) or not np.all(np.isfinite(scale)):
+            raise ValueError("Distribution scale must be finite and strictly positive.")
+        standardized = np.abs((true - pred) / np.maximum(scale, self.eps))
+        if self.distribution == "gaussian":
+            return -math.log(2.0) - log_ndtr(-standardized)
+
+        if "df" not in distribution_params:
+            raise ValueError("student_t tail scoring requires df parameters.")
+        df = self._as_numpy(distribution_params["df"])
+        if df.shape != true.shape:
+            raise ValueError(
+                "PatternAwareScorer df shape mismatch: "
+                f"{df.shape} vs {true.shape}"
+            )
+        if np.any(df <= 2.0) or not np.all(np.isfinite(df)):
+            raise ValueError("Student-t df must be finite and greater than 2.")
+        return -math.log(2.0) - student_t_distribution.logsf(standardized, df)
+
     def _aggregate_cell_scores(self, cell_scores, score_mask=None):
         if score_mask is None:
             return cell_scores.mean(axis=-1)
@@ -328,7 +367,7 @@ class PatternAwareScorer:
     ):
         mode = self.score_mode.lower()
         if mode == "auto":
-            mode = "nll" if self.distribution != "mse" else "raw"
+            mode = "tail_probability" if self.distribution != "mse" else "raw"
         if mode in {"nll", "distribution_nll", "conditional_nll"}:
             if self.distribution == "mse":
                 return self._raw_residual_score(
@@ -338,6 +377,21 @@ class PatternAwareScorer:
                 true_windows, pred_windows, distribution_params
             )
             return self._aggregate_cell_scores(cell_nll, score_mask=score_mask)
+
+        if mode in {
+            "tail",
+            "tail_probability",
+            "tail_surprisal",
+            "conditional_tail",
+        }:
+            if self.distribution == "mse":
+                return self._raw_residual_score(
+                    true_windows, pred_windows, score_mask=score_mask
+                )
+            cell_tail = self._distribution_tail_surprisal(
+                true_windows, pred_windows, distribution_params
+            )
+            return self._aggregate_cell_scores(cell_tail, score_mask=score_mask)
 
         if mode == "raw":
             return self._raw_residual_score(

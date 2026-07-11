@@ -13,6 +13,7 @@ class FieldNames:
     STRATEGY_ARGS = "strategy_args"
     ACTUAL_DATA = "actual_data"
     INFERENCE_DATA = "inference_data"
+    MODEL_DIAGNOSTICS = "model_diagnostics"
     LOG_INFO = "log_info"
     ANOMALY_RATIO = "typical_anomaly_ratio"
 

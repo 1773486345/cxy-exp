@@ -14,6 +14,7 @@ import shlex
 import subprocess
 import sys
 import tarfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -91,6 +92,18 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
             "The minimal factorial manifest must define exactly "
             f"{sorted(expected)}; got {sorted(variants)}."
         )
+
+    benchmark = manifest["benchmark"]
+    _require_keys(
+        benchmark,
+        {"max_scale_boundary_fraction", "require_model_diagnostics"},
+        "manifest.benchmark",
+    )
+    maximum_boundary_fraction = float(benchmark["max_scale_boundary_fraction"])
+    if not 0 <= maximum_boundary_fraction <= 1:
+        raise ValueError("max_scale_boundary_fraction must be between 0 and 1.")
+    if benchmark["require_model_diagnostics"] is not True:
+        raise ValueError("Strict PatternAD runs must require model diagnostics.")
 
     expected_factors = {
         "A00": ("C0", "D0", "M1"),
@@ -218,13 +231,23 @@ def _critical_source_hashes(benchmark_config: Path) -> Dict[str, str]:
         / "PatternAD"
         / "utils"
         / "pattern_scoring.py",
+        REPO_ROOT / "ts_benchmark" / "evaluation" / "evaluate_model.py",
+        REPO_ROOT / "ts_benchmark" / "evaluation" / "strategy" / "constants.py",
         REPO_ROOT / "ts_benchmark" / "evaluation" / "strategy" / "anomaly_detect.py",
+        REPO_ROOT / "ts_benchmark" / "pipeline.py",
+        REPO_ROOT / "ts_benchmark" / "recording.py",
+        REPO_ROOT / "ts_benchmark" / "report" / "report_csv.py",
         REPO_ROOT / "ts_benchmark" / "report" / "utils" / "leaderboard.py",
         benchmark_config,
         REPO_ROOT / "dataset" / "anomaly_detect" / "DETECT_META.csv",
     ]
     paths.extend(sorted((REPO_ROOT / "scripts" / "patternad").glob("*.py")))
     paths.extend(sorted((REPO_ROOT / "config" / "patternad").glob("*.json")))
+    paths.extend(
+        sorted(
+            (REPO_ROOT / "ts_benchmark" / "baselines" / "PatternAD").rglob("*.py")
+        )
+    )
     paths.extend(
         sorted((REPO_ROOT / "ts_benchmark" / "evaluation" / "metrics").glob("*.py"))
     )
@@ -267,6 +290,11 @@ def _completed_attempt(
                     "Completed attempt does not match the current frozen config: "
                     f"{attempt_dir}. Use a new --run-name."
                 )
+            if not isinstance(metadata.get("model_diagnostics"), dict):
+                raise RuntimeError(
+                    "Completed attempt lacks validated model diagnostics: "
+                    f"{attempt_dir}. Use a new --run-name."
+                )
             completed.append(attempt_dir)
     if len(completed) > 1:
         raise RuntimeError(
@@ -304,12 +332,195 @@ def _read_detail_rows(tar_path: Path) -> List[Dict[str, str]]:
     return rows
 
 
+def _finite_number(value: Any, name: str, minimum: Optional[float] = None) -> float:
+    if isinstance(value, bool):
+        raise RuntimeError(f"Model diagnostic {name} must be numeric, not boolean.")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(f"Model diagnostic {name} is not numeric.") from error
+    if not math.isfinite(numeric):
+        raise RuntimeError(f"Model diagnostic {name} is not finite.")
+    if minimum is not None and numeric < minimum:
+        raise RuntimeError(f"Model diagnostic {name} must be at least {minimum}.")
+    return numeric
+
+
+def _validate_model_diagnostics(
+    diagnostics: Mapping[str, Any],
+    hyperparameters: Mapping[str, Any],
+    maximum_boundary_fraction: float,
+) -> Dict[str, Any]:
+    if diagnostics.get("schema_version") != 1 or diagnostics.get("model") != "PatternAD":
+        raise RuntimeError("Detailed result has unsupported PatternAD diagnostics.")
+    distribution = str(hyperparameters.get("reconstruction_distribution", "mse"))
+    if diagnostics.get("distribution") != distribution:
+        raise RuntimeError("Model diagnostic distribution differs from the frozen cell.")
+    expected_score_mode = str(hyperparameters.get("pattern_score_mode", "raw"))
+    if diagnostics.get("score_mode") != expected_score_mode:
+        raise RuntimeError("Model diagnostic score mode differs from the frozen cell.")
+
+    training = diagnostics.get("training")
+    if not isinstance(training, dict):
+        raise RuntimeError("Model diagnostics are missing training details.")
+    for name in ("fit_seconds", "training_seconds", "scorer_fit_seconds"):
+        _finite_number(training.get(name), f"training.{name}", minimum=0.0)
+    epochs_completed = int(
+        _finite_number(
+            training.get("epochs_completed"), "training.epochs_completed", minimum=1
+        )
+    )
+    epochs_requested = int(
+        _finite_number(
+            training.get("epochs_requested"), "training.epochs_requested", minimum=1
+        )
+    )
+    if epochs_completed > epochs_requested:
+        raise RuntimeError("Model diagnostics report too many completed epochs.")
+    history = training.get("epoch_history")
+    if not isinstance(history, list) or len(history) != epochs_completed:
+        raise RuntimeError("Model diagnostic epoch history is incomplete.")
+    for index, epoch in enumerate(history, start=1):
+        if not isinstance(epoch, dict) or int(epoch.get("epoch", -1)) != index:
+            raise RuntimeError("Model diagnostic epoch history is out of order.")
+        for name in ("train_loss", "validation_loss", "learning_rate"):
+            _finite_number(epoch.get(name), f"epoch[{index}].{name}")
+        _finite_number(
+            epoch.get("elapsed_seconds"),
+            f"epoch[{index}].elapsed_seconds",
+            minimum=0.0,
+        )
+    best_epoch = int(
+        _finite_number(training.get("best_epoch"), "training.best_epoch", minimum=1)
+    )
+    if best_epoch > epochs_completed:
+        raise RuntimeError("Model diagnostic best_epoch exceeds completed epochs.")
+    _finite_number(training.get("best_validation_loss"), "training.best_validation_loss")
+    _finite_number(training.get("parameter_count"), "training.parameter_count", minimum=1)
+    _finite_number(
+        training.get("optimization_train_points"),
+        "training.optimization_train_points",
+        minimum=1,
+    )
+    _finite_number(
+        training.get("validation_points"), "training.validation_points", minimum=1
+    )
+    if not isinstance(training.get("stopped_early"), bool):
+        raise RuntimeError("Model diagnostic stopped_early must be boolean.")
+
+    score_calls = diagnostics.get("score_calls")
+    if not isinstance(score_calls, list) or len(score_calls) != 2:
+        raise RuntimeError(
+            "Strict diagnostics require exactly calibration and test score calls."
+        )
+    for call_index, (call, expected_phase) in enumerate(
+        zip(score_calls, ("calibration", "test"))
+    ):
+        if not isinstance(call, dict):
+            raise RuntimeError("Model score diagnostics must be objects.")
+        if int(call.get("call_index", -1)) != call_index:
+            raise RuntimeError("Model score diagnostic call_index is invalid.")
+        if call.get("phase") != expected_phase:
+            raise RuntimeError("Model score diagnostic phases are incomplete or out of order.")
+        for name in ("input_length", "batch_count", "window_count"):
+            _finite_number(call.get(name), f"{expected_phase}.{name}", minimum=1)
+        _finite_number(
+            call.get("elapsed_seconds"),
+            f"{expected_phase}.elapsed_seconds",
+            minimum=0.0,
+        )
+        score = call.get("score")
+        if not isinstance(score, dict):
+            raise RuntimeError(f"{expected_phase} score diagnostics are missing.")
+        score_count = int(_finite_number(score.get("count"), "score.count", minimum=1))
+        finite_count = int(
+            _finite_number(score.get("finite_count"), "score.finite_count", minimum=0)
+        )
+        nonfinite_count = int(
+            _finite_number(
+                score.get("nonfinite_count"), "score.nonfinite_count", minimum=0
+            )
+        )
+        if score_count != finite_count + nonfinite_count or nonfinite_count:
+            raise RuntimeError("Model score diagnostics contain non-finite values.")
+        if score_count != int(call["input_length"]):
+            raise RuntimeError("Model score count differs from the score input length.")
+        score_min = _finite_number(score.get("min"), f"{expected_phase}.score.min")
+        score_mean = _finite_number(score.get("mean"), f"{expected_phase}.score.mean")
+        score_max = _finite_number(score.get("max"), f"{expected_phase}.score.max")
+        if not score_min <= score_mean <= score_max:
+            raise RuntimeError("Model score min/mean/max are inconsistent.")
+
+        scale = call.get("scale")
+        if distribution == "mse":
+            if scale is not None:
+                raise RuntimeError("MSE diagnostics must mark scale as not applicable.")
+            continue
+        if not isinstance(scale, dict):
+            raise RuntimeError("Probabilistic diagnostics are missing scale statistics.")
+        scale_count = int(
+            _finite_number(scale.get("count"), "scale.count", minimum=1)
+        )
+        scale_finite = int(
+            _finite_number(scale.get("finite_count"), "scale.finite_count", minimum=0)
+        )
+        scale_nonfinite = int(
+            _finite_number(
+                scale.get("nonfinite_count"), "scale.nonfinite_count", minimum=0
+            )
+        )
+        if scale_count != scale_finite + scale_nonfinite or scale_nonfinite:
+            raise RuntimeError("Predicted scale contains non-finite values.")
+        scale_min = _finite_number(scale.get("min"), "scale.min", minimum=0.0)
+        scale_mean = _finite_number(scale.get("mean"), "scale.mean", minimum=0.0)
+        scale_max = _finite_number(scale.get("max"), "scale.max", minimum=0.0)
+        _finite_number(scale.get("std"), "scale.std", minimum=0.0)
+        lower_bound = _finite_number(
+            scale.get("lower_bound"), "scale.lower_bound", minimum=0.0
+        )
+        upper_bound = _finite_number(
+            scale.get("upper_bound"), "scale.upper_bound", minimum=lower_bound
+        )
+        if not scale_min <= scale_mean <= scale_max:
+            raise RuntimeError("Predicted scale min/mean/max are inconsistent.")
+        if scale_min < lower_bound or scale_max > upper_bound * (1.0 + 1e-12):
+            raise RuntimeError("Predicted scale falls outside its configured bounds.")
+        for side in ("lower", "upper"):
+            count = int(
+                _finite_number(
+                    scale.get(f"{side}_bound_count"),
+                    f"scale.{side}_bound_count",
+                    minimum=0,
+                )
+            )
+            fraction = _finite_number(
+                scale.get(f"{side}_bound_fraction"),
+                f"scale.{side}_bound_fraction",
+                minimum=0.0,
+            )
+            if count > scale_count or fraction > 1:
+                raise RuntimeError("Predicted scale boundary diagnostics are invalid.")
+            if not math.isclose(fraction, count / scale_count, abs_tol=1e-12):
+                raise RuntimeError("Predicted scale boundary count/fraction disagree.")
+            if (
+                expected_phase == "calibration"
+                and fraction >= maximum_boundary_fraction
+            ):
+                raise RuntimeError(
+                    f"Calibration scale {side}-boundary fraction {fraction:.6f} "
+                    f"exceeds the frozen limit {maximum_boundary_fraction:.6f}. "
+                    "Test boundary fractions are reported but never tune this gate."
+                )
+    return dict(diagnostics)
+
+
 def _validate_artifact(
     attempt_dir: Path,
     benchmark: Mapping[str, Any],
     score_metrics: Sequence[str],
     seed: int,
-) -> Path:
+    hyperparameters: Mapping[str, Any],
+) -> Tuple[Path, Dict[str, Any]]:
     tar_files = sorted(attempt_dir.glob("*.csv.tar.gz"))
     if len(tar_files) != 1:
         raise RuntimeError(
@@ -325,6 +536,7 @@ def _validate_artifact(
         )
     expected_ratios = {float(value) for value in benchmark["anomaly_ratios"]}
     observed_ratios = set()
+    diagnostic_payloads = set()
     for row in rows:
         try:
             strategy_args = json.loads(row.get("strategy_args", "{}"))
@@ -339,6 +551,10 @@ def _validate_artifact(
         if int(strategy_args.get("seed", -1)) != int(seed):
             raise RuntimeError("Detailed result used the wrong seed.")
         observed_ratios.add(float(row.get("typical_anomaly_ratio", "nan")))
+        diagnostic_payload = row.get("model_diagnostics", "").strip()
+        if not diagnostic_payload:
+            raise RuntimeError("Detailed result is missing model diagnostics.")
+        diagnostic_payloads.add(diagnostic_payload)
         for metric in score_metrics:
             try:
                 value = float(row.get(metric, "nan"))
@@ -354,7 +570,20 @@ def _validate_artifact(
         raise RuntimeError(
             f"Detailed result anomaly ratios differ: {observed_ratios} != {expected_ratios}."
         )
-    return tar_files[0]
+    if len(diagnostic_payloads) != 1:
+        raise RuntimeError("Detailed threshold rows disagree on model diagnostics.")
+    try:
+        diagnostics = json.loads(next(iter(diagnostic_payloads)))
+    except (json.JSONDecodeError, StopIteration) as error:
+        raise RuntimeError("Detailed result has invalid model diagnostics JSON.") from error
+    if not isinstance(diagnostics, dict):
+        raise RuntimeError("Detailed model diagnostics must be a JSON object.")
+    diagnostics = _validate_model_diagnostics(
+        diagnostics,
+        hyperparameters,
+        float(benchmark["max_scale_boundary_fraction"]),
+    )
+    return tar_files[0], diagnostics
 
 
 def _build_command(
@@ -709,31 +938,44 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "command": command,
         }
         metadata_path = attempt_dir / "run_metadata.json"
+        benchmark_log_path = attempt_dir / "benchmark.log"
+        metadata["benchmark_log"] = benchmark_log_path.name
         _write_json_atomic(metadata_path, metadata)
+        run_started_at = time.perf_counter()
         try:
-            result = subprocess.run(
-                command,
-                cwd=REPO_ROOT,
-                env=environment,
-                check=False,
-                timeout=float(manifest["benchmark"]["timeout_seconds"]),
-            )
+            with benchmark_log_path.open("w", encoding="utf-8") as benchmark_log:
+                result = subprocess.run(
+                    command,
+                    cwd=REPO_ROOT,
+                    env=environment,
+                    check=False,
+                    timeout=float(manifest["benchmark"]["timeout_seconds"]),
+                    stdout=benchmark_log,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
             if result.returncode != 0:
                 raise RuntimeError(
-                    f"run_benchmark.py exited with status {result.returncode}."
+                    f"run_benchmark.py exited with status {result.returncode}; "
+                    f"inspect {benchmark_log_path}."
                 )
-            artifact = _validate_artifact(
+            artifact, model_diagnostics = _validate_artifact(
                 attempt_dir,
                 manifest["benchmark"],
                 manifest["score_metrics"],
                 seed,
+                hyperparameters,
             )
             metadata.update(
                 {
                     "status": "completed",
                     "completed_at": _utc_now(),
                     "return_code": result.returncode,
+                    "runner_wall_seconds": float(
+                        time.perf_counter() - run_started_at
+                    ),
                     "detail_artifact": artifact.name,
+                    "model_diagnostics": model_diagnostics,
                 }
             )
             _write_json_atomic(metadata_path, metadata)
@@ -744,6 +986,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     if isinstance(error, KeyboardInterrupt)
                     else "failed",
                     "completed_at": _utc_now(),
+                    "runner_wall_seconds": float(
+                        time.perf_counter() - run_started_at
+                    ),
                     "error": f"{type(error).__name__}: {error}",
                 }
             )

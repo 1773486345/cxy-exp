@@ -15,6 +15,7 @@ from ts_benchmark.report.utils.leaderboard import get_leaderboard
 ARTIFACT_COLUMNS = [
     FieldNames.ACTUAL_DATA,
     FieldNames.INFERENCE_DATA,
+    FieldNames.MODEL_DIAGNOSTICS,
     FieldNames.LOG_INFO,
 ]
 

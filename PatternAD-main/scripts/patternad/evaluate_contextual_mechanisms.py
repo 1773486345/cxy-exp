@@ -168,8 +168,16 @@ def run_patternad_variant(
     calibration_score = np.asarray(
         model.detect_multi_score(calibration_data, calibration_text)[0], dtype=np.float64
     ).reshape(-1)
+    calibration_components = model.get_last_score_components()
     if calibration_score.size != calibration_length:
         raise RuntimeError("PatternAD returned a misaligned calibration score.")
+    if not calibration_components:
+        raise RuntimeError("PatternAD did not return score decomposition components.")
+    for name, values in calibration_components.items():
+        if np.asarray(values).reshape(-1).size != calibration_length:
+            raise RuntimeError(
+                f"PatternAD calibration component {name!r} is misaligned."
+            )
 
     score_dir.mkdir(parents=True, exist_ok=True)
     filler = float(np.median(calibration_score))
@@ -187,12 +195,37 @@ def run_patternad_variant(
         test_score = np.asarray(
             model.detect_multi_score(test_data, test_text)[0], dtype=np.float64
         ).reshape(-1)
+        test_components = model.get_last_score_components()
         if test_score.size != test_length:
             raise RuntimeError(f"PatternAD returned a misaligned score for {mechanism}.")
         aligned = np.full(train_length + test_length, filler, dtype=np.float64)
         aligned[calibration_start:train_length] = calibration_score
         aligned[train_length:] = test_score
-        np.savez_compressed(score_dir / f"{mechanism}.npz", score=aligned)
+        aligned_arrays = {"score": aligned}
+        if set(test_components) != set(calibration_components):
+            raise RuntimeError("PatternAD score component keys changed between calls.")
+        for name in sorted(calibration_components):
+            calibration_values = np.asarray(
+                calibration_components[name], dtype=np.float64
+            ).reshape(-1)
+            test_values = np.asarray(test_components[name], dtype=np.float64).reshape(-1)
+            if test_values.size != test_length:
+                raise RuntimeError(
+                    f"PatternAD test component {name!r} is misaligned."
+                )
+            component_aligned = np.full(
+                train_length + test_length,
+                float(np.median(calibration_values)),
+                dtype=np.float64,
+            )
+            component_aligned[calibration_start:train_length] = calibration_values
+            component_aligned[train_length:] = test_values
+            if not np.isfinite(component_aligned).all():
+                raise RuntimeError(
+                    f"PatternAD score component {name!r} contains non-finite values."
+                )
+            aligned_arrays[name] = component_aligned
+        np.savez_compressed(score_dir / f"{mechanism}.npz", **aligned_arrays)
     run_metadata = {
         "schema_version": 1,
         "variant": variant,
@@ -205,6 +238,7 @@ def run_patternad_variant(
         "test_range": [train_length, train_length + test_length],
         "hyperparameters": hyperparameters,
         "score_key": "score",
+        "component_keys": sorted(calibration_components),
     }
     with (score_dir / "score_run_metadata.json").open("w", encoding="utf-8") as handle:
         json.dump(run_metadata, handle, indent=2, sort_keys=True, ensure_ascii=True)
@@ -489,11 +523,46 @@ def evaluate_scores(
     return summary, mechanism_rows, ordering_rows
 
 
+def component_ordering_rows(
+    config: Mapping[str, Any],
+    artifact_dir: Path,
+    score_dir: Optional[Path],
+    primary_score_key: str,
+) -> List[Dict[str, Any]]:
+    if score_dir is None:
+        return []
+    total_length = int(config["train_length"]) + int(config["test_length"])
+    rows: List[Dict[str, Any]] = []
+    expected_keys: Optional[set] = None
+    for mechanism in MECHANISM_ORDER:
+        metadata = _load_json(artifact_dir / f"{mechanism}.metadata.json")
+        if not metadata.get("orderings"):
+            continue
+        score_path = score_dir / f"{mechanism}.npz"
+        with np.load(score_path, allow_pickle=False) as payload:
+            component_keys = set(payload.files) - {primary_score_key}
+            if expected_keys is None:
+                expected_keys = component_keys
+            elif component_keys != expected_keys:
+                raise ValueError("Score component keys differ across mechanisms.")
+            for component in sorted(component_keys):
+                values = np.asarray(payload[component], dtype=np.float64).reshape(-1)
+                if values.size != total_length or not np.isfinite(values).all():
+                    raise ValueError(
+                        f"Invalid component {component!r} in {score_path}."
+                    )
+                for row in _ordering_rows(mechanism, values, metadata):
+                    row["component"] = component
+                    rows.append(row)
+    return rows
+
+
 def write_evaluation(
     output_dir: Path,
     summary: Mapping[str, Any],
     mechanism_rows: Sequence[Mapping[str, Any]],
     ordering_rows: Sequence[Mapping[str, Any]],
+    component_rows: Sequence[Mapping[str, Any]] = (),
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_path = output_dir / "contextual_evaluation.json"
@@ -506,6 +575,11 @@ def write_evaluation(
     pd.DataFrame(ordering_rows).to_csv(
         output_dir / "matched_orderings.csv", index=False
     )
+    component_path = output_dir / "score_component_orderings.csv"
+    if component_rows:
+        pd.DataFrame(component_rows).to_csv(component_path, index=False)
+    elif component_path.exists():
+        component_path.unlink()
     return summary_path
 
 
@@ -632,7 +706,16 @@ def main() -> int:
         score_key,
         method_name,
     )
-    path = write_evaluation(output_dir, summary, mechanism_rows, ordering_rows)
+    component_rows = component_ordering_rows(
+        config, artifact_dir, score_dir, score_key
+    )
+    path = write_evaluation(
+        output_dir,
+        summary,
+        mechanism_rows,
+        ordering_rows,
+        component_rows,
+    )
     print(f"Wrote contextual evaluation: {path}")
     print(
         "macro_AP={:.6f} ordering_rate={:.3f} max_regime_FPR_gap={:.6f}".format(

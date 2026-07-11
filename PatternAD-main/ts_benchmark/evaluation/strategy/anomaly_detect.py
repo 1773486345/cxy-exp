@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import logging
 import traceback
 from typing import List, Any
@@ -64,6 +65,7 @@ class AnomalyDetect(Strategy):
         self.data_lens = None
         self.calibration_data = None
         self.calibration_text = None
+        self.model_diagnostics = None
 
         protocol = self._evaluation_protocol()
         if protocol not in SUPPORTED_EVALUATION_PROTOCOLS:
@@ -106,6 +108,42 @@ class AnomalyDetect(Strategy):
                 "adapter or select the explicit legacy protocol for reproduction."
             )
         return method
+
+    def _capture_model_diagnostics(self, score_phases=None):
+        diagnostic_method = getattr(self.model, "get_diagnostics", None)
+        if not callable(diagnostic_method):
+            self.model_diagnostics = None
+            return
+        diagnostics = diagnostic_method()
+        if not isinstance(diagnostics, dict):
+            raise TypeError("Model get_diagnostics() must return a dictionary.")
+        if score_phases is not None:
+            score_calls = diagnostics.get("score_calls")
+            if not isinstance(score_calls, list) or len(score_calls) < len(score_phases):
+                raise ValueError(
+                    "Model diagnostics do not contain all calibration/test score calls."
+                )
+            for score_call, phase in zip(
+                score_calls[-len(score_phases) :], score_phases
+            ):
+                if not isinstance(score_call, dict):
+                    raise TypeError("Each model score diagnostic must be a dictionary.")
+                score_call["phase"] = phase
+        # Reject NaN/Inf and non-serializable diagnostics before writing a result row.
+        json.dumps(diagnostics, allow_nan=False, sort_keys=True)
+        self.model_diagnostics = diagnostics
+
+    def _model_diagnostics_json(self) -> str:
+        if self.model_diagnostics is None:
+            self._capture_model_diagnostics()
+        if self.model_diagnostics is None:
+            return ""
+        return json.dumps(
+            self.model_diagnostics,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
 
     @staticmethod
     def _split_multi_text(
@@ -298,9 +336,12 @@ class AnomalyDetect(Strategy):
         if self._uses_legacy_test_contaminated_threshold():
             return self.model.detect_label(test_data)
         detect_score = self._require_model_method("detect_score")
+        calibration_output = detect_score(self.calibration_data)
+        test_output = detect_score(test_data)
+        self._capture_model_diagnostics(("calibration", "test"))
         return self._threshold_from_calibration_scores(
-            detect_score(self.calibration_data),
-            detect_score(test_data),
+            calibration_output,
+            test_output,
         )
 
     def _detect_train_calibrated_multi_label(
@@ -309,9 +350,14 @@ class AnomalyDetect(Strategy):
         if self._uses_legacy_test_contaminated_threshold():
             return self.model.detect_multi_label(test_data, test_text)
         detect_multi_score = self._require_model_method("detect_multi_score")
+        calibration_output = detect_multi_score(
+            self.calibration_data, self.calibration_text
+        )
+        test_output = detect_multi_score(test_data, test_text)
+        self._capture_model_diagnostics(("calibration", "test"))
         return self._threshold_from_calibration_scores(
-            detect_multi_score(self.calibration_data, self.calibration_text),
-            detect_multi_score(test_data, test_text),
+            calibration_output,
+            test_output,
         )
 
     def _detect_train_calibrated_mmd_label(
@@ -320,9 +366,14 @@ class AnomalyDetect(Strategy):
         if self._uses_legacy_test_contaminated_threshold():
             return self.model.detect_timeMMD_label(test_data, test_text)
         detect_mmd_score = self._require_model_method("detect_timeMMD_score")
+        calibration_output = detect_mmd_score(
+            self.calibration_data, self.calibration_text
+        )
+        test_output = detect_mmd_score(test_data, test_text)
+        self._capture_model_diagnostics(("calibration", "test"))
         return self._threshold_from_calibration_scores(
-            detect_mmd_score(self.calibration_data, self.calibration_text),
-            detect_mmd_score(test_data, test_text),
+            calibration_output,
+            test_output,
         )
 
     def _align_result_vector(
@@ -363,6 +414,7 @@ class AnomalyDetect(Strategy):
             test_label.to_numpy(), "test label"
         ).astype(float)
         score_metric_cache = {}
+        model_diagnostics = self._model_diagnostics_json()
         results = []
         for ratio, predict_label in predict_labels.items():
             predict_label = self._align_result_vector(
@@ -384,7 +436,14 @@ class AnomalyDetect(Strategy):
             )
             if self._verbose_result():
                 print(metric_results)
-            metric_results += [series_name, ratio, "", "", log_info]
+            metric_results += [
+                series_name,
+                ratio,
+                "",
+                "",
+                model_diagnostics,
+                log_info,
+            ]
             results.append(metric_results)
         return results
 
@@ -436,6 +495,7 @@ class AnomalyDetect(Strategy):
         model = model_factory()
         try:
             self.model = model
+            self.model_diagnostics = None
             train_data, train_label, test_data, test_label = self.split_data(
                 series_name
             )
@@ -473,6 +533,7 @@ class AnomalyDetect(Strategy):
         model = model_factory()
         try:
             self.model = model
+            self.model_diagnostics = None
             (
                 train_data,
                 train_text,
@@ -517,6 +578,7 @@ class AnomalyDetect(Strategy):
         model = model_factory()
         try:
             self.model = model
+            self.model_diagnostics = None
             (
                 train_data,
                 train_text,
@@ -570,6 +632,7 @@ class AnomalyDetect(Strategy):
             FieldNames.ANOMALY_RATIO,
             FieldNames.ACTUAL_DATA,
             FieldNames.INFERENCE_DATA,
+            FieldNames.MODEL_DIAGNOSTICS,
             FieldNames.LOG_INFO,
         ]
 
