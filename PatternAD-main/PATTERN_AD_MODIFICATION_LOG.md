@@ -1,26 +1,26 @@
 # PatternAD Modification Log
 
-Date: 2026-07-05
+Date: 2026-07-11
 
 ## Current Goal
 
 Build a multivariate time-series anomaly detector around the following motivation:
 
 ```text
-The same reconstruction residual can have different anomaly meaning under different temporal and structural contexts.
+The same reconstruction residual can have different anomaly meaning under different temporal and structural contexts; the model should estimate conditional residual uncertainty, not only a conditional mean.
 ```
 
 The model is no longer treated as an optional switch on top of the previous LLM-prompt baseline. The outer benchmark class is now `PatternAD`, and its scoring path is multivariate by design.
 
 ## Main Design
 
-`PatternAD` now uses a context-conditioned denoising reconstruction backbone. Each time step is encoded as a full multivariate state, and local scale, trend, high-frequency activity, and mask structure are injected into the reconstruction backbone through FiLM-style conditioning before the Transformer encoder. Training masks both individual variable points and whole variable traces inside a window, forcing the model to recover missing values from temporal context and cross-variable evidence.
+`PatternAD` now uses a context-conditioned denoising reconstruction backbone. Each time step is encoded as a full multivariate state, and mask-aware local scale, trend, high-frequency activity, and mask structure are injected into the reconstruction backbone through FiLM-style conditioning before the Transformer encoder. Training masks both individual variable points and whole variable traces inside a window, forcing the model to recover missing values from temporal context and cross-variable evidence.
 
-The default inference path also uses conditional reconstruction: a deterministic subset of variables is hidden at each time step, and the anomaly score is the raw reconstruction residual on those hidden positions only. This makes the local dynamic context contribute to reconstruction quality itself, rather than multiplying the anomaly score after reconstruction.
+Inference now uses complementary conditional reconstruction. Deterministic mask passes partition the full time-variable grid, so every target is hidden and scored exactly once. The compatibility default remains MSE/raw residual. Gaussian and Student-t conditional distributions are opt-in and use NLL scoring; the strict first-stage factorial experiment uses Gaussian before considering Student-t robustness.
 
 The previous post-hoc aggregate scorer and reliability-weighted scorer remain in `pattern_scoring.py` only for explicit ablation. They are not the current default path because the raw-control experiments showed that handcrafted score aggregation/reweighting is weaker than improving the reconstruction process directly.
 
-This makes the implementation match direction A: not anomaly type classification, not relation-graph prototype learning, and not text-topology alignment. The key object is the residual's meaning under local dynamics, implemented by making reconstruction conditional on that local dynamic state.
+This makes the implementation match direction A: not anomaly type classification, not relation-graph prototype learning, and not text-topology alignment. The key object is the residual's meaning under local dynamics, implemented as a conditional residual distribution rather than a collection of handcrafted post-hoc weights.
 
 ## Files Changed
 
@@ -58,7 +58,7 @@ This makes the implementation match direction A: not anomaly type classification
 
 - `scripts/multivariate_detection/detect_label/*_script/PatternAD_raw.sh`
   - Added the no-context raw-control experiment for the current model.
-  - Uses the same `PatternAD.PatternAD` wrapper but disables context conditioning and conditional scoring.
+  - Uses the same `PatternAD.PatternAD` wrapper, replaces dynamic visible context with the learned constant control, and disables conditional scoring.
   - Sets `pattern_score_components=["raw"]`, `pattern_score_aggregation="mean"`, `pattern_score_use_calibration=false`, and `pattern_score_mode="raw"`.
   - Saves results to `label/<dataset>_PatternAD_raw`.
 
@@ -76,7 +76,7 @@ This makes the implementation match direction A: not anomaly type classification
 
 ## Scoring Components
 
-The current default score is `raw`: mean squared reconstruction residual over conditionally hidden variables. The following components are retained only as legacy ablation utilities in `pattern_scoring.py`:
+The compatibility default score is `raw`: mean squared reconstruction residual from complementary conditional predictions. Gaussian and Student-t use distribution NLL when `pattern_score_mode="nll"`; selecting a non-MSE distribution without an explicit score mode switches to NLL automatically. The following components are retained only as legacy ablation utilities in `pattern_scoring.py`:
 
 - `scale`: residual normalized by local rolling variance.
 - `trend`: residual between rolling trend estimates of the input and reconstruction.
@@ -86,7 +86,7 @@ The current default score is `raw`: mean squared reconstruction residual over co
 
 These components should not be treated as the main contribution unless an explicit ablation enables `pattern_score_mode="aggregate"` or `pattern_score_mode="reliability_weighted"`.
 
-## Calibration
+## Legacy Component Calibration
 
 The scorer fits on training-normal reconstruction outputs after model training:
 
@@ -96,7 +96,7 @@ train true windows + train reconstructed windows
 -> per-component median/MAD statistics
 ```
 
-Test windows use these training statistics only. The number of calibration windows is capped by `pattern_score_max_fit_windows` to prevent the scorer from becoming heavy.
+Test windows use these training statistics only. The number of calibration windows is capped by `pattern_score_max_fit_windows` to prevent the scorer from becoming heavy. This component calibration is unrelated to the strict label-threshold calibration protocol added on 2026-07-11.
 
 ## Config
 
@@ -113,6 +113,13 @@ The current default model-related hyperparameters are:
   "context_film_strength": 0.2,
   "use_conditional_scoring": true,
   "score_mask_ratio": 0.35,
+  "reconstruction_distribution": "mse",
+  "distribution_min_scale": 0.001,
+  "distribution_max_scale": 100.0,
+  "distribution_init_scale": 1.0,
+  "student_t_df": 4.0,
+  "student_t_learn_df": true,
+  "student_t_max_df": 100.0,
   "pattern_score_components": ["raw"],
   "pattern_score_aggregation": "mean",
   "pattern_score_use_calibration": false,
@@ -135,20 +142,24 @@ Legacy scorer hyperparameters such as `pattern_score_local_window`, `pattern_sco
 
 ## Suggested Experiments
 
-Primary comparison after this revision:
+Primary comparison after the current revision:
 
 ```text
-PatternAD: context-conditioned reconstruction + conditional masked raw residual
-PatternAD_raw: no context conditioning + no conditional scoring + raw residual
+A00: context off + MSE + complementary conditional masks
+A10: context on  + MSE + complementary conditional masks
+A01: context off + Gaussian NLL + complementary conditional masks
+A11: context on  + Gaussian NLL + complementary conditional masks
+B00/B11: unmasked diagnostics only
 ```
 
 Recommended first server order:
 
 ```text
-Weather PatternAD / PatternAD_raw
-MetroPT3 PatternAD / PatternAD_raw
-HAI21 dev PatternAD / PatternAD_raw
-SMD dev PatternAD / PatternAD_raw
+P0 tests and Weather one-seed A00/A10/A01/A11 smoke
+P1 synthetic mechanism suite through the dedicated generator/evaluator; benchmark registration is optional
+P2 motivation group, three paired seeds
+P3 robustness group after candidate selection is frozen
+P4 locked confirmation group once, with five paired seeds
 ```
 
 Recommended metrics:
@@ -177,7 +188,7 @@ The local copy was used for result analysis and code modification. The updated l
 
 ### Raw-Control Result
 
-The completed experiment compared the default PatternAD scorer against the raw-control script on seven multivariate datasets. Metrics were read from the detailed `*.tar.gz` result CSV files. For label metrics, the best value over the 42 anomaly-ratio rows was used. For score-ranking metrics, the reported values are the per-dataset score metrics in the detailed CSV.
+The completed experiment compared the default PatternAD scorer against the raw-control script on seven multivariate datasets. Metrics were read from the detailed `*.tar.gz` result CSV files. For label metrics, the best value over the 42 anomaly-ratio rows was used. For score-ranking metrics, the reported values are the per-dataset score metrics in the detailed CSV. The best-over-42 label metrics are test-label oracle values and are retained here only as historical development evidence; they must not be used as unbiased results.
 
 ```text
               F1      Adjust-F1  Aff-F    AUC-ROC  AUC-PR  R-AUC-ROC  R-AUC-PR  VUS-ROC  VUS-PR
@@ -341,7 +352,7 @@ file       T        D   train    anom%   seg_n  seg_med  amp_auc_mean  amp_auc_m
 MetroPT3   1516948  15  214850   2.30    4      5511     0.945         0.881        17.45
 ```
 
-Interpretation: MetroPT-3 is computationally attractive and realistic, but not ideal as the core PatternAD motivation dataset because `amp_auc_mean=0.945` indicates that raw amplitude deviation is already highly discriminative. Use it for smoke tests, runtime checks, and lightweight multimodal-context experiments. Use HAI21 as the stronger motivation dataset.
+Interpretation: MetroPT-3 is computationally attractive and realistic, but not ideal as the core PatternAD motivation dataset because `amp_auc_mean=0.945` indicates that raw amplitude deviation is already highly discriminative. Use it for smoke tests, runtime checks, and lightweight multivariate-context experiments. Use HAI21 as the stronger motivation candidate.
 
 Next server commands after syncing:
 
@@ -514,9 +525,9 @@ PatternAD_raw = no context conditioning + no conditional scoring + raw residual
 Validation status in the local workspace:
 
 ```text
-Syntax check passed for PatternAD.py and pattern_scoring.py by Python compile().
-A real forward smoke test was not run locally because this downloaded workspace does not have torch installed.
-Run the smoke test on the server environment after syncing with Git.
+The patternad_env Conda environment is available in the current workspace.
+Focused model/protocol unit tests pass under that environment.
+One-epoch MSE and Gaussian fit-to-score smoke tests return finite, length-aligned scores.
 ```
 
 
@@ -568,7 +579,7 @@ The benchmark used real MetroPT3 labels and deterministic random scores to isola
 Experiment interpretation:
 
 ```text
-- Existing completed PatternAD reports remain semantically valid; the VUS formula was not changed.
+- Existing completed PatternAD VUS values remain semantically valid within their historical architecture and evaluation protocol; the VUS formula was not changed. They are not directly comparable with the 2026-07-11 factorial revision described below.
 - New PatternAD and baseline runs must use the synchronized optimized evaluator for practical runtime.
 - Do not compare runs that were interrupted before report generation; rerun those incomplete model-series pairs.
 - Server paths and Python environments remain deployment-specific. The code uses repository-relative imports and the currently selected Python environment.
@@ -581,3 +592,146 @@ cd <server-workspace>/PatternAD-main
 conda activate <server-environment>
 sh ./scripts/multivariate_detection/detect_label/MetroPT3_script/PatternAD.sh
 ```
+
+## 2026-07-11 Conditional Distribution And Strict Protocol Revision
+
+This revision closes two gaps in the previous implementation: raw MSE could not distinguish equal residuals under different normal uncertainty, and the historical label/report path used test-contaminated thresholds and best-over-ratio aggregation.
+
+### Leakage-Free Conditional Context
+
+The documentation previously showed `describe_local_dynamics(x)` before masking. That pseudocode was misleading and has been corrected. The implemented order is:
+
+```text
+construct mask
+replace hidden targets
+compute local context with valid = not mask
+predict hidden target distribution
+score only the targets hidden in that pass
+```
+
+`JointMultivariateReconstructor._context_features` now uses masked rolling sums and valid counts. Local mean/std exclude hidden targets, trend differences are valid only when both endpoints are visible, and masked high-frequency entries are zero. Context is computed from observed inputs rather than from the learned `mask_token`.
+
+### Complementary Mask Coverage
+
+The old inference implementation scored one deterministic subset. `_complementary_score_masks` now partitions every `(time, variable)` cell across K passes, and `_predict_for_scoring` assembles the hidden predictions into one complete tensor. Coverage is checked at runtime and must equal one at every cell.
+
+For the strict manifest, `score_mask_ratio=1/3`, so the A cells use three passes. For very low-dimensional inputs, the number of groups is capped by `D`; for example, `D=2` uses two passes and still covers each cell exactly once.
+
+### Conditional Distribution Heads
+
+Supported values of `reconstruction_distribution` are:
+
+```text
+mse
+gaussian
+student_t
+```
+
+All variants use the same `3 * D` final output head. MSE consumes only the mean output, while Gaussian consumes mean/scale and Student-t consumes mean/scale/df. Positive scale uses softplus plus a configurable floor and maximum; Student-t df is constrained above 2 and can be learned or fixed.
+
+The training losses are:
+
+```text
+MSE:
+masked MSE(mean, target) + lambda * full-window MSE(mean, target)
+
+Gaussian / Student-t:
+masked NLL(mean, scale[, df], target) + lambda * full-window MSE(mean, target)
+```
+
+The auxiliary term is deliberately full mean-MSE, not full NLL. Visible positions can be copied; applying NLL there would let the decoder reduce loss by collapsing its scale without learning hidden-target uncertainty. NLL scores are aggregated only from predictions made while their target was hidden.
+
+The repository default remains `reconstruction_distribution="mse"` and raw scoring for compatibility. Gaussian/Student-t are opt-in; a non-MSE distribution selects NLL automatically unless `pattern_score_mode` is explicitly supplied. The first strict factorial uses Gaussian as D1. Student-t is implemented but deferred until conditional-scale modeling has evidence.
+
+### Fair Architecture Controls And Compatibility
+
+The unified `3 * D` output head keeps MSE/Gaussian/Student-t parameter counts equal. C0 sends a learned dataset-level constant through the same `context_proj`, FiLM, and `pre_encoder_norm` route used by C1; C1 replaces that constant with target-blind visible context.
+
+These changes create a hard comparison boundary:
+
+```text
+old output head: D
+current output head: 3 * D
+old context-off path: skipped context projection, FiLM, and pre_encoder_norm
+current C0 path: learned constant through context projection, FiLM, and pre_encoder_norm
+```
+
+Old checkpoints are generally not load-compatible because the output-head shapes differ. Old PatternAD/PatternAD_raw results also cannot be placed directly beside the new A00/A10/A01/A11 results: the context-off computation graph changed, and the strict threshold/seed protocol changed. Rerun all compared cells with the same current code and manifest.
+
+### Strict Temporal Calibration
+
+The new `train_calibration` evaluation protocol is explicit in `config/unfixed_detect_label_multi_config.json` and the factorial manifest. For label evaluation:
+
+```text
+official train prefix -> model fit input
+gap                  -> default seq_len - 1 points
+official train tail  -> independent calibration input
+official test        -> evaluation only
+```
+
+The default calibration fraction is 20%. The threshold uses a finite-sample calibration-only empirical/conformal-style order statistic; overlapping time-series scores do not provide the exchangeability required for a strict conformal coverage guarantee:
+
+```text
+alpha = anomaly_ratio / 100
+k = ceil((n_cal + 1) * (1 - alpha))
+threshold = kth calibration score
+```
+
+If `k > n_cal`, the threshold is `+inf`. Test scores and labels do not enter threshold selection. The factorial manifest predeclares one 1% ratio. The non-legacy leaderboard keeps ratio rows separate instead of applying `aggfunc=max`, and the strict summarizer never optimizes across test ratios.
+
+Strict calibration now also validates that every official-train label is finite and zero; contaminated train splits fail instead of being silently treated as normal. All 39 entities in the frozen smoke, motivation, robustness, and confirmation groups pass this label audit. The runner's attempt-number parser avoids Python 3.9-only string APIs, so `--resume` remains compatible with the documented Python 3.8 environment.
+
+`legacy_test_contaminated` remains an explicit compatibility protocol. It can still call model label APIs that combine train/test scores, and the legacy leaderboard can still take the test-metric maximum. It must be labeled test-label oracle and is not an acceptable main protocol.
+
+### Seed Fix
+
+`AnomalyDetect.execute`, `multi_execute`, and `mmd_execute` now pass the current scalar or per-series strategy seed to `fix_random_seed` before constructing the model. Previously, the no-argument call silently reused the default seed 2021, so nominal multi-seed runs could initialize identically. PatternAD now uses dedicated seeded generators for training-mask draws and DataLoader shuffle; the strict matrix fixes dropout to zero so C0/C1 do not desynchronize paired random schedules.
+
+### Reproducible Experiment Tools
+
+The current strict guide and executable files are:
+
+```text
+EXPERIMENT_PLAN_DRAFT.md
+config/patternad/factorial_ablation.json
+config/patternad/dataset_groups.json
+scripts/patternad/run_factorial_ablation.py
+scripts/patternad/summarize_factorial.py
+scripts/patternad/bootstrap_factorial.py
+scripts/patternad/generate_contextual_synthetic.py
+scripts/patternad/evaluate_contextual_mechanisms.py
+scripts/patternad/README.md
+config/patternad/synthetic_suite.json
+```
+
+The experiment plan now uses the implemented objective consistently: masked Gaussian NLL plus full mean-MSE, not full NLL.
+
+The runner creates a frozen `run_plan.json` containing the complete identity grid plus critical source, benchmark-config, data/text, manifest, and dataset-config hashes. Resume refuses config drift. Locked confirmation additionally requires a clean worktree and the full predeclared dataset/variant/seed grid. The summarizer rejects missing, failed, unexpected, or hash-mismatched cells instead of silently aggregating only successful runs. Single-row static text descriptions are reused across fit/calibration/test without materializing millions of duplicate strings.
+
+The synthetic suite now provides 20 predeclared switching-VAR generator seeds, with separate development and untouched confirmation groups. Its same-deviation and gradual/abrupt pairs use equal injected deviations in their compared windows; dependency breaks preserve each affected channel's event marginal while maximizing ground-truth conditional surprise over a seeded, fixed candidate set. Context OOD is explicitly a negative control for conditional-only scores. FPR pools exclude event spans plus a `seq_len - 1` overlap guard. The bootstrap tool reports deterministic paired intervals and fails closed when provenance, balance, replicate count, or stage-specific sampling assumptions are insufficient.
+
+Run focused correctness tests:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python -m unittest discover -s tests -p 'test_*.py'
+```
+
+Dry-run the first four A cells:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python scripts/patternad/run_factorial_ablation.py \
+  --group smoke --dataset Weather --variant A00 A10 A01 A11 \
+  --seeds 2021 --gpus 0 --run-name p0_weather --dry-run
+```
+
+Remove `--dry-run` to execute. Summarize completed detailed artifacts without a test-oracle maximum:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python scripts/patternad/summarize_factorial.py \
+  --input result/patternad_strict/p0_weather
+```
+
+The primary comparison is now `A00/A10/A01/A11`, not PatternAD versus `PatternAD_raw`, because the latter changes both context conditioning and conditional scoring. `B00/B11` remain unmasked diagnostics and cannot support the target-blind conditional-density claim by themselves.

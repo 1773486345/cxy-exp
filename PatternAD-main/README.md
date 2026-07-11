@@ -4,9 +4,9 @@
 
 ## Introduction
 
-PatternAD is a multivariate time-series anomaly detection model built around context-conditioned reconstruction. Each time step is encoded as a full multivariate state, and training masks both individual variable points and whole variable traces inside a window.
+PatternAD is a multivariate time-series anomaly detection model for context-conditioned residual semantics. Each time step is encoded as a full multivariate state, and training masks both individual variable points and whole variable traces inside a window.
 
-The current default model no longer uses temporal context as a post-hoc score multiplier. Local scale, trend, high-frequency activity, and mask structure are encoded inside the reconstruction backbone through FiLM-style conditioning. During inference, PatternAD performs conditional reconstruction by hiding a deterministic subset of variables and scoring only the raw reconstruction residual on those hidden positions. The goal is to make reconstruction itself adapt to the operating state, rather than manually reweighting the anomaly score after reconstruction.
+The current research path no longer uses temporal context as a post-hoc score multiplier. Local scale, trend, high-frequency activity, and mask structure are encoded inside the reconstruction backbone through FiLM-style conditioning. The model can estimate either a deterministic conditional mean or a conditional Gaussian/Student-t distribution. The repository keeps `reconstruction_distribution="mse"` as the backward-compatible default; the strict factorial experiment opts into Gaussian NLL to test conditional residual distributions directly.
 
 ## Installation
 
@@ -14,7 +14,11 @@ The current default model no longer uses temporal context as a post-hoc score mu
 pip install -r requirements.txt
 ```
 
-The project was developed under Python 3.8.
+The project was developed under Python 3.8. On the current server, the intended Conda environment is `patternad_env` and can be used without activating the shell:
+
+```bash
+conda run --no-capture-output -n patternad_env python --version
+```
 
 ## Data
 
@@ -46,9 +50,80 @@ Scoring implementation:
 ts_benchmark/baselines/PatternAD/utils/pattern_scoring.py
 ```
 
-Current default scoring is raw residual on conditionally hidden positions. Legacy aggregate and reliability-weighted scorers remain available only as explicit ablation paths.
+### Leakage-free context
 
-## Standard Experiments
+The mask is chosen before context construction. Rolling mean/std use only visible values and explicit valid counts; trend uses differences whose two endpoints are visible; masked high-frequency entries are zeroed. The true target and the learned mask token are therefore excluded from the target's context.
+
+### Complementary conditional scoring
+
+Inference partitions the complete `(time, variable)` grid into deterministic complementary masks. Each cell is hidden and scored in exactly one pass, and runtime validation requires coverage to equal one everywhere. The final point score averages all variables, but every variable prediction was produced while that target was hidden.
+
+### Distribution heads and losses
+
+All variants use the same `3 * D` output head so MSE, Gaussian, and Student-t ablations have the same parameter count. Available modes are:
+
+```text
+mse       -> conditional mean + masked squared residual
+gaussian  -> conditional mean/scale + masked Gaussian NLL
+student_t -> conditional mean/scale/df + masked Student-t NLL
+```
+
+For MSE, training uses `masked MSE + reconstruction_full_loss_weight * full mean-MSE`. For Gaussian and Student-t, it uses `masked NLL + reconstruction_full_loss_weight * full mean-MSE`. The auxiliary full-window term is intentionally mean-MSE, not full NLL, so visible values cannot drive the predicted scale toward zero by simple copying.
+
+Legacy aggregate and reliability-weighted scorers remain available only as explicit ablation paths.
+
+For the factorial context control, `use_context_conditioning=false` does not remove the context modules. It sends a learned dataset-level constant through the same `context_proj` and FiLM path as the visible-context variant. Thus A00/A01 differ from A10/A11 in dynamic context information rather than in the presence of the conditioning route.
+
+## Strict Evaluation Protocol
+
+`config/unfixed_detect_label_multi_config.json` now selects `evaluation_protocol="train_calibration"`. The protocol reserves the temporal tail of official train as an independent calibration split and leaves a gap of `seq_len - 1` points by default between model fit data and calibration data. Test scores and labels do not determine the threshold.
+
+The threshold is a finite-sample calibration-only empirical/conformal-style quantile. Because overlapping time-series scores are not exchangeable, this is not presented as a strict conformal coverage guarantee. The strict factorial manifest predeclares `anomaly_ratios=[1.0]`; different ratios remain separate experiments in the leaderboard and are never collapsed by taking the best test metric. The strict summarizer accepts only threshold-independent ranking/VUS metrics and verifies that repeated score-metric values agree across any ratio rows.
+
+Historical behavior is retained only behind the explicit `evaluation_protocol="legacy_test_contaminated"`. That path is for reproduction and can still depend on test scores and choose a test-metric maximum across ratios. Its output is test-label oracle evidence and must not be reported as an unbiased result.
+
+The strategy now applies the requested seed before each model-series pair is constructed. Factorial runs record the dataset, variant, seed, exact source/config/data hashes, complete expected grid, and attempt number. Resume and summary both fail if the frozen identity changes or the grid is incomplete.
+
+## Strict Experiment Workflow
+
+The current design is documented in [EXPERIMENT_PLAN_DRAFT.md](EXPERIMENT_PLAN_DRAFT.md). Executable manifests and tooling are in [config/patternad](config/patternad) and [scripts/patternad](scripts/patternad/README.md). The Gaussian objective is consistently defined as masked Gaussian NLL plus full mean-MSE.
+
+Run the focused tests first:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python -m unittest discover -s tests -p 'test_*.py'
+```
+
+Inspect the first four-cell smoke command without executing it:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python scripts/patternad/run_factorial_ablation.py \
+  --group smoke --dataset Weather --variant A00 A10 A01 A11 \
+  --seeds 2021 --gpus 0 --run-name p0_weather --dry-run
+```
+
+Remove `--dry-run` after checking the resolved dataset and command. Summarize a completed experiment with:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python scripts/patternad/summarize_factorial.py \
+  --input result/patternad_strict/p0_weather
+```
+
+The primary matrix holds complementary masking fixed and isolates the two research factors:
+
+```text
+A00: context off + MSE
+A10: context on  + MSE
+A01: context off + Gaussian NLL
+A11: context on  + Gaussian NLL
+```
+
+`B00/B11` are unmasked diagnostics. Student-t is implemented but deferred until Gaussian establishes that conditional-scale modeling is useful.
+
+## Convenience Dataset Scripts
 
 Run one of the existing multivariate datasets:
 
@@ -57,11 +132,11 @@ sh ./scripts/multivariate_detection/detect_label/Weather_script/PatternAD.sh
 sh ./scripts/multivariate_detection/detect_label/Weather_script/PatternAD_raw.sh
 ```
 
-The `_raw` script disables context-conditioned reconstruction and conditional scoring, then uses raw residual scoring. It is the no-context raw-control baseline for the current model.
+The `_raw` script replaces dynamic visible context with the learned constant control, disables conditional scoring, and uses raw residual scoring. Because it changes two factors at once, it is useful for historical continuity and smoke checks but is not a fair isolation of the context effect. Use `A00/A10/A01/A11` for the primary attribution experiment.
 
 ## Added Dataset Scripts
 
-These datasets have been adapted locally but may not yet exist on the server unless the new data files are synced.
+These datasets have been adapted locally. The factorial runner validates every referenced data and text file before it creates a run directory.
 
 MetroPT-3 is the lightweight real-industrial smoke-test dataset:
 
@@ -80,7 +155,7 @@ sh ./scripts/multivariate_detection/detect_label/SMD_script/PatternAD.sh
 sh ./scripts/multivariate_detection/detect_label/SMD_script/PatternAD_raw.sh
 ```
 
-Full HAI21/SMD runs are explicit:
+The legacy full HAI21/SMD convenience scripts are explicit:
 
 ```bash
 sh ./scripts/multivariate_detection/detect_label/HAI21_script/PatternAD_full.sh
@@ -90,11 +165,17 @@ sh ./scripts/multivariate_detection/detect_label/SMD_script/PatternAD_full.sh
 sh ./scripts/multivariate_detection/detect_label/SMD_script/PatternAD_raw_full.sh
 ```
 
+These convenience scripts reproduce the older confounded PatternAD/PatternAD_raw comparison. They are not inputs to the current factorial main table or locked confirmation; use `scripts/patternad/run_factorial_ablation.py` for those experiments.
+
 ## Evaluation Scalability
 
 The VUS evaluator uses an exact sparse implementation for long multivariate datasets. It preserves the original RangeAUC-volume definition while avoiding repeated full-sequence scans for every window and threshold. `VUS_ROC` and `VUS_PR` also share the same volume computation.
 
-This change affects evaluation runtime only; it does not change PatternAD reconstruction, anomaly scores, threshold ratios, or metric definitions. See `PATTERN_AD_MODIFICATION_LOG.md` for the equivalence tests and MetroPT3 benchmark.
+This change affects evaluation runtime only; it does not change PatternAD reconstruction, anomaly scores, threshold ratios, or metric definitions. See [PATTERN_AD_MODIFICATION_LOG.md](PATTERN_AD_MODIFICATION_LOG.md) for the equivalence tests and MetroPT3 benchmark.
+
+## Checkpoint and Result Compatibility
+
+Current MSE/Gaussian/Student-t variants share a `3 * D` output head, while older checkpoints used a `D`-wide mean head. Current C0/C1 paths both traverse `context_proj`, FiLM, and `pre_encoder_norm`; C0 uses a learned constant and C1 uses visible dynamic context. Older context-off runs skipped conditioning and normalization. Old checkpoints are therefore not load-compatible in general, and old PatternAD/PatternAD_raw result tables are not directly comparable with new factorial results. Rerun every compared cell under the same current code, seed protocol, strict calibration protocol, and manifest.
 
 ## Notes
 
@@ -106,4 +187,4 @@ HAI21: 3 industrial process parts, stronger motivation dataset but heavier.
 SMD: 28 machine entities, standard benchmark supplement; stored as .csv.gz.
 ```
 
-See `PATTERN_AD_MODIFICATION_LOG.md` for implementation notes, result interpretation, and dataset adaptation history.
+See [PATTERN_AD_MODIFICATION_LOG.md](PATTERN_AD_MODIFICATION_LOG.md) for implementation notes, result interpretation, and dataset adaptation history.

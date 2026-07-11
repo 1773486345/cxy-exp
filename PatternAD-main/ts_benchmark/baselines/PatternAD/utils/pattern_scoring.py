@@ -1,4 +1,7 @@
+import math
+
 import numpy as np
+from scipy.special import gammaln
 
 
 class PatternAwareScorer:
@@ -32,6 +35,7 @@ class PatternAwareScorer:
         risk_strength=0.15,
         min_weight=0.5,
         max_weight=1.5,
+        distribution="mse",
     ):
         self.components = tuple(components or self.DEFAULT_COMPONENTS)
         self.local_window = max(3, int(local_window))
@@ -46,6 +50,16 @@ class PatternAwareScorer:
         self.risk_strength = float(risk_strength)
         self.min_weight = float(min_weight)
         self.max_weight = float(max_weight)
+        distribution = str(distribution).lower().replace("-", "_")
+        aliases = {
+            "raw": "mse",
+            "normal": "gaussian",
+            "student": "student_t",
+            "studentt": "student_t",
+        }
+        self.distribution = aliases.get(distribution, distribution)
+        if self.distribution not in {"mse", "gaussian", "student_t"}:
+            raise ValueError("distribution must be one of: mse, gaussian, student_t.")
         self.stats = {}
         self.fitted = False
 
@@ -178,6 +192,76 @@ class PatternAwareScorer:
         self.fitted = True
         return self
 
+    def _distribution_nll(self, true_windows, pred_windows, distribution_params):
+        true = self._as_numpy(true_windows)
+        pred = self._as_numpy(pred_windows)
+        if true.shape != pred.shape:
+            raise ValueError(
+                "PatternAwareScorer true/pred shape mismatch: "
+                f"{true.shape} vs {pred.shape}"
+            )
+        if not distribution_params or "scale" not in distribution_params:
+            raise ValueError(f"{self.distribution} NLL scoring requires scale parameters.")
+
+        scale = self._as_numpy(distribution_params["scale"])
+        if scale.shape != true.shape:
+            raise ValueError(
+                "PatternAwareScorer scale shape mismatch: "
+                f"{scale.shape} vs {true.shape}"
+            )
+        if np.any(scale <= 0) or not np.all(np.isfinite(scale)):
+            raise ValueError("Distribution scale must be finite and strictly positive.")
+        standardized = (true - pred) / np.maximum(scale, self.eps)
+        if self.distribution == "gaussian":
+            return (
+                0.5 * standardized ** 2
+                + np.log(scale)
+                + 0.5 * math.log(2.0 * math.pi)
+            )
+
+        if "df" not in distribution_params:
+            raise ValueError("student_t NLL scoring requires df parameters.")
+        df = self._as_numpy(distribution_params["df"])
+        if df.shape != true.shape:
+            raise ValueError(
+                "PatternAwareScorer df shape mismatch: "
+                f"{df.shape} vs {true.shape}"
+            )
+        if np.any(df <= 2.0) or not np.all(np.isfinite(df)):
+            raise ValueError("Student-t df must be finite and greater than 2.")
+        return (
+            gammaln(0.5 * df)
+            - gammaln(0.5 * (df + 1.0))
+            + 0.5 * (np.log(df) + math.log(math.pi))
+            + np.log(scale)
+            + 0.5 * (df + 1.0) * np.log1p(standardized ** 2 / df)
+        )
+
+    def _aggregate_cell_scores(self, cell_scores, score_mask=None):
+        if score_mask is None:
+            return cell_scores.mean(axis=-1)
+        mask = score_mask.detach().cpu().numpy() if hasattr(score_mask, "detach") else score_mask
+        mask = np.asarray(mask, dtype=bool)
+        if mask.shape != cell_scores.shape:
+            raise ValueError(
+                "PatternAwareScorer score_mask shape mismatch: "
+                f"{mask.shape} vs {cell_scores.shape}"
+            )
+        denom = np.maximum(mask.sum(axis=-1), 1)
+        return (cell_scores * mask).sum(axis=-1) / denom
+
+    def _raw_residual_score(self, true_windows, pred_windows, score_mask=None):
+        true = self._as_numpy(true_windows)
+        pred = self._as_numpy(pred_windows)
+        if true.shape != pred.shape:
+            raise ValueError(
+                "PatternAwareScorer true/pred shape mismatch: "
+                f"{true.shape} vs {pred.shape}"
+            )
+        return self._aggregate_cell_scores(
+            (true - pred) ** 2, score_mask=score_mask
+        )
+
     def _z(self, name, value):
         stat = self.stats[name]
         return (value - stat["center"]) / (stat["scale"] + self.eps)
@@ -235,13 +319,36 @@ class PatternAwareScorer:
         weight = np.clip(1.0 - relief + risk, self.min_weight, self.max_weight)
         return raw * weight
 
-    def score_windows(self, true_windows, pred_windows, score_mask=None):
-        if self.score_mode == "raw":
-            return self._evidence_arrays(true_windows, pred_windows, score_mask=score_mask)["raw"]
+    def score_windows(
+        self,
+        true_windows,
+        pred_windows,
+        score_mask=None,
+        distribution_params=None,
+    ):
+        mode = self.score_mode.lower()
+        if mode == "auto":
+            mode = "nll" if self.distribution != "mse" else "raw"
+        if mode in {"nll", "distribution_nll", "conditional_nll"}:
+            if self.distribution == "mse":
+                return self._raw_residual_score(
+                    true_windows, pred_windows, score_mask=score_mask
+                )
+            cell_nll = self._distribution_nll(
+                true_windows, pred_windows, distribution_params
+            )
+            return self._aggregate_cell_scores(cell_nll, score_mask=score_mask)
+
+        if mode == "raw":
+            return self._raw_residual_score(
+                true_windows, pred_windows, score_mask=score_mask
+            )
 
         raw_only = self.components == ("raw",) and not self.use_calibration
         if raw_only:
-            return self.component_scores(true_windows, pred_windows, score_mask=score_mask)["raw"]
+            return self._raw_residual_score(
+                true_windows, pred_windows, score_mask=score_mask
+            )
 
         if score_mask is not None:
             # Masked scoring is intentionally supported only for raw residual.
@@ -249,8 +356,8 @@ class PatternAwareScorer:
             # unmasked ablation path.
             return self._evidence_arrays(true_windows, pred_windows, score_mask=score_mask)["raw"]
 
-        if self.score_mode in {"aggregate", "legacy", "component_aggregate"}:
+        if mode in {"aggregate", "legacy", "component_aggregate"}:
             return self._aggregate_components(true_windows, pred_windows)
-        if self.score_mode in {"reliability_weighted", "context_weighted"}:
+        if mode in {"reliability_weighted", "context_weighted"}:
             return self._reliability_weighted_score(true_windows, pred_windows)
         raise ValueError(f"Unknown pattern score_mode: {self.score_mode}")

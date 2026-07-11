@@ -24,13 +24,23 @@
         "metrics": "all",
         "strategy_args": {
             "strategy_name": "unfixed_detect_label",
+            "evaluation_protocol": "train_calibration",
+            "anomaly_ratios": [1.0],
+            "calibration_fraction": 0.2,
             "seed": 2021
         }
     },
 
     "report_config" : {
         "aggregate_type": "mean",
-        "report_metrics": ["affiliation_f"],
+        "report_metrics": [
+            "auc_pr",
+            "VUS_PR",
+            "auc_roc",
+            "VUS_ROC",
+            "f_score",
+            "affiliation_f"
+        ],
         "fill_type": "mean_value",
         "null_value_threshold": "0.3"
     }

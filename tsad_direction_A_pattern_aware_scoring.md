@@ -1,14 +1,16 @@
 # 方向 A：模式感知的残差语义建模
 
 记录日期：2026-06-30  
-更新日期：2026-07-10
+更新日期：2026-07-11
 
 方向定位：
 
 ```text
-Pattern-Aware Residual Semantics for Context-Conditioned Reconstruction
-模式感知的残差语义建模与条件重构
+Pattern-Aware Residual Semantics via Conditional Residual Distributions
+基于条件残差分布的模式感知残差语义建模
 ```
+
+本文档负责研究动机、方法演进与论文主张边界。可执行因子、数据切分、seed、停止/推进判据和运行命令单独维护在 `PatternAD-main/EXPERIMENT_PLAN_DRAFT.md`，并在正式多 seed 实验前冻结为带版本号的 protocol，避免根据结果反向修改判据。
 
 该方向的核心不是异常类型分类，也不是多证据修复。它关注的是：
 
@@ -21,8 +23,8 @@ Pattern-Aware Residual Semantics for Context-Conditioned Reconstruction
 ```text
 给定多变量时序窗口和需要恢复的目标位置，
 识别当前窗口所处的动态背景与变量状态，
-使重构结果符合该背景下的合理取值，
-再用条件重构残差判断异常。
+使模型同时估计该背景下的合理取值与正常不确定性，
+再用条件残差分布中的罕见程度判断异常。
 ```
 
 ---
@@ -140,7 +142,7 @@ cross-variable residual evidence：
 
 ### 4.3 分数如何校准
 
-不同背景下 residual 的正常范围不同。需要使用训练集正常样本拟合每类证据的正常分布，例如：
+不同背景下 residual 的正常范围不同。仅让背景改变条件均值，仍不能直接表达“相同 residual 在不同波动状态下含义不同”。因此当前主线进一步升级为直接建模条件残差分布，例如：
 
 ```text
 median / MAD
@@ -148,6 +150,7 @@ robust z-score
 quantile score
 tail probability
 extreme value threshold
+heteroscedastic Gaussian / Student-t NLL
 ```
 
 校准目标是让分数表达：
@@ -192,7 +195,7 @@ slow-drift vs abrupt-shift separation
 multi-scale inconsistency scoring
 ```
 
-前两轮实验也表明，简单把多个结构证据转化为异常分数再做 top-k / mean / max 聚合，或在重构之后手工调权，都不够稳健，容易让辅助证据噪声扰乱 raw residual 的排序。因此，后续实现应避免把背景描述量直接当成独立异常证据，而应优先让背景信息进入重构过程。
+前两轮实验也表明，简单把多个结构证据转化为异常分数再做 top-k / mean / max 聚合，或在重构之后手工调权，都不够稳健，容易让辅助证据噪声扰乱 raw residual 的排序。因此，后续实现应避免把背景描述量直接当成独立异常证据，而应让背景信息进入条件均值与条件尺度的估计过程。
 
 ---
 
@@ -272,16 +275,33 @@ frequency-aware evidence 明显升高。
 
 ## 7. 修订后的最小可行方案
 
-前两轮实验后，方向 A 的最小可行方案需要从“残差后处理”进一步修订为“上下文条件重构”。核心判断是：raw reconstruction residual 本身仍然是最稳定的异常证据，但结构背景不应主要在评分阶段手工放大或压低 residual，而应进入重构过程，使模型先恢复出“在当前动态状态下合理的值”。
+前两轮实验后，方向 A 的最小可行方案先从“残差后处理”修订为“上下文条件重构”；当前又进一步升级为“条件残差分布”。原因是：context-conditioned mean 可以改变 `x_hat`，但若最终仍只使用 raw MSE，则同样大小的 residual 仍会得到同样分数，尚未完整回答本方向的核心命题。更闭环的对象应是：
+
+```text
+q_theta(x_M | x_visible, context_visible)
+score = -log q_theta(x_M | x_visible, context_visible)
+```
+
+其中，MSE 路径继续保留，作为兼容默认值和确定性条件均值基线；Gaussian / Student-t 路径用于显式估计条件尺度或重尾分布。
 
 因此，落地流程应调整为：
 
 ```text
-x_context = describe_local_dynamics(x)
-x_masked = mask_target_variables(x)
-x_hat = ContextConditionedReconstructor(x_masked, x_context, mask)
-score = MSE(x_hat, x) on masked target positions
+mask_groups = build_complementary_masks(x)
+
+for mask in mask_groups:
+    valid = not mask
+    x_visible = replace_masked_targets(x, mask)
+    context_visible = describe_local_dynamics(x_visible, valid)
+    distribution = ContextConditionedReconstructor(
+        x_visible, context_visible, mask
+    )
+    score[mask] = NLL(distribution, x)[mask]
+
+score_t = mean_over_variables(score[t, :])
 ```
+
+这里必须先确定 mask，再只使用 visible values 构造 context。旧伪码中的 `describe_local_dynamics(x)` 写在 mask 之前，容易被理解为上下文可读取待评分目标；这与实际代码不一致，现已纠正。实际实现通过显式 `valid=~mask` 和有效计数计算 rolling mean/std/trend，高频项在 masked 位置置零，不把真实 target 或 mask token 混入 context。
 
 其中，`context` 用于帮助重构，而不是替代 residual，也不是额外生成一组并列异常分数：
 
@@ -292,8 +312,8 @@ local scale context:
 trend / shift context:
 描述局部趋势运动和水平变化，使模型区分正常趋势演化与难以解释的偏离。
 
-frequency context:
-描述局部高频扰动，使模型在强振荡状态下避免把正常波动直接误报为异常。
+local high-frequency context:
+描述相对局部均值的短时扰动，使模型在强振荡状态下避免把正常波动直接误报为异常。当前实现不是完整频谱模型。
 
 mask context:
 告诉模型哪些变量或时间点需要被条件恢复，防止评分目标直接泄漏给重构器。
@@ -309,27 +329,42 @@ S = raw_residual * handcrafted_context_weight
 而是：
 
 ```text
-先让 context 改善 x_hat，再用被遮蔽位置的 raw residual 做异常分数。
+先让 visible context 改善条件均值与条件尺度，再用被遮蔽目标的条件 NLL 评分。
+MSE 版本作为只建模条件均值的兼容基线。
 ```
 
-这样更符合方向 A 的动机：如果某个观测值虽然偏离自身历史趋势，但可以被当前局部波动、趋势阶段或其他变量状态合理解释，模型应尽量把它重构正确，从而降低误报；如果在给定这些上下文后仍无法恢复，残差才更能说明异常。
+这样更符合方向 A 的动机：如果某个观测值虽然偏离条件均值，但当前状态本身具有较高正常不确定性，预测尺度可以表达其较低异常意义；反之，在稳定状态下，同样 residual 应获得更高 NLL。条件均值负责“当前应出现什么”，条件尺度/分布负责“允许偏离多少”。
 
-关键实验比较也应相应调整为：
+训练目标也必须避免概率头在可见位置通过复制输入并压缩尺度获得虚假的低 NLL。当前实现为：
 
 ```text
-PatternAD_raw: no context conditioning + no conditional scoring + raw residual
-PatternAD: context-conditioned reconstruction + conditional masked raw residual
-legacy aggregate / reliability-weighted scorer: only as ablation, not main path
+MSE path:
+L = masked_MSE(mu, x) + lambda * full_mean_MSE(mu, x)
+
+Gaussian / Student-t path:
+L = masked_NLL(mu, scale[, df], x) + lambda * full_mean_MSE(mu, x)
+```
+
+即概率模型只在隐藏目标上学习 NLL，辅助全窗口项始终约束条件均值，不使用 full-window NLL。
+
+关键实验比较也应相应调整为同一 conditional-mask 协议下的最小公平消融：
+
+```text
+A00: context off + MSE + complementary conditional masks
+A10: context on  + MSE + complementary conditional masks
+A01: context off + Gaussian NLL + complementary conditional masks
+A11: context on  + Gaussian NLL + complementary conditional masks
+B00/B11: unmasked diagnostics, not the main conditional-density claim
 ```
 
 消融重点不再是堆叠更多评分组件，而是验证上下文进入重构是否有效：
 
 ```text
-no context conditioning
-local scale context only
-scale + trend/frequency context
-with / without variable-level conditional mask
-with / without whole-variable training mask
+context on/off under the same mask and distribution
+MSE versus heteroscedastic Gaussian under the same context and mask
+complementary conditional mask versus unmasked diagnostic
+Gaussian confirmed first, then Student-t as heavy-tail robustness
+point-only versus point + whole-variable training masks after the main mechanism is established
 ```
 
 ---
@@ -342,13 +377,13 @@ PatternAD-main/ts_benchmark/baselines/PatternAD/PatternAD.py
 PatternAD-main/ts_benchmark/baselines/PatternAD/utils/pattern_scoring.py
 ```
 
-最新版本已经不再把贡献点放在“重构之后如何给 residual 加权”。前两轮实验说明，简单把 scale、trend、freq、sync 等结构量当作并列异常分数做聚合不稳定；进一步的 reliability-weighted residual 虽然优于旧聚合器，但整体仍弱于 raw residual control。因此，当前实现改为“模式感知的条件重构”：让局部动态背景和变量上下文在重构阶段发生作用，最终评分保持尽可能干净的 raw residual。
+最新版本已经不再把贡献点放在“重构之后如何给 residual 加权”。前两轮实验说明，简单把 scale、trend、freq、sync 等结构量当作并列异常分数做聚合不稳定；进一步的 reliability-weighted residual 虽然优于旧聚合器，但整体仍弱于 raw residual control。因此，当前实现改为“模式感知的条件残差分布”：让局部动态背景和变量上下文同时影响条件均值与条件尺度。默认 `reconstruction_distribution="mse"` 仍保留为兼容基线；`gaussian` 和 `student_t` 是显式 opt-in 的概率路径。
 
 ### 8.1 设计原则
 
 方向 A 的核心判断是：同样大小的残差在不同动态背景下含义不同。但这并不意味着一定要在评分阶段手工调权。更合理的落地方式是让模型先利用当前背景重构出“在该状态下应当出现的合理值”。如果一个观测点只是由高负载、局部波动、趋势运动或变量协同变化造成，那么条件重构应尽量把它恢复正确，从而降低误报；如果该点在给定这些背景后仍难以被恢复，残差才更有异常意义。
 
-因此，当前模型的重点不是增加异常分数种类，而是改变残差的来源：残差来自一个已经感知局部动态模式的重构器。
+因此，当前模型的重点不是增加手工异常分数种类，而是改变残差的参照系：残差来自一个感知局部动态模式、且可选择输出条件不确定性的重构器。
 
 ### 8.2 模型结构
 
@@ -358,7 +393,7 @@ PatternAD-main/ts_benchmark/baselines/PatternAD/utils/pattern_scoring.py
 x: [B, T, D]
 ```
 
-每个时间步以完整 `D` 维变量状态作为联合输入。模型在重构前构造局部上下文特征，包括：
+每个时间步以完整 `D` 维变量状态作为联合输入。对每次遮蔽 pass，模型只用 visible values 构造局部上下文特征，包括：
 
 ```text
 local mean: 局部均值背景
@@ -368,31 +403,37 @@ high-frequency residual: 去局部均值后的短时扰动
 mask indicator: 当前哪些变量被遮蔽
 ```
 
-这些上下文特征经过轻量 MLP 编码后，通过 FiLM-style gamma/beta 调制注入 Transformer 输入表示。也就是说，趋势、波动和高频活动不是在最后改变分数，而是在重构过程中改变模型如何解释当前窗口。
+这些上下文特征经过轻量 MLP 编码后，通过 FiLM-style gamma/beta 调制注入 Transformer 输入表示。rolling mean/std 使用显式有效计数，trend 只使用相邻两点均可见的差分，masked target 不参与 context。也就是说，趋势、波动和高频活动不是在最后改变分数，而是在重构过程中改变模型如何解释当前窗口。
 
 训练阶段继续采用 denoising reconstruction：随机遮蔽部分变量点，并额外随机遮蔽整条变量轨迹，使模型不能只复制单变量自身历史，而要利用时间上下文和其他变量共同恢复被遮蔽值。
 
 ### 8.3 推理与异常分数
 
-推理阶段启用确定性的条件遮蔽。对于每个窗口，模型隐藏一部分变量位置，用剩余变量和局部动态上下文恢复它们。异常分数只在被隐藏的位置上计算：
+推理阶段启用确定性的互补条件遮蔽。`(time, variable)` 网格被划分为 K 个互斥 mask pass；每个位置恰好被隐藏并评分一次，所有 pass 的并集完整覆盖窗口，不再只给某一固定子集计分：
 
 ```text
-S_t = mean over i in M_t of (x_ti - x_hat_ti)^2
+MSE: S_t = mean_d (x_td - mu_td)^2
+NLL: S_t = mean_d -log q_theta(x_td | x_visible_in_its_pass, context_visible)
 ```
 
-其中 `M_t` 是时间点 `t` 被遮蔽的变量集合。这样做的含义是：模型不能直接看到被评分的值，必须判断该值是否能被当前窗口的上下文和其他变量合理解释。
+其中每个 `mu_td / q_theta` 都来自遮蔽 `(t,d)` 的对应 pass。这样做的含义是：模型不能直接看到被评分的值，但最终每个变量都有分数；实现还会检查 coverage 是否逐位置严格等于 1。
 
-当前默认不再使用 post-hoc reliability weight。`pattern_scoring.py` 中的 aggregate / reliability-weighted 路径只作为显式消融保留。默认主模型为：
+当前默认不再使用 post-hoc reliability weight。`pattern_scoring.py` 中的 aggregate / reliability-weighted 路径只作为显式消融保留。为兼容现有脚本，默认配置仍为：
 
 ```text
-PatternAD = context-conditioned reconstruction + conditional masked raw residual
+PatternAD default = context-conditioned mean reconstruction
+                  + complementary conditional masks
+                  + raw masked MSE
 ```
 
-对应 raw control 为：
+概率路径通过以下参数显式启用：
 
-```text
-PatternAD_raw = no context conditioning + no conditional scoring + raw residual
+```json
+{"reconstruction_distribution": "gaussian", "pattern_score_mode": "nll"}
+{"reconstruction_distribution": "student_t", "pattern_score_mode": "nll"}
 ```
+
+若选择非 MSE 分布且没有显式设置 `pattern_score_mode`，配置会自动切换为 `nll`。首轮严格主实验只使用 Gaussian 识别 conditional-scale 机制；Student-t 已实现，但应在 Gaussian 获得支持后作为重尾鲁棒性实验。
 
 ### 8.4 与旧版本的区别
 
@@ -405,21 +446,59 @@ PatternAD_raw = no context conditioning + no conditional scoring + raw residual
 当前版本的逻辑是：
 
 ```text
-先识别局部动态背景 -> 用该背景约束重构 -> 只在被遮蔽目标上计算 raw residual
+先遮蔽目标 -> 只由 visible values 提取动态背景
+-> 估计条件均值/尺度 -> 在所有目标各自被遮蔽时计算 MSE 或 NLL
 ```
 
-这一区别很重要。旧版本仍然属于残差后处理，容易把结构估计噪声放大到最终排序中；当前版本则让结构背景直接影响重构结果本身，符合“关系、文本或状态信息应当帮助重构更符合实际意义，从而减少误报并提升检测”的总思路。
+这一区别很重要。旧版本仍然属于残差后处理，容易把结构估计噪声放大到最终排序中；当前版本则让多变量动态状态直接影响重构结果本身。当前 PatternAD 不消费文本，文本 CSV 仅是 benchmark 接口占位，不能把本轮结果解释为多模态贡献。
 
-### 8.5 当前实验重点
+### 8.5 严格评估协议
 
-下一轮实验不应再比较“多个手工评分组件谁更好”，而应比较上下文是否真正提升了条件重构下的异常检测：
+当前 `unfixed_detect_label_multi_config.json` 已显式使用 `evaluation_protocol="train_calibration"`。严格路径先验证 official train 标签全部为 0；非零或非有限 train label 会使运行直接失败，当前代码不会静默过滤异常窗口。official train 的尾部被留作独立 temporal calibration，fit 与 calibration 之间默认保留 `seq_len - 1` 个点的 gap，避免重叠窗口跨段共享原始点。阈值只由 calibration scores 的有限样本 empirical/conformal-style quantile 决定；时间依赖与重叠窗口不满足普通 conformal 的交换性假设，因此不声称严格 coverage guarantee：
 
 ```text
-PatternAD_raw: 无上下文、无条件遮蔽的 raw residual baseline
-PatternAD: 上下文条件重构 + 条件遮蔽 residual
+alpha = anomaly_ratio / 100
+k = ceil((n_cal + 1) * (1 - alpha))
+threshold = kth order statistic of calibration scores
 ```
 
-优先观察 AUC-PR、AUC-ROC、VUS-PR、VUS-ROC，并辅以 event-level F1 和 point-adjusted F1。若主模型优于 raw control，说明模式背景进入重构过程是有效的；若仍然失败，应继续改重构机制，而不是回到手工分数聚合。
+若 `k > n_cal`，阈值取 `+inf`，不静默截断。测试分数和测试标签都不参与阈值确定。严格 leaderboard 会把不同 ratio 保持为不同实验列；当前 factorial runner 预先固定 `anomaly_ratios=[1.0]`，summarizer 只读取阈值无关的 ranking/VUS 指标并验证重复 ratio 行完全一致，不再在测试集上取最大值。
+
+旧行为只通过显式 `evaluation_protocol="legacy_test_contaminated"` 保留用于历史复现。该路径仍可能拼接 train/test scores 并在 leaderboard 中按测试指标取最大值，必须标为 test-label oracle，不能进入无偏主结果。
+
+随机种子也已修复为在每个 model-series pair 的模型构造前读取当前 strategy seed，而不是无参数调用固定默认 seed。严格 runner 会把 dataset、variant、seed、配置 hash 和 attempt 目录绑定，便于配对重复实验与失败续跑。
+
+### 8.6 版本兼容性边界
+
+本轮为公平比较统一了所有 distribution variant 的输出头：末层均输出 `3 * D`，MSE 只使用其中的 mean，因此 MSE/Gaussian/Student-t 名义参数量一致。C0 不再删除条件路径，而是把可学习的 dataset-level 常量送入与 C1 相同的 `context_proj`、FiLM 和 `pre_encoder_norm`；C1 仅把该常量替换为 target-blind visible context。旧实现的 context-off 路径会同时跳过条件注入和该归一化。
+
+因此，旧 checkpoint 通常会因输出头形状变化而无法直接加载；即使只比较旧结果，context-off 计算图也已经变化。此前生成的 PatternAD/PatternAD_raw 数值只能作为历史开发证据，不能与当前 A00/A10/A01/A11 结果直接拼表或据此声称增益。所有主消融 cell 必须在统一新代码、统一 seed 和统一严格协议下重跑。
+
+### 8.7 当前实验重点
+
+下一轮实验不应再使用同时关闭 context 和 conditional scoring 的 `PatternAD_raw` 来归因 context 效果，而应运行固定 complementary mask 的 2 x 2 主消融：
+
+```text
+A00 / A10: 在 MSE 下隔离 context 效应
+A01 / A11: 在 Gaussian NLL 下隔离 context 效应
+A00 / A01: context-off 时的 distribution 效应
+A10 / A11: context-on 时的 distribution 效应
+B00 / B11: 仅用于诊断 conditional mask 的作用
+```
+
+严格实验设计见 `PatternAD-main/EXPERIMENT_PLAN_DRAFT.md`，可执行配置与工具见 `PatternAD-main/config/patternad/` 和 `PatternAD-main/scripts/patternad/`。Gaussian 目标在文档与代码中统一为 `masked Gaussian NLL + full mean-MSE`。
+
+首个端到端检查建议从仓库根目录运行：
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python scripts/patternad/run_factorial_ablation.py \
+  --group smoke --dataset Weather --variant A00 A10 A01 A11 \
+  --seeds 2021 --gpus 0 --run-name p0_weather --dry-run
+```
+
+确认命令和数据后去掉 `--dry-run`，完成后使用 `scripts/patternad/summarize_factorial.py` 汇总。优先观察 AUC-PR、VUS-PR、AUC-ROC、VUS-ROC 及 paired seed deltas；固定阈值 F1 可作为协议诊断，但不能跨 ratio 选择测试最优值。
+
 ## 9. 数据集审计与新增数据集选择
 
 ### 9.1 当前数据集是否充分支持方向 A
@@ -505,7 +584,7 @@ HAI21_part2       345602  79  226801   2.90    20     151      0.538         0.5
 HAI21_part3       718804  79  478801   2.03    25     203      0.633         0.571        7.77
 ```
 
-判断：HAI 21.03 比 SMD 更适合作为方向 A 的核心新增数据集。它的简单幅值可分性不强，三个实体的 `amp_auc_mean` 只有 0.452、0.538、0.633；同时训练正常阶段的局部波动变化范围较大，`train_vol_p90/p10` 约为 7.8-8.1。这说明异常并不是简单幅值尖峰即可稳定识别，而更需要解释 residual 所处的运行背景。
+判断：HAI 21.03 是比 SMD 更契合方向 A 动机的候选验证集。它的简单幅值可分性不强，三个实体的 `amp_auc_mean` 只有 0.452、0.538、0.633；同时训练正常阶段的局部波动变化范围较大，`train_vol_p90/p10` 约为 7.8-8.1。这些统计说明 raw amplitude 未必充分、正常背景变化明显，但不能单独证明 context 方法必要或有效；必要性仍要由 A00/A10/A01/A11 与 synthetic matched-pair 实验检验。
 
 考虑到 HAI21 全量数据较长且变量数为 79，当前脚本已改成分层实验：
 
@@ -516,7 +595,7 @@ HAI21_script/PatternAD_full.sh：全量实验，跑 HAI21_part1/2/3，num_epochs
 HAI21_script/PatternAD_raw_full.sh：对应 raw-control full 实验。
 ```
 
-因此服务器端应先跑 dev，确认方向和运行时间后再跑 full。
+以上 shell 仅保留为历史便利入口；它们比较的是同时改变多个因子的 `PatternAD/PatternAD_raw`，不用于当前主消融或 locked confirmation。正式实验使用 factorial runner 的 motivation/confirmation 分组。
 
 已完成接入：MetroPT-3。
 
@@ -540,7 +619,7 @@ file       T        D   train    anom%   seg_n  seg_med  amp_auc_mean  amp_auc_m
 MetroPT3   1516948  15  214850   2.30    4      5511     0.945         0.881        17.45
 ```
 
-判断：MetroPT-3 是更好的轻量开发集，而不是更好的核心论证数据集。它的优势是变量数低、真实工业场景、单文件易运行，适合快速验证代码、训练速度和多模态轻量 context 设计；限制是简单幅值可分性很强，`amp_auc_mean=0.945`，说明 raw amplitude 已能很好地区分故障区间。因此它不适合作为证明“raw residual 不足，需要上下文解释”的主要证据。
+判断：MetroPT-3 是更好的轻量开发集，而不是更好的核心论证数据集。它的优势是变量数低、真实工业场景、单文件易运行，适合快速验证代码、训练速度和多变量动态 context 设计；限制是简单幅值可分性很强，`amp_auc_mean=0.945`，说明 raw amplitude 已能很好地区分故障区间。因此它不适合作为证明“raw residual 不足，需要上下文解释”的主要证据。
 
 已完成接入：SMD。
 
@@ -590,7 +669,7 @@ SMD_machine-1-1：常用中等难度机器，amp_auc_mean=0.735。
 SMD_machine-2-8：幅值可分性很强的 sanity check，amp_auc_mean=0.989。
 ```
 
-这组 dev 数据不是为了替代 full，而是用于快速检查模型趋势、运行稳定性和 raw-control 差距。
+这组 dev 数据不是为了替代 full，而是用于快速检查模型趋势和运行稳定性。上述 shell 的 raw-control 比较仍有因子混杂；当前主结论只使用 factorial runner 中预声明的 A/B cells。
 
 待申请：SWaT / WADI / BATADAL。
 
@@ -647,14 +726,15 @@ TEP 是经典化工过程故障检测 benchmark。它的优势是过程变量多
 
 ### 9.4 具体执行建议
 
-下一步不应盲目扩大数据集数量，而应按以下顺序推进：
+下一步不应盲目扩大数据集数量，而应按严格 factorial runner 的阶段推进：
 
 ```text
-Step 1：先运行 MetroPT3 与 HAI21 dev，用于检查代码、速度和方向趋势。
-Step 2：运行 SMD dev，用 5 个代表机器检查标准 benchmark 上的趋势。
-Step 3：若 dev 结果相对 raw-control 有价值，再运行 HAI21 full。
-Step 4：SMD full 只放在最终补充实验或需要标准 benchmark 全量结果时运行。
-Step 5：申请 SWaT/WADI/BATADAL，作为最重要的真实工业动态系统补充。
+Step 0：运行自动测试，并对 Weather A00/A10/A01/A11 做 one-seed dry-run/smoke。
+Step 1：用 `config/patternad/synthetic_suite.json` 与 `scripts/patternad/generate_contextual_synthetic.py` / `evaluate_contextual_mechanisms.py` 验证“同 residual、不同 scale”的机制；3101-3110 用于开发，3111-3120 保持未查看确认。
+Step 2：运行 motivation 组的三 seed 主消融，只依据预声明的 paired comparison 判断机制。
+Step 3：用 `bootstrap_factorial.py` 对三个预声明的 A11 comparator 分别做 paired CI，再冻结候选并运行 robustness 组；MetroPT3 主要用于长序列时间/内存压力测试。
+Step 4：保存代码、配置和数据 hash 后，只运行一次 locked confirmation 组。
+Step 5：申请 SWaT/WADI/BATADAL 或接入 Exathlon/明确版本 TEP，补充真正未参与迭代的外部证据。
 ```
 
 新增数据集进入主表前必须先做审计。审计至少包括：

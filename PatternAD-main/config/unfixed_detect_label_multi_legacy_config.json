@@ -1,7 +1,7 @@
 {
     "data_config": {
         "feature_dict": {
-            "if_univariate": true,
+            "if_univariate": false,
             "if_trend": null,
             "has_timestamp": null,
             "if_season": null
@@ -13,20 +13,21 @@
         "recommend_model_hyper_params": {
             "input_chunk_length": 12,
             "output_chunk_length": 1,
-            "add_relative_index": true
+            "add_relative_index": true,
+            "norm": true
         }
     },
     "evaluation_config": {
         "metrics": "all",
         "strategy_args": {
-            "strategy_name": "all_detect_label",
+            "strategy_name": "unfixed_detect_label",
             "evaluation_protocol": "legacy_test_contaminated",
             "seed": 2021
         }
     },
     "report_config": {
         "aggregate_type": "mean",
-        "report_metrics": ["f_score"],
+        "report_metrics": ["affiliation_f"],
         "fill_type": "mean_value",
         "null_value_threshold": "0.3"
     }

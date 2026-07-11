@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import logging
 from typing import List, Union
 
@@ -6,6 +7,38 @@ import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+LEGACY_TEST_CONTAMINATED_PROTOCOL = "legacy_test_contaminated"
+
+
+def _strategy_evaluation_protocol(strategy_args):
+    if isinstance(strategy_args, dict):
+        config = strategy_args
+    elif isinstance(strategy_args, str):
+        try:
+            config = json.loads(strategy_args)
+        except (TypeError, json.JSONDecodeError):
+            return None
+    else:
+        return None
+    return config.get("evaluation_protocol")
+
+
+def _strategy_uses_legacy_oracle(strategy_args) -> bool:
+    return (
+        _strategy_evaluation_protocol(strategy_args)
+        == LEGACY_TEST_CONTAMINATED_PROTOCOL
+    )
+
+
+def _format_anomaly_ratio(ratio) -> str:
+    try:
+        numeric_ratio = float(ratio)
+    except (TypeError, ValueError):
+        return str(ratio)
+    if numeric_ratio.is_integer():
+        return str(int(numeric_ratio))
+    return format(numeric_ratio, ".12g")
 
 
 def _fill_null_value(result_df: pd.DataFrame, fill_type: str) -> pd.DataFrame:
@@ -36,6 +69,7 @@ def _calculate_single_metric_result(
     agg_type: str,
     nan_threshold: float,
     fill_type: str,
+    legacy_oracle: bool = False,
 ) -> pd.Series:
     """
     Calculates the leaderboard values for a single metric.
@@ -46,20 +80,54 @@ def _calculate_single_metric_result(
     :param nan_threshold: The metric for any algorithm will be set to NaN if the ratio
         of NaN values from that algorithm exceeds this threshold.
     :param fill_type: Fill method, optional values include "mean_value".
+    :param legacy_oracle: If true, reproduce the historical test-metric maximum
+        across anomaly-ratio rows. The default keeps ratios as separate experiments.
     :return: The leaderboard values for a single metric.
     """
     metric_df = full_metric_df.copy()
     metric_df["model_and_params"] = (
         metric_df["model_name"] + ";" + metric_df["model_params"]
     )
-    # todo:inf,-inf应该变成null
-    metric_df = metric_df[[metric_name, "model_and_params", "file_name"]].pivot_table(
-        values=metric_name,
-        index="file_name",
-        columns="model_and_params",
-        aggfunc="max",
-        dropna=False,
-    )
+
+    ratio_column = "typical_anomaly_ratio"
+    if not legacy_oracle and ratio_column in metric_df.columns:
+        has_ratio = metric_df[ratio_column].notna()
+        metric_df.loc[has_ratio, "model_and_params"] += metric_df.loc[
+            has_ratio, ratio_column
+        ].map(lambda ratio: f";anomaly_ratio={_format_anomaly_ratio(ratio)}")
+
+    if legacy_oracle:
+        metric_df = metric_df[
+            [metric_name, "model_and_params", "file_name"]
+        ].pivot_table(
+            values=metric_name,
+            index="file_name",
+            columns="model_and_params",
+            aggfunc="max",
+            dropna=False,
+        )
+    else:
+        pivot_columns = [metric_name, "model_and_params", "file_name"]
+        metric_records = metric_df[pivot_columns]
+        duplicate_keys = metric_records.duplicated(
+            subset=["file_name", "model_and_params"], keep=False
+        )
+        if duplicate_keys.any():
+            duplicate_examples = metric_records.loc[
+                duplicate_keys, ["file_name", "model_and_params"]
+            ].drop_duplicates()
+            raise ValueError(
+                "Duplicate leaderboard records remain after separating anomaly ratios. "
+                "Refusing to choose a test result implicitly. Examples: "
+                f"{duplicate_examples.head(5).to_dict(orient='records')}"
+            )
+        metric_df = metric_records.pivot(
+            index="file_name",
+            columns="model_and_params",
+            values=metric_name,
+        )
+
+    metric_df = metric_df.replace([np.inf, -np.inf], np.nan)
     threshold_count = float(nan_threshold) * len(metric_df)
     nan_count = metric_df.isna().sum(axis=0)
     metric_values = _fill_null_value(metric_df, fill_type).aggregate(agg_type, axis=0)
@@ -143,13 +211,33 @@ def get_leaderboard(
         log_data.columns.values, np.array(report_metrics)
     )
 
+    if log_data["strategy_args"].nunique() != 1:
+        raise ValueError("strategy_args are inconsistent in the log file.")
+    strategy_args = log_data["strategy_args"].iloc[0]
+    protocol = _strategy_evaluation_protocol(strategy_args)
+    legacy_oracle = _strategy_uses_legacy_oracle(strategy_args)
+    if legacy_oracle:
+        logger.warning(
+            "Legacy leaderboard protocol is enabled: rows with different anomaly "
+            "ratios are collapsed with aggfunc=max on test metrics. These are "
+            "test-label oracle results and must not be reported as unbiased results."
+        )
+    elif protocol is None:
+        logger.warning(
+            "Evaluation protocol is missing from these records. Anomaly ratios will "
+            "remain separate, but historical thresholds may still depend on test "
+            "scores; treat the result provenance as unknown, not unbiased."
+        )
+
     final_result = []
     for metric_name in actual_report_metrics:
-        if log_data["strategy_args"].nunique() != 1:
-            raise ValueError("strategy_args are inconsistent in the log file.")
-
         single_metric_result = _calculate_single_metric_result(
-            log_data, metric_name, aggregate_type, nan_threshold, fill_type
+            log_data,
+            metric_name,
+            aggregate_type,
+            nan_threshold,
+            fill_type,
+            legacy_oracle=legacy_oracle,
         )
         final_result.append(single_metric_result)
 

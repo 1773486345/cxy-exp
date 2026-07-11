@@ -421,18 +421,29 @@ def anomaly_detection_data_provider(data, batch_size, win_size=100, step=100, mo
     return data_loader
 
 
-def anomaly_detection_multi_data_provider(data, text, batch_size, win_size=100, step=100, mode='train'):
+def anomaly_detection_multi_data_provider(
+    data,
+    text,
+    batch_size,
+    win_size=100,
+    step=100,
+    mode="train",
+    generator=None,
+):
     dataset = MultiSegLoader(data, text, win_size, 1, mode)
 
     shuffle = False
     if mode == 'train' or mode == 'val':
         shuffle = True
 
-    data_loader = DataLoader(dataset=dataset,
-                             batch_size=batch_size,
-                             shuffle=shuffle,
-                             num_workers=0,
-                             drop_last=False)
+    data_loader = DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=0,
+        drop_last=False,
+        generator=generator,
+    )
     return data_loader
 
 def anomaly_detection_timeMMD_data_provider(data, text, batch_size, win_size=100, step=100, mode='train'):

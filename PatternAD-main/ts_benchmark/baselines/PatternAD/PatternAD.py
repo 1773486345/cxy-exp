@@ -1,3 +1,4 @@
+import math
 import time
 
 import numpy as np
@@ -56,6 +57,14 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "context_film_strength": 0.2,
     "use_conditional_scoring": True,
     "score_mask_ratio": 0.35,
+    "reconstruction_distribution": "mse",
+    "distribution_min_scale": 1e-3,
+    "distribution_max_scale": 100.0,
+    "distribution_init_scale": 1.0,
+    "student_t_df": 4.0,
+    "student_t_learn_df": True,
+    "student_t_max_df": 100.0,
+    "train_mask_seed": None,
 }
 
 
@@ -81,6 +90,53 @@ class PatternADConfig:
         self.context_film_strength = float(getattr(self, "context_film_strength", 0.2))
         self.use_conditional_scoring = bool(getattr(self, "use_conditional_scoring", True))
         self.score_mask_ratio = float(getattr(self, "score_mask_ratio", 0.35))
+        if "reconstruction_distribution" in kwargs:
+            distribution = kwargs["reconstruction_distribution"]
+        elif "distribution_mode" in kwargs:
+            distribution = kwargs["distribution_mode"]
+        elif "distribution_head" in kwargs:
+            distribution = kwargs["distribution_head"]
+        else:
+            distribution = "mse"
+        distribution = str(distribution).lower().replace("-", "_")
+        distribution_aliases = {
+            "raw": "mse",
+            "normal": "gaussian",
+            "student": "student_t",
+            "studentt": "student_t",
+        }
+        self.reconstruction_distribution = distribution_aliases.get(distribution, distribution)
+        if self.reconstruction_distribution not in {"mse", "gaussian", "student_t"}:
+            raise ValueError(
+                "reconstruction_distribution must be one of: mse, gaussian, student_t."
+            )
+        if "pattern_score_mode" not in kwargs and self.reconstruction_distribution != "mse":
+            self.pattern_score_mode = "nll"
+        self.distribution_min_scale = max(
+            float(getattr(self, "distribution_min_scale", 1e-3)), 1e-8
+        )
+        self.distribution_max_scale = max(
+            float(getattr(self, "distribution_max_scale", 100.0)),
+            self.distribution_min_scale,
+        )
+        self.distribution_init_scale = min(
+            max(
+                float(getattr(self, "distribution_init_scale", 1.0)),
+                self.distribution_min_scale,
+            ),
+            self.distribution_max_scale,
+        )
+        self.student_t_df = max(float(getattr(self, "student_t_df", 4.0)), 2.01)
+        self.student_t_learn_df = bool(getattr(self, "student_t_learn_df", True))
+        self.student_t_max_df = max(
+            float(getattr(self, "student_t_max_df", 100.0)), self.student_t_df
+        )
+        configured_mask_seed = getattr(self, "train_mask_seed", None)
+        self.train_mask_seed = int(
+            torch.initial_seed()
+            if configured_mask_seed is None
+            else configured_mask_seed
+        )
         if self.parallel_strategy not in [None, "DP"]:
             raise ValueError("Invalid value for parallel_strategy. Supported values are 'DP' and None.")
 
@@ -121,11 +177,20 @@ class JointMultivariateReconstructor(nn.Module):
         if self.context_window % 2 == 0:
             self.context_window += 1
         self.context_film_strength = float(getattr(config, "context_film_strength", 0.2))
+        self.reconstruction_distribution = str(
+            getattr(config, "reconstruction_distribution", "mse")
+        )
+        self.distribution_min_scale = float(getattr(config, "distribution_min_scale", 1e-3))
+        self.distribution_max_scale = float(getattr(config, "distribution_max_scale", 100.0))
+        self.student_t_df = float(getattr(config, "student_t_df", 4.0))
+        self.student_t_learn_df = bool(getattr(config, "student_t_learn_df", True))
+        self.student_t_max_df = float(getattr(config, "student_t_max_df", 100.0))
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.enc_in))
         self.input_proj = nn.Linear(self.enc_in, config.d_model)
         self.mask_proj = nn.Linear(self.enc_in, config.d_model)
         context_dim = self.enc_in * 6
+        self.context_control = nn.Parameter(torch.zeros(1, 1, context_dim))
         self.context_proj = nn.Sequential(
             nn.Linear(context_dim, config.d_ff),
             _activation_module(config.activation),
@@ -151,34 +216,73 @@ class JointMultivariateReconstructor(nn.Module):
             nn.Linear(config.d_model, config.d_ff),
             _activation_module(config.activation),
             nn.Dropout(config.dropout),
-            nn.Linear(config.d_ff, self.enc_in),
+            # All variants use the same sized head. MSE ignores scale/df, so
+            # distribution ablations do not change the parameter count.
+            nn.Linear(config.d_ff, 3 * self.enc_in),
         )
         nn.init.trunc_normal_(self.pos_embedding, std=0.02)
         nn.init.trunc_normal_(self.mask_token, std=0.02)
+        self._init_distribution_bias(config)
+
+    def _init_distribution_bias(self, config):
+        output_layer = self.output_proj[-1]
+        init_scale = float(getattr(config, "distribution_init_scale", 1.0))
+        scale_offset = max(init_scale - self.distribution_min_scale, 1e-6)
+        scale_bias = scale_offset if scale_offset > 20.0 else math.log(math.expm1(scale_offset))
+        df_offset = max(self.student_t_df - 2.0, 1e-6)
+        df_bias = df_offset if df_offset > 20.0 else math.log(math.expm1(df_offset))
+        with torch.no_grad():
+            output_layer.weight[self.enc_in:, :].zero_()
+            output_layer.bias[self.enc_in:2 * self.enc_in].fill_(scale_bias)
+            output_layer.bias[2 * self.enc_in:].fill_(df_bias)
 
     @staticmethod
     def _odd_window(window):
         window = max(3, int(window))
         return window + 1 if window % 2 == 0 else window
 
-    def _rolling_mean(self, x, window):
+    def _masked_rolling_mean(self, x, valid, window):
         window = self._odd_window(window)
         radius = window // 2
-        xt = x.transpose(1, 2)
-        padded = F.pad(xt, (radius, radius), mode="replicate")
-        return F.avg_pool1d(padded, kernel_size=window, stride=1).transpose(1, 2)
+        valid = valid.to(dtype=x.dtype)
+        values = torch.where(valid.bool(), x, torch.zeros_like(x)).transpose(1, 2)
+        weights = valid.transpose(1, 2)
+        value_sum = F.avg_pool1d(
+            F.pad(values, (radius, radius), mode="replicate"),
+            kernel_size=window,
+            stride=1,
+        ) * window
+        weight_sum = F.avg_pool1d(
+            F.pad(weights, (radius, radius), mode="replicate"),
+            kernel_size=window,
+            stride=1,
+        ) * window
+        mean = value_sum / weight_sum.clamp_min(1.0)
+        mean = torch.where(weight_sum > 0, mean, torch.zeros_like(mean))
+        return mean.transpose(1, 2)
 
     def _context_features(self, x, mask):
-        local_mean = self._rolling_mean(x, self.context_window)
-        local_mean_sq = self._rolling_mean(x * x, self.context_window)
+        valid = torch.ones_like(x, dtype=torch.bool) if mask is None else ~mask.bool()
+        local_mean = self._masked_rolling_mean(x, valid, self.context_window)
+        local_mean_sq = self._masked_rolling_mean(x * x, valid, self.context_window)
         local_std = torch.sqrt(torch.clamp(local_mean_sq - local_mean * local_mean, min=0.0) + 1e-6)
 
         diff = torch.zeros_like(x)
         diff[:, 1:, :] = x[:, 1:, :] - x[:, :-1, :]
-        trend = self._rolling_mean(diff, self.context_window)
-        high_freq = x - local_mean
+        diff_valid = torch.zeros_like(valid)
+        diff_valid[:, 1:, :] = valid[:, 1:, :] & valid[:, :-1, :]
+        trend = self._masked_rolling_mean(diff, diff_valid, self.context_window)
+        context_x = torch.where(valid, x, local_mean)
+        high_freq = torch.where(valid, x - local_mean, torch.zeros_like(x))
         mask_float = torch.zeros_like(x) if mask is None else mask.float()
-        return torch.cat([x, local_mean, local_std, trend, high_freq, mask_float], dim=-1)
+        return torch.cat(
+            [context_x, local_mean, local_std, trend, high_freq, mask_float], dim=-1
+        )
+
+    def _conditioning_features(self, x, mask):
+        if self.use_context_conditioning:
+            return self._context_features(x, mask)
+        return self.context_control.expand(x.shape[0], x.shape[1], -1)
 
     def forward(self, x, mask=None):
         if x.ndim != 3:
@@ -198,16 +302,27 @@ class JointMultivariateReconstructor(nn.Module):
         if mask is not None:
             h = h + self.mask_proj(mask.float())
 
-        if self.use_context_conditioning:
-            context = self.context_proj(self._context_features(x_in, mask))
-            gamma, beta = self.film(context).chunk(2, dim=-1)
-            strength = self.context_film_strength
-            h = h + context
-            h = h * (1.0 + strength * torch.tanh(gamma)) + strength * beta
-            h = self.pre_encoder_norm(h)
+        # C1 uses target-blind visible context. C0 sends a learned dataset-level
+        # constant through the same projection and FiLM path.
+        context = self.context_proj(self._conditioning_features(x, mask))
+        gamma, beta = self.film(context).chunk(2, dim=-1)
+        strength = self.context_film_strength
+        h = h + context
+        h = h * (1.0 + strength * torch.tanh(gamma)) + strength * beta
+        h = self.pre_encoder_norm(h)
 
         h = self.encoder(h)
-        return self.output_proj(self.norm(h))
+        mean, raw_scale, raw_df = self.output_proj(self.norm(h)).chunk(3, dim=-1)
+        scale = F.softplus(raw_scale) + self.distribution_min_scale
+        scale = scale.clamp(max=self.distribution_max_scale)
+        if self.student_t_learn_df:
+            df = 2.0 + F.softplus(raw_df)
+            df = df.clamp(max=self.student_t_max_df)
+        else:
+            df = torch.full_like(mean, self.student_t_df)
+        if self.reconstruction_distribution == "mse":
+            return mean
+        return {"mean": mean, "scale": scale, "df": df}
 
 
 class PatternAD:
@@ -222,6 +337,7 @@ class PatternAD:
         self.pattern_scorer = None
         self.model = None
         self.early_stopping = None
+        self._train_mask_generators = {}
 
     @staticmethod
     def required_hyper_params() -> dict:
@@ -257,10 +373,16 @@ class PatternAD:
             risk_strength=getattr(self.config, "pattern_score_risk_strength", 0.15),
             min_weight=getattr(self.config, "pattern_score_min_weight", 0.5),
             max_weight=getattr(self.config, "pattern_score_max_weight", 1.5),
+            distribution=getattr(self.config, "reconstruction_distribution", "mse"),
         )
 
     @staticmethod
     def _align_output_to_true(outputs, true):
+        if isinstance(outputs, dict):
+            return {
+                name: PatternAD._align_output_to_true(value, true)
+                for name, value in outputs.items()
+            }
         if outputs.shape == true.shape:
             return outputs
         if outputs.ndim == true.ndim and outputs.shape[:2] == true.shape[:2]:
@@ -270,48 +392,147 @@ class PatternAD:
     def _forward_backbone(self, batch_x_time, mask=None):
         return self.model(batch_x_time, mask)
 
+    @staticmethod
+    def _output_mean(outputs):
+        if isinstance(outputs, dict):
+            if "mean" not in outputs:
+                raise ValueError("Distribution output is missing its mean tensor.")
+            return outputs["mean"]
+        return outputs
+
+    @staticmethod
+    def _distribution_params(outputs):
+        if not isinstance(outputs, dict):
+            return None
+        return {name: outputs[name] for name in ("scale", "df") if name in outputs}
+
+    def _train_mask_generator(self, device):
+        key = str(device)
+        if key not in self._train_mask_generators:
+            generator = torch.Generator(device=device)
+            generator.manual_seed(self.config.train_mask_seed)
+            self._train_mask_generators[key] = generator
+        return self._train_mask_generators[key]
+
     def _mask_input(self, batch_x_time):
         ratio = float(getattr(self.config, "train_mask_ratio", 0.0))
         variable_ratio = float(getattr(self.config, "train_variable_mask_ratio", 0.0))
+        generator = self._train_mask_generator(batch_x_time.device)
         keep = torch.ones_like(batch_x_time, dtype=torch.bool)
         if ratio > 0:
-            keep = keep & (torch.rand_like(batch_x_time) > ratio)
+            point_random = torch.rand(
+                batch_x_time.shape,
+                dtype=batch_x_time.dtype,
+                device=batch_x_time.device,
+                generator=generator,
+            )
+            keep = keep & (point_random > ratio)
         if variable_ratio > 0:
             variable_keep = torch.rand(
                 batch_x_time.shape[0],
                 1,
                 batch_x_time.shape[-1],
                 device=batch_x_time.device,
+                generator=generator,
             ) > variable_ratio
             keep = keep & variable_keep
         masked_positions = ~keep
         return batch_x_time * keep.float(), masked_positions
 
-    def _score_mask_input(self, batch_x_time):
-        if not bool(getattr(self.config, "use_conditional_scoring", True)):
-            return batch_x_time, None
-
+    def _complementary_score_masks(self, batch_x_time):
+        """Partition every [time, variable] position across score passes."""
+        if batch_x_time.shape[-1] <= 1:
+            raise ValueError("Complementary scoring requires at least two variables.")
         ratio = float(getattr(self.config, "score_mask_ratio", 0.35))
-        ratio = min(max(ratio, 1.0 / max(batch_x_time.shape[-1], 1)), 0.8)
-        period = max(2, int(round(1.0 / ratio)))
+        ratio = min(max(ratio, 1e-6), 0.8)
+        group_count = min(
+            batch_x_time.shape[-1],
+            max(2, int(math.ceil(1.0 / ratio))),
+        )
         t = torch.arange(batch_x_time.shape[1], device=batch_x_time.device).unsqueeze(1)
         d = torch.arange(batch_x_time.shape[2], device=batch_x_time.device).unsqueeze(0)
-        base = ((t + 2 * d) % period) == 0
-        empty_rows = ~base.any(dim=1)
-        if empty_rows.any():
-            row_idx = torch.arange(batch_x_time.shape[1], device=batch_x_time.device)[empty_rows]
-            base[empty_rows, row_idx % batch_x_time.shape[2]] = True
-        score_mask = base.unsqueeze(0).expand(batch_x_time.shape[0], -1, -1)
+        assignment = (t + d) % group_count
+        return tuple(
+            (assignment == group).unsqueeze(0).expand(batch_x_time.shape[0], -1, -1)
+            for group in range(group_count)
+        )
+
+    def _score_mask_input(self, batch_x_time):
+        """Return the first score mask for backward-compatible diagnostics."""
+        if not bool(getattr(self.config, "use_conditional_scoring", True)):
+            return batch_x_time, None
+        score_mask = self._complementary_score_masks(batch_x_time)[0]
         return batch_x_time.masked_fill(score_mask, 0.0), score_mask
 
+    def _predict_for_scoring(self, batch_x_time, force_conditional=False):
+        use_conditional = bool(
+            force_conditional
+            or getattr(self.config, "use_conditional_scoring", True)
+        )
+        if not use_conditional:
+            outputs = self._forward_backbone(batch_x_time, None)
+            return self._align_output_to_true(outputs, batch_x_time), None
+
+        combined = None
+        coverage = torch.zeros_like(batch_x_time, dtype=torch.int8)
+        for score_mask in self._complementary_score_masks(batch_x_time):
+            score_input = batch_x_time.masked_fill(score_mask, 0.0)
+            current = self._align_output_to_true(
+                self._forward_backbone(score_input, score_mask), batch_x_time
+            )
+            if not isinstance(current, dict):
+                current = {"mean": current}
+            if combined is None:
+                combined = {name: torch.zeros_like(value) for name, value in current.items()}
+            mask_float = score_mask.to(dtype=batch_x_time.dtype)
+            for name, value in current.items():
+                combined[name] = combined[name] + value * mask_float
+            coverage = coverage + score_mask.to(dtype=coverage.dtype)
+
+        if not torch.all(coverage == 1):
+            raise RuntimeError("Complementary score masks must cover every position exactly once.")
+        return combined, coverage.bool()
+
+    def _elementwise_reconstruction_loss(self, outputs, target):
+        mean = self._output_mean(outputs)
+        distribution = getattr(self.config, "reconstruction_distribution", "mse")
+        if distribution == "mse":
+            return (mean - target) ** 2
+        if not isinstance(outputs, dict) or "scale" not in outputs:
+            raise ValueError(f"{distribution} loss requires a predicted scale tensor.")
+
+        scale = outputs["scale"].clamp_min(self.config.distribution_min_scale)
+        standardized = (target - mean) / scale
+        if distribution == "gaussian":
+            return 0.5 * standardized.square() + torch.log(scale) + 0.5 * math.log(2.0 * math.pi)
+
+        if "df" not in outputs:
+            raise ValueError("student_t loss requires a predicted df tensor.")
+        df = outputs["df"].clamp_min(2.0 + 1e-6)
+        return (
+            torch.lgamma(0.5 * df)
+            - torch.lgamma(0.5 * (df + 1.0))
+            + 0.5 * (torch.log(df) + math.log(math.pi))
+            + torch.log(scale)
+            + 0.5 * (df + 1.0) * torch.log1p(standardized.square() / df)
+        )
+
     def _reconstruction_loss(self, outputs, target, masked_positions):
-        squared_error = (outputs - target) ** 2
-        full_loss = squared_error.mean()
-        if masked_positions.any():
-            masked_loss = squared_error[masked_positions].mean()
+        elementwise_loss = self._elementwise_reconstruction_loss(outputs, target)
+        if masked_positions is not None and masked_positions.any():
+            masked_loss = elementwise_loss[masked_positions].mean()
         else:
-            masked_loss = full_loss
-        return masked_loss + self.config.reconstruction_full_loss_weight * full_loss
+            masked_loss = elementwise_loss.mean()
+
+        # On visible positions a probabilistic decoder can copy the target and
+        # reduce NLL only by collapsing its scale. Keep the auxiliary full-window
+        # term on the conditional mean so scale/df are learned from hidden targets.
+        mean = self._output_mean(outputs)
+        full_mean_loss = ((mean - target) ** 2).mean()
+        return (
+            masked_loss
+            + self.config.reconstruction_full_loss_weight * full_mean_loss
+        )
 
     @staticmethod
     def _windows_to_point_scores(window_scores: np.ndarray, total_len: int) -> np.ndarray:
@@ -343,16 +564,34 @@ class PatternAD:
         with torch.no_grad():
             for batch_x_time, _, _, _ in data_loader:
                 batch_x_time = batch_x_time.float().to(self.device)
-                score_input, score_mask = self._score_mask_input(batch_x_time)
-                outputs = self._forward_backbone(score_input, score_mask)
-                outputs = self._align_output_to_true(outputs, batch_x_time)
+                outputs, score_mask = self._predict_for_scoring(batch_x_time)
                 window_scores.append(
-                    self.pattern_scorer.score_windows(batch_x_time, outputs, score_mask=score_mask)
+                    self.pattern_scorer.score_windows(
+                        batch_x_time,
+                        self._output_mean(outputs),
+                        score_mask=score_mask,
+                        distribution_params=self._distribution_params(outputs),
+                    )
                 )
 
         return self._windows_to_point_scores(np.concatenate(window_scores, axis=0), total_len)
 
     def _fit_pattern_scorer(self, data_loader):
+        self.pattern_scorer = self._build_pattern_scorer()
+        score_mode = str(getattr(self.config, "pattern_score_mode", "raw")).lower()
+        if score_mode in {
+            "raw",
+            "nll",
+            "distribution_nll",
+            "conditional_nll",
+            "auto",
+        }:
+            # Raw residual and distribution NLL do not use fitted legacy
+            # component statistics. Avoid materializing large float64 window
+            # tensors solely to toggle the scorer's fitted guard.
+            self.pattern_scorer.fitted = True
+            return
+
         self.model.load_state_dict(self.early_stopping.check_point)
         self.model.to(self.device)
         self.model.eval()
@@ -363,15 +602,13 @@ class PatternAD:
         with torch.no_grad():
             for batch_x_time, _, _, _ in data_loader:
                 batch_x_time = batch_x_time.float().to(self.device)
-                fit_input, fit_mask = self._score_mask_input(batch_x_time)
-                outputs = self._forward_backbone(fit_input, fit_mask)
-                outputs = self._align_output_to_true(outputs, batch_x_time)
+                outputs, _ = self._predict_for_scoring(batch_x_time)
 
                 take = min(batch_x_time.shape[0], max_windows - collected_windows)
                 if take <= 0:
                     break
                 true_windows.append(batch_x_time[:take].detach().cpu().numpy())
-                pred_windows.append(outputs[:take].detach().cpu().numpy())
+                pred_windows.append(self._output_mean(outputs)[:take].detach().cpu().numpy())
                 collected_windows += take
                 if collected_windows >= max_windows:
                     break
@@ -379,7 +616,6 @@ class PatternAD:
         if not true_windows:
             raise RuntimeError("No windows collected for pattern-aware scorer calibration.")
 
-        self.pattern_scorer = self._build_pattern_scorer()
         self.pattern_scorer.fit(
             np.concatenate(true_windows, axis=0),
             np.concatenate(pred_windows, axis=0),
@@ -392,10 +628,12 @@ class PatternAD:
         with torch.no_grad():
             for batch_x_time, _, _, _ in valid_data_loader:
                 batch_x_time = batch_x_time.float().to(self.device)
-                valid_input, valid_mask = self._score_mask_input(batch_x_time)
-                outputs = self._forward_backbone(valid_input, valid_mask)
-                outputs = self._align_output_to_true(outputs, batch_x_time)
-                loss = self._reconstruction_loss(outputs, batch_x_time, valid_mask) if valid_mask is not None else criterion(outputs, batch_x_time)
+                # Checkpoint selection is held fixed across A/B cells. The M
+                # factor changes final scoring only, not validation semantics.
+                outputs, valid_mask = self._predict_for_scoring(
+                    batch_x_time, force_conditional=True
+                )
+                loss = self._reconstruction_loss(outputs, batch_x_time, valid_mask)
                 total_loss.append(loss.detach().cpu().numpy())
 
         self.model.train()
@@ -405,6 +643,7 @@ class PatternAD:
         self.detect_hyper_param_tune(train_data)
         setattr(self.config, "task_name", "anomaly_detection")
         self.model = JointMultivariateReconstructor(self.config)
+        self._train_mask_generators = {}
 
         train_data_value, valid_data = train_val_split(train_data, 0.8, None)
         train_data_text, valid_text = train_val_split(train_text, 0.8, None)
@@ -429,11 +668,27 @@ class PatternAD:
         self.train_data_value = train_data_value
         self.train_data_text = train_data_text
 
+        train_loader_generator = torch.Generator()
+        train_loader_generator.manual_seed(self.config.train_mask_seed)
+        valid_loader_generator = torch.Generator()
+        valid_loader_generator.manual_seed(self.config.train_mask_seed + 1)
         self.valid_data_loader = anomaly_detection_multi_data_provider(
-            valid_data, valid_text, batch_size=self.config.batch_size, win_size=self.config.seq_len, step=1, mode="val"
+            valid_data,
+            valid_text,
+            batch_size=self.config.batch_size,
+            win_size=self.config.seq_len,
+            step=1,
+            mode="val",
+            generator=valid_loader_generator,
         )
         self.train_data_loader = anomaly_detection_multi_data_provider(
-            train_data_value, train_data_text, batch_size=self.config.batch_size, win_size=self.config.seq_len, step=1, mode="train"
+            train_data_value,
+            train_data_text,
+            batch_size=self.config.batch_size,
+            win_size=self.config.seq_len,
+            step=1,
+            mode="train",
+            generator=train_loader_generator,
         )
 
         criterion = nn.MSELoss()
