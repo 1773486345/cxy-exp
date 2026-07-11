@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "experiment_name": "patternad_factorial_v1",
-  "description": "Minimal C x D ablation with complementary scoring fixed in A cells and M0 diagnostics in B cells.",
+  "experiment_name": "patternad_factorial_v2",
+  "description": "Minimal C x D ablation with normal-only context-stratified tail calibration and complementary scoring fixed in A cells.",
   "benchmark": {
     "script": "scripts/run_benchmark.py",
     "config_path": "unfixed_detect_label_multi_config.json",
@@ -39,7 +39,7 @@
     "train_mask_ratio": 0.25,
     "train_variable_mask_ratio": 0.15,
     "reconstruction_full_loss_weight": 0.1,
-    "reconstruction_transition_loss_weight": 0.1,
+    "reconstruction_transition_loss_weight": 0.0,
     "use_context_scale_prior": true,
     "context_scale_floor": 0.05,
     "context_scale_prior_mix": 0.5,
@@ -54,6 +54,10 @@
     "pattern_score_components": ["raw"],
     "pattern_score_aggregation": "mean",
     "pattern_score_use_calibration": false,
+    "pattern_score_contextual_calibration_bins": 4,
+    "pattern_score_contextual_calibration_min_bin_size": 128,
+    "pattern_score_contextual_calibration_shrinkage": 128.0,
+    "pattern_score_contextual_calibration_max_cells": 500000,
     "parallel_strategy": "DP"
   },
   "variants": {
@@ -78,22 +82,24 @@
       }
     },
     "A01": {
-      "description": "C0/D1/M1: learned constant-context Gaussian complementary control.",
+      "description": "C0/D1/M1: learned constant-context Gaussian with normal-only scale-stratified empirical tail calibration.",
       "factors": {"context": "C0", "distribution": "D1", "mask": "M1"},
       "hyperparameters": {
         "use_context_conditioning": false,
         "reconstruction_distribution": "gaussian",
-        "pattern_score_mode": "tail_probability",
+        "reconstruction_transition_loss_weight": 0.0,
+        "pattern_score_mode": "contextual_tail_probability",
         "use_conditional_scoring": true
       }
     },
     "A11": {
-      "description": "C1/D1/M1: visible context and heteroscedastic Gaussian complementary scoring.",
+      "description": "C1/D1/M1: visible context and heteroscedastic Gaussian with normal-only scale-stratified empirical tail calibration.",
       "factors": {"context": "C1", "distribution": "D1", "mask": "M1"},
       "hyperparameters": {
         "use_context_conditioning": true,
         "reconstruction_distribution": "gaussian",
-        "pattern_score_mode": "tail_probability",
+        "reconstruction_transition_loss_weight": 0.0,
+        "pattern_score_mode": "contextual_tail_probability",
         "use_conditional_scoring": true
       }
     },
@@ -113,6 +119,7 @@
       "hyperparameters": {
         "use_context_conditioning": true,
         "reconstruction_distribution": "gaussian",
+        "reconstruction_transition_loss_weight": 0.0,
         "pattern_score_mode": "tail_probability",
         "use_conditional_scoring": false
       }

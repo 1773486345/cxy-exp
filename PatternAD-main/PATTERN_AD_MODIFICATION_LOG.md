@@ -16,7 +16,7 @@ The model is no longer treated as an optional switch on top of the previous LLM-
 
 `PatternAD` now uses a context-conditioned denoising reconstruction backbone. Each time step is encoded as a full multivariate state, and mask-aware local scale, trend, high-frequency activity, and mask structure are injected into the reconstruction backbone through FiLM-style conditioning before the Transformer encoder. Training masks both individual variable points and whole variable traces inside a window, forcing the model to recover missing values from temporal context and cross-variable evidence.
 
-Inference now uses complementary conditional reconstruction. Deterministic mask passes partition the full time-variable grid, so every target is hidden and scored exactly once. The compatibility default remains MSE/raw residual. Gaussian and Student-t conditional distributions are opt-in and use NLL scoring; the strict first-stage factorial experiment uses Gaussian before considering Student-t robustness.
+Inference now uses complementary conditional reconstruction. Deterministic mask passes partition the full time-variable grid, so every target is hidden and scored exactly once. The compatibility default remains MSE/raw residual. Gaussian and Student-t conditional distributions are opt-in and use conditional two-sided tail surprisal by default; density NLL remains an explicit diagnostic mode. The strict first-stage factorial experiment uses Gaussian before considering Student-t robustness.
 
 The previous post-hoc aggregate scorer and reliability-weighted scorer remain in `pattern_scoring.py` only for explicit ablation. They are not the current default path because the raw-control experiments showed that handcrafted score aggregation/reweighting is weaker than improving the reconstruction process directly.
 
@@ -76,7 +76,7 @@ This makes the implementation match direction A: not anomaly type classification
 
 ## Scoring Components
 
-The compatibility default score is `raw`: mean squared reconstruction residual from complementary conditional predictions. Gaussian and Student-t use distribution NLL when `pattern_score_mode="nll"`; selecting a non-MSE distribution without an explicit score mode switches to NLL automatically. The following components are retained only as legacy ablation utilities in `pattern_scoring.py`:
+The compatibility default score is `raw`: mean squared reconstruction residual from complementary conditional predictions. Gaussian and Student-t use density NLL only when `pattern_score_mode="nll"`; selecting a non-MSE distribution without an explicit score mode switches to conditional two-sided tail surprisal. The following components are retained only as legacy ablation utilities in `pattern_scoring.py`:
 
 - `scale`: residual normalized by local rolling variance.
 - `trend`: residual between rolling trend estimates of the input and reconstruction.
@@ -525,7 +525,12 @@ PatternAD_raw = no context conditioning + no conditional scoring + raw residual
 Validation status in the local workspace:
 
 ```text
-The patternad_env Conda environment is available in the current workspace.
+The canonical server environment is the global Conda environment
+`patternad_env` at
+`/media/h3c/users/wangyueyang1/.env/envs/patternad_env` (Python 3.8.20), invoked
+through `/media/h3c/users/shared_app/miniconda3/bin/conda`. All PatternAD tests
+and experiments should use this environment rather than searching for or
+creating a similarly named replacement.
 Focused model/protocol unit tests pass under that environment.
 One-epoch MSE and Gaussian fit-to-score smoke tests return finite, length-aligned scores.
 ```
@@ -780,3 +785,13 @@ Transition diagnostics showed that the conditional-mean transition residual itse
 The 30-epoch derived-transition run completed in `dev_transition_likelihood_full`. A11 retained level macro AP `0.1254`, same-deviation ordering `2/3`, and transition standardized-residual ordering `2/2` with margins `+0.1083` and `+0.0438`. However, its learned transition scale was nearly constant (`1.22-1.25`) across contexts. Unconditionally adding transition tail surprisal destroyed same-deviation ordering. Two deterministic gates were rejected: normalized local slope and a left/right change-point statistic had similar event means in abrupt, gradual, and volatile contexts and did not protect regime calibration.
 
 The transition scale now has its own target-blind visible-difference prior, analogous to the level-scale prior. A separate transition head directly predicts normalized `delta_mu` and transition-scale correction instead of subtracting two independently reconstructed level means. All variants instantiate the same head. One-epoch A11 retained macro AP `0.1284` and same-deviation `2/3`; transition standardized-residual ordering remained `2/2`, although the second margin was only `+0.0073`. The head is not combined into the main score until a full run confirms this margin.
+
+The 30-epoch explicit-transition-head run retained level macro AP `0.1262` and same-deviation `2/3`. Raw transition residual stayed `2/2`, but transition standardized residual finished at `1/2`; the second margin was `-0.0014`, effectively tied but not stable. Raising transition-loss weight from `0.1` to `0.5` did not improve the one-epoch margin (`+0.0055` versus `+0.0073`) and slightly reduced macro AP. Unconditional joint scoring, normalized-slope gating, and left/right change-point gating were all rejected. During P1-v1 the transition head remained auxiliary/diagnostic, was absent from the anomaly score, and its `0.1` auxiliary loss was applied only to D1 cells.
+
+## 2026-07-12 P1 Result And Context-Stratified Tail Calibration
+
+The complete P1-v1 crossed grid finished all 120 identities without failures. A11 improved macro AP over A00 by `0.063709` (95% crossed-bootstrap CI `[0.052872, 0.075587]`) and improved A11-A01 matched ordering by `0.186667` (`[0.066667, 0.293333]`). The registered regime-FPR criterion failed: the relative reduction against A00 was only `11.46%`, below `25%`, with a CI spanning zero. A11 also reduced abrupt/gradual ordering to `0.116667`; dependency-break AP remained below prevalence. Direction A therefore has a supported same-deviation mechanism but cannot advance to the real-data matrix in its v1 form.
+
+The failed transition family is now closed. Its auxiliary loss is zero in every formal cell, removing a D1/D0 training-objective confound. P1-v2 replaces the uncalibrated theoretical Gaussian tail with a normal-only context-stratified empirical tail. Target-blind predicted log-scale defines four quantile bins; each bin's empirical survival probability is shrunk toward the global ECDF, with undersized bins falling back completely to the global reference. The map is fitted only on masked residuals from the model fit split. Outer temporal calibration data, test values, and all labels are excluded. Scores remain monotone in absolute standardized residual within each bin and finite for values beyond the reference maximum.
+
+Expanded P1-v1 cells were consolidated from more than 1,300 files into `result/patternad_synthetic/p1_contextual_dev_v1/p1_raw_cells_20260712.tar.gz` (SHA256 `5b1be39f8942251289c7561f5ceac80362f4f0587d944e2cac68b8b5c6f77d34`). The strict summary, run plan, and frozen inputs remain unpacked. Regenerable seeds 3102-3110, obsolete single-seed prototype trees, old Weather P0 expansions, stale label results, and caches were removed. Runtime `result/` and generated synthetic seed directories are now ignored so future experiments do not dirty locked-run provenance.

@@ -37,6 +37,9 @@ class PatternAwareScorer:
         min_weight=0.5,
         max_weight=1.5,
         distribution="mse",
+        contextual_calibration_bins=4,
+        contextual_calibration_min_bin_size=128,
+        contextual_calibration_shrinkage=128.0,
     ):
         self.components = tuple(components or self.DEFAULT_COMPONENTS)
         self.local_window = max(3, int(local_window))
@@ -51,6 +54,15 @@ class PatternAwareScorer:
         self.risk_strength = float(risk_strength)
         self.min_weight = float(min_weight)
         self.max_weight = float(max_weight)
+        self.contextual_calibration_bins = max(
+            1, int(contextual_calibration_bins)
+        )
+        self.contextual_calibration_min_bin_size = max(
+            1, int(contextual_calibration_min_bin_size)
+        )
+        self.contextual_calibration_shrinkage = max(
+            0.0, float(contextual_calibration_shrinkage)
+        )
         distribution = str(distribution).lower().replace("-", "_")
         aliases = {
             "raw": "mse",
@@ -62,6 +74,7 @@ class PatternAwareScorer:
         if self.distribution not in {"mse", "gaussian", "student_t"}:
             raise ValueError("distribution must be one of: mse, gaussian, student_t.")
         self.stats = {}
+        self.contextual_calibration = None
         self.fitted = False
 
     @staticmethod
@@ -192,6 +205,142 @@ class PatternAwareScorer:
                 self.stats[name] = self._robust_stat(value, self.eps)
         self.fitted = True
         return self
+
+    def fit_contextual_tail(
+        self,
+        true_windows,
+        pred_windows,
+        distribution_params,
+        score_mask=None,
+    ):
+        """Fit a target-blind scale-stratified empirical residual CDF."""
+        true = self._as_numpy(true_windows)
+        pred = self._as_numpy(pred_windows)
+        if true.shape != pred.shape:
+            raise ValueError(
+                "PatternAwareScorer true/pred shape mismatch: "
+                f"{true.shape} vs {pred.shape}"
+            )
+        if self.distribution == "mse":
+            raise ValueError("Contextual tail calibration requires a distribution scale.")
+        if not distribution_params or "scale" not in distribution_params:
+            raise ValueError("Contextual tail calibration requires scale parameters.")
+        scale = self._as_numpy(distribution_params["scale"])
+        if scale.shape != true.shape:
+            raise ValueError(
+                "PatternAwareScorer scale shape mismatch: "
+                f"{scale.shape} vs {true.shape}"
+            )
+        if np.any(scale <= 0) or not np.all(np.isfinite(scale)):
+            raise ValueError("Distribution scale must be finite and strictly positive.")
+
+        selected = np.ones(true.shape, dtype=bool)
+        if score_mask is not None:
+            selected = np.asarray(
+                score_mask.detach().cpu().numpy()
+                if hasattr(score_mask, "detach")
+                else score_mask,
+                dtype=bool,
+            )
+            if selected.shape != true.shape:
+                raise ValueError(
+                    "PatternAwareScorer score_mask shape mismatch: "
+                    f"{selected.shape} vs {true.shape}"
+                )
+        standardized = np.abs((true - pred) / np.maximum(scale, self.eps))
+        log_scale = np.log(scale)
+        finite = selected & np.isfinite(standardized) & np.isfinite(log_scale)
+        residual_values = standardized[finite]
+        context_values = log_scale[finite]
+        if residual_values.size < 2:
+            raise ValueError(
+                "Contextual tail calibration requires at least two finite cells."
+            )
+
+        requested_edges = np.quantile(
+            context_values,
+            np.linspace(0.0, 1.0, self.contextual_calibration_bins + 1)[1:-1],
+        )
+        bin_edges = np.unique(np.asarray(requested_edges, dtype=np.float64))
+        assignments = np.searchsorted(bin_edges, context_values, side="right")
+        references = []
+        for bin_index in range(bin_edges.size + 1):
+            references.append(np.sort(residual_values[assignments == bin_index]))
+        self.contextual_calibration = {
+            "bin_edges": bin_edges,
+            "global_reference": np.sort(residual_values),
+            "bin_references": references,
+        }
+        self.fitted = True
+        return self
+
+    @staticmethod
+    def _empirical_survival(values, reference):
+        reference = np.asarray(reference, dtype=np.float64)
+        values = np.asarray(values, dtype=np.float64)
+        tail_count = reference.size - np.searchsorted(
+            reference, values, side="left"
+        )
+        return (tail_count + 1.0) / (reference.size + 1.0)
+
+    def contextual_calibration_summary(self):
+        if self.contextual_calibration is None:
+            return None
+        return {
+            "bin_edges": self.contextual_calibration["bin_edges"].tolist(),
+            "global_count": int(
+                self.contextual_calibration["global_reference"].size
+            ),
+            "bin_counts": [
+                int(reference.size)
+                for reference in self.contextual_calibration["bin_references"]
+            ],
+            "minimum_bin_size": self.contextual_calibration_min_bin_size,
+            "shrinkage": self.contextual_calibration_shrinkage,
+        }
+
+    def _contextual_tail_surprisal(
+        self, true_windows, pred_windows, distribution_params
+    ):
+        if self.contextual_calibration is None:
+            raise RuntimeError(
+                "Contextual tail calibration must be fitted before scoring."
+            )
+        true = self._as_numpy(true_windows)
+        pred = self._as_numpy(pred_windows)
+        if not distribution_params or "scale" not in distribution_params:
+            raise ValueError("Contextual tail scoring requires scale parameters.")
+        scale = self._as_numpy(distribution_params["scale"])
+        if true.shape != pred.shape or scale.shape != true.shape:
+            raise ValueError("Contextual tail inputs must have identical shapes.")
+        if np.any(scale <= 0) or not np.all(np.isfinite(scale)):
+            raise ValueError("Distribution scale must be finite and strictly positive.")
+
+        standardized = np.abs((true - pred) / np.maximum(scale, self.eps))
+        log_scale = np.log(scale)
+        calibration = self.contextual_calibration
+        assignments = np.searchsorted(
+            calibration["bin_edges"], log_scale, side="right"
+        )
+        global_probability = self._empirical_survival(
+            standardized, calibration["global_reference"]
+        )
+        probability = global_probability.copy()
+        for bin_index, reference in enumerate(calibration["bin_references"]):
+            selected = assignments == bin_index
+            if not selected.any() or reference.size < self.contextual_calibration_min_bin_size:
+                continue
+            local_probability = self._empirical_survival(
+                standardized[selected], reference
+            )
+            weight = reference.size / (
+                reference.size + self.contextual_calibration_shrinkage
+            )
+            probability[selected] = (
+                weight * local_probability
+                + (1.0 - weight) * global_probability[selected]
+            )
+        return -np.log(np.maximum(probability, self.eps))
 
     def _distribution_nll(self, true_windows, pred_windows, distribution_params):
         true = self._as_numpy(true_windows)
@@ -389,6 +538,20 @@ class PatternAwareScorer:
                     true_windows, pred_windows, score_mask=score_mask
                 )
             cell_tail = self._distribution_tail_surprisal(
+                true_windows, pred_windows, distribution_params
+            )
+            return self._aggregate_cell_scores(cell_tail, score_mask=score_mask)
+
+        if mode in {
+            "contextual_tail_probability",
+            "context_calibrated_tail",
+            "calibrated_tail_probability",
+        }:
+            if self.distribution == "mse":
+                return self._raw_residual_score(
+                    true_windows, pred_windows, score_mask=score_mask
+                )
+            cell_tail = self._contextual_tail_surprisal(
                 true_windows, pred_windows, distribution_params
             )
             return self._aggregate_cell_scores(cell_tail, score_mask=score_mask)

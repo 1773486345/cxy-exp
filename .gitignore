@@ -10,3 +10,5 @@ __pycache__/
 .vscode/
 .DS_Store
 Thumbs.db
+PatternAD-main/result/
+PatternAD-main/artifacts/patternad_synthetic/contextual_v1/seed_*/

@@ -62,8 +62,8 @@ D0: deterministic mean
 D1: heteroscedastic Gaussian
     输出：mu(x_visible, c), log_sigma(x_visible, c)
     训练目标：masked Gaussian NLL + 固定权重的 full mean-MSE
-             + masked transition Gaussian NLL（当前开发权重 0.1）
-    分数：-log(2 * GaussianSF(|x-mu| / sigma))，即条件双尾罕见度
+    分数：在正常训练残差上按 target-blind predicted scale 分箱，
+          用向全局 ECDF 收缩的经验双尾概率计算 -log(p)
 ```
 
 实现约束：
@@ -71,6 +71,8 @@ D1: heteroscedastic Gaussian
 - `sigma` 只能由 masked input 和 visible context 预测，不能接收真实 target 或 realized residual。
 - 对 `log_sigma` 使用数值边界和 variance floor；记录落到上下界的比例。
 - D0 与 D1 使用相同的 `mu` backbone、训练窗口、mask schedule、epoch budget 和 early-stop patience。
+- transition auxiliary 已在 P1-v1 证明不稳定且不进入最终分数，所有正式 cell 的权重统一为 0，避免污染 distribution 主效应。
+- empirical tail calibration 只使用模型 fit split 的正常 masked residual；外层 temporal calibration 和测试集不参与 calibration map 拟合。
 - Gaussian 是机制识别版本。只有 D1 明确有效后，再把 Student-t 作为二阶段 robustness 优化；否则无法判断收益来自 conditional scale 还是 heavy tail。
 - Density NLL 只作为训练目标和显式消融保留。异方差 density 的 `log(sigma)` 归一化项会改变跨 regime 排序，不能直接等同于“在当前背景下有多罕见”。
 
@@ -224,7 +226,7 @@ SMD 其余 23 台机器
 ```text
 开发：2021, 2022, 2023
 锁定确认：2021, 2022, 2023, 2024, 2025
-合成机制：20 个 generator seeds，每个 generator seed 固定 paired model seeds
+合成机制：20 个 generator seeds；development 将 3101-3110 与 model seeds 2021/2022/2023 做平衡交叉，confirmation 将 3111-3120 与 model seeds 2021-2025 做平衡交叉。同一 `(generator_seed, model_seed)` 下四个 cell 严格配对。
 ```
 
 相同 dataset/seed 下必须固定：数据切分、Scaler fit 段、训练窗口顺序生成规则、训练 mask schedule、complementary mask partitions。不同 cell 仅改变被声明的因子。
@@ -339,7 +341,7 @@ raw-control tie = matched pair 的注入 squared-deviation margin 应近似 0
 
 ### P1：合成机制，4 个主 cell
 
-开发阶段只在 generator seeds 3101-3110 上运行 A00/A10/A01/A11。预先分别定义 `A11-A00`（完整方法对基线）、`A11-A01`（Gaussian 下 dynamic context 增量）和 `A11-A10`（dynamic context 下 distribution 增量），不得看完结果后选择 observed-best comparator。候选、组合规则和所有门槛冻结后，才在 untouched seeds 3111-3120 上运行一次确认。开发阶段至少满足：
+开发阶段只在 generator seeds 3101-3110 与 model seeds 2021/2022/2023 的平衡交叉网格上运行 A00/A10/A01/A11。每个 `(generator_seed, model_seed)` 内先计算 paired delta；bootstrap 分别重采样 generator 与 model seed 轴，再对重采样后的交叉网格取均值，不能把 generator seed 当作 dataset，也不能把 30 个交叉 cell 当作相互独立样本。预先分别定义 `A11-A00`（完整方法对基线）、`A11-A01`（Gaussian 下 dynamic context 增量）和 `A11-A10`（dynamic context 下 distribution 增量），不得看完结果后选择 observed-best comparator。候选、组合规则和所有门槛冻结后，才在 untouched generator seeds 3111-3120 与 model seeds 2021-2025 的平衡交叉网格上运行一次确认。开发阶段至少满足：
 
 - `A11-A01` 的 matched-ordering paired mean 提升至少 0.05，且 95% CI 下界大于 0；
 - regime FPR gap 相对 A00 降低至少 25%；
@@ -419,6 +421,12 @@ scripts/patternad/generate_contextual_synthetic.py
 scripts/patternad/evaluate_contextual_mechanisms.py
 config/patternad/synthetic_suite.json
     已实现：20 个冻结 generator seeds、四种机制、外部分数契约和 PatternAD variant 端到端模式。
+
+scripts/patternad/run_contextual_factorial.py
+    已实现：development/locked-confirmation 交叉 seed 网格、冻结 config/source hash、独立 GPU 子进程、完整进程组超时清理和 fail-closed resume。
+
+scripts/patternad/summarize_contextual_factorial.py
+    已实现：完整 identity/provenance/score hash 校验、预声明 paired deltas、generator/model 两轴 crossed bootstrap 和 P1 gate diagnostics。
 ```
 
 生成数据默认写入独立 ignored 目录，只提交 generator、参数 manifest 和小型 deterministic fixture，不提交大量生成 CSV。

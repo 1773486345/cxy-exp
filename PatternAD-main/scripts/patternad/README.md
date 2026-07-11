@@ -3,6 +3,21 @@
 These scripts turn the six-cell experiment design into reproducible benchmark
 commands and summarize only threshold-independent score metrics.
 
+## Execution environment
+
+Every command in this guide uses the canonical global Conda environment:
+
+```text
+Conda: /media/h3c/users/shared_app/miniconda3/bin/conda
+Name:  patternad_env
+Path:  /media/h3c/users/wangyueyang1/.env/envs/patternad_env
+Python: 3.8.20
+```
+
+Do not search for or create another PatternAD environment unless this documented
+prefix is missing. The commands use the shorter `conda run -n patternad_env`
+form because the global Conda executable is already on `PATH`.
+
 ## Configuration
 
 - `config/patternad/factorial_ablation.json` is the only variant source. It
@@ -282,26 +297,68 @@ separate rare-context score proposed in the research plan. The embedded oracle
 is useful for checking generation semantics, not for claiming learned-model
 performance.
 
-During the current model-development phase, do not launch the full seed grid.
-The completed `dev_transition_likelihood_full` run confirmed that a derived
-transition residual contains signal, but its scale was nearly constant and
-could not be safely combined with the level score. The next requested handoff
-is only the current explicit-transition-head A01/A11 on generator seed 3101
-with the default epoch count:
+P1-v1 completed all 120 cells. A11 improved macro AP by `0.063709` over A00
+and improved A11-A01 matched ordering by `0.186667`, but reduced the maximum
+regime-FPR gap by only `11.46%` against the registered `25%` target. The
+transition branch also reduced abrupt/gradual ordering, so its auxiliary loss
+is now disabled in all formal cells. Expanded raw cells are stored in
+`p1_raw_cells_20260712.tar.gz`; `run_plan.json`, frozen inputs, and the strict
+summary remain directly readable.
+
+The next full experiment is the strict P1-v2 development grid: ten generator
+seeds crossed with model seeds 2021/2022/2023 and all four A cells. Inspect the
+120-command plan without creating files or processes:
 
 ```bash
-for variant in A01 A11; do
-  conda run --no-capture-output -n patternad_env \
-    python -u scripts/patternad/evaluate_contextual_mechanisms.py \
-    --artifact-dir artifacts/patternad_synthetic/contextual_v1/seed_3101 \
-    --patternad-variant "$variant" --seed 2021 \
-    --output-dir "result/patternad_synthetic/dev_explicit_transition_full/$variant/generator_seed_3101/model_seed_2021"
-done
+conda run --no-capture-output -n patternad_env \
+  python -u scripts/patternad/run_contextual_factorial.py \
+  --seed-group development --run-name p1_contextual_calibrated_v2 \
+  --gpus 0 --dry-run
 ```
 
-Return the two `contextual_evaluation.json`, `mechanism_metrics.csv`,
-`matched_orderings.csv`, and `score_component_orderings.csv` artifacts. Do not
-run additional generator seeds before this pair is interpreted.
+Remove `--dry-run` to execute. The runner generates missing synthetic fixtures,
+runs one isolated model process at a time, writes an immutable `run_plan.json`,
+and validates every completed identity against its config/source hashes. A
+timeout or interrupt terminates the complete child process group before the
+runner returns, so CUDA workers do not remain attached. Resume failed or
+interrupted identities without overwriting completed ones:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python -u scripts/patternad/run_contextual_factorial.py \
+  --seed-group development --run-name p1_contextual_calibrated_v2 \
+  --gpus 0 --resume
+```
+
+Monitor the active run from a separate terminal. This read-only command refreshes
+the completed/total count, current identity, elapsed time, log freshness, recent
+epoch lines, failures, and a per-variant ETA when enough timings are available:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python -u scripts/patternad/status_contextual_factorial.py \
+  --input result/patternad_synthetic/p1_contextual_calibrated_v2/development \
+  --watch 5
+```
+
+`Ctrl+C` stops only the status monitor; it does not signal the experiment
+runner. Omit `--watch 5` for a one-shot report.
+
+After the complete grid finishes, run the fail-closed paired summary and crossed
+generator/model-seed bootstrap:
+
+```bash
+conda run --no-capture-output -n patternad_env \
+  python -u scripts/patternad/summarize_contextual_factorial.py \
+  --input result/patternad_synthetic/p1_contextual_calibrated_v2/development \
+  --n-bootstrap 10000 --seed 2021
+```
+
+Return the run root including `run_plan.json`, `summary/`, and any identity whose
+`identity_metadata.json` is not `status=completed`. Do not open generator seeds
+3111-3120 before the development candidate, score combination, and gates are
+frozen. Locked synthetic confirmation requires the runner's explicit
+`--allow-locked` acknowledgement and the complete predeclared seed grid.
 
 External methods can instead provide one `<mechanism>.npz` per mechanism, each
 with a finite `score` vector aligned to the full train-then-test series, and use

@@ -1,2 +1,0 @@
-run_name,group,family,entity,seed,comparison,lhs,rhs,lhs_config_hash,rhs_config_hash,auc_pr,VUS_PR,auc_roc,VUS_ROC,R_AUC_PR,R_AUC_ROC
-p0_weather_diag_v2,smoke,Weather,Weather,2021,context_at_D1,A11,A01,7421b18534e647d439bbe80f2c4b50ad7e7c1db22d4fd6f437d329351681bfdd,7cba5bae0fd54c56b6cde4beb6e8d1d2be07f06c2c96cfb5af4cb7b6882aa1ad,-0.0023763971429398567,0.00041813731981116264,-0.0039297577518032645,0.0088003364071014278,0.00080305798322161115,0.010142048923013069

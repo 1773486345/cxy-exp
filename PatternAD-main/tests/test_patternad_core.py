@@ -465,6 +465,72 @@ class PatternADCoreTest(unittest.TestCase):
             float(tail.score_windows(true, pred, distribution_params=narrow_scale).item()),
         )
 
+    def test_contextual_tail_calibration_is_monotone_and_scale_stratified(self):
+        scorer = PatternAwareScorer(
+            score_mode="contextual_tail_probability",
+            distribution="gaussian",
+            contextual_calibration_bins=2,
+            contextual_calibration_min_bin_size=2,
+            contextual_calibration_shrinkage=0.0,
+        )
+        scale = np.array([[[1.0], [1.0], [4.0], [4.0]]])
+        standardized = np.array([[[0.2], [1.0], [0.2], [1.0]]])
+        true = scale * standardized
+        pred = np.zeros_like(true)
+        scorer.fit_contextual_tail(
+            true,
+            pred,
+            {"scale": scale},
+            score_mask=np.ones_like(true, dtype=bool),
+        )
+
+        test_scale = np.array([[[1.0], [1.0], [4.0]]])
+        test_standardized = np.array([[[0.5], [1.5], [0.5]]])
+        scores = scorer.score_windows(
+            test_scale * test_standardized,
+            np.zeros_like(test_scale),
+            distribution_params={"scale": test_scale},
+        )
+
+        self.assertLess(float(scores[0, 0]), float(scores[0, 1]))
+        self.assertAlmostEqual(float(scores[0, 0]), float(scores[0, 2]))
+        self.assertTrue(np.isfinite(scores).all())
+        summary = scorer.contextual_calibration_summary()
+        self.assertEqual(summary["global_count"], 4)
+        self.assertEqual(summary["bin_counts"], [2, 2])
+
+    def test_contextual_tail_small_bins_fall_back_to_global_ecdf(self):
+        scorer = PatternAwareScorer(
+            score_mode="contextual_tail_probability",
+            distribution="gaussian",
+            contextual_calibration_bins=4,
+            contextual_calibration_min_bin_size=10,
+            contextual_calibration_shrinkage=0.0,
+        )
+        scale = np.array([[[1.0], [2.0], [3.0], [4.0]]])
+        true = scale * np.array([[[0.1], [0.4], [0.8], [1.2]]])
+        pred = np.zeros_like(true)
+        scorer.fit_contextual_tail(true, pred, {"scale": scale})
+
+        test_scale = np.array([[[1.0], [4.0]]])
+        test_true = test_scale * 0.6
+        scores = scorer.score_windows(
+            test_true,
+            np.zeros_like(test_true),
+            distribution_params={"scale": test_scale},
+        )
+        self.assertAlmostEqual(float(scores[0, 0]), float(scores[0, 1]))
+
+    def test_contextual_tail_mode_requires_target_blind_distribution_scoring(self):
+        with self.assertRaisesRegex(ValueError, "requires gaussian or student_t"):
+            PatternADConfig(pattern_score_mode="contextual_tail_probability")
+        with self.assertRaisesRegex(ValueError, "target-blind conditional scoring"):
+            PatternADConfig(
+                reconstruction_distribution="gaussian",
+                pattern_score_mode="contextual_tail_probability",
+                use_conditional_scoring=False,
+            )
+
     def test_raw_score_matches_masked_mean_squared_error(self):
         scorer = PatternAwareScorer(score_mode="raw")
         true = np.array([[[1.0, 2.0], [3.0, 4.0]]])

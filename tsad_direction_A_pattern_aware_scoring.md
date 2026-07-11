@@ -493,7 +493,7 @@ A10 / A11: context-on 时的 distribution 效应
 B00 / B11: 仅用于诊断 conditional mask 的作用
 ```
 
-严格实验设计见 `PatternAD-main/EXPERIMENT_PLAN_DRAFT.md`，可执行配置与工具见 `PatternAD-main/config/patternad/` 和 `PatternAD-main/scripts/patternad/`。当前 Gaussian 开发目标在文档与代码中统一为 `masked Gaussian NLL + full mean-MSE + 0.1 * masked transition Gaussian NLL`。
+严格实验设计见 `PatternAD-main/EXPERIMENT_PLAN_DRAFT.md`，可执行配置与工具见 `PatternAD-main/config/patternad/` 和 `PatternAD-main/scripts/patternad/`。P1-v2 的 Gaussian 目标统一为 `masked Gaussian NLL + full mean-MSE`；已失败的 transition auxiliary 在所有正式 cell 中关闭。评分使用正常 fit residual 上的 predicted-scale 分层经验尾概率，并向全局 ECDF 收缩。
 
 首个端到端检查建议从仓库根目录运行：
 
@@ -738,11 +738,11 @@ TEP 是经典化工过程故障检测 benchmark。它的优势是过程变量多
 ```text
 Step 0（旧模型工具链已完成）：Weather smoke 与 machine-readable scale 诊断通过，但结果早于 visible-context scale-prior 原型，只保留为 pipeline evidence。
 Step 1（当前）：用单 seed、低 epoch 的 synthetic sanity check 迭代模型，优先验证 same-residual ordering、regime FPR 与 dependency break；此阶段不扩真实数据矩阵。
-30-epoch generator-seed-3101 的 density-NLL 诊断中，A11 相对 A01 提升了 macro AP（0.0931 vs 0.0835）并略微缩小 regime FPR gap，但 matched ordering 从 1/5 降至 0/5。分解结果表明 `sigma` 方向正确，标准化残差已使 same-deviation 的 2/3 对排序正确，错误主要来自 density NLL 的 `log(sigma)` 项。改用 conditional two-sided tail surprisal 后，单 epoch A11 macro AP 达到 0.1224、same-deviation AP 达到 0.1573、ordering 提升到 2/5。当前下一步只需确认 30-epoch tail 结果；若 abrupt/gradual 仍为 0/2，再进入局部尺度归一化重构或独立 transition 建模。
+30-epoch generator-seed-3101 的 density-NLL 诊断中，A11 相对 A01 提升了 macro AP（0.0931 vs 0.0835）并略微缩小 regime FPR gap，但 matched ordering 从 1/5 降至 0/5。分解结果表明 `sigma` 方向正确，标准化残差已使 same-deviation 的 2/3 对排序正确，错误主要来自 density NLL 的 `log(sigma)` 项。改用 conditional two-sided tail surprisal 后，单 epoch A11 macro AP 达到 0.1224、same-deviation AP 达到 0.1573、ordering 提升到 2/5。当时据此先确认 30-epoch tail；其后结果与 transition 分支结论见下文。
 
-30-epoch tail 结果保持 same-deviation 2/3，但 abrupt/gradual 仍为 0/2。随后两项开发修改均通过单 epoch sanity check：visible scale 同时归一化重构输入并反归一化条件均值，使 macro AP 从 0.1224 升至 0.1286；独立 masked transition NLL 利用 Gaussian 第三输出块学习 `transition_scale`，使 transition standardized residual 对 abrupt/gradual 达到 2/2。transition 分支尚未并入最终分数，需先完成同 seed 30-epoch A01/A11，确认其尺度不会随训练退化。
+30-epoch tail 结果保持 same-deviation 2/3，但 abrupt/gradual 仍为 0/2。随后两项开发修改均通过单 epoch sanity check：visible scale 同时归一化重构输入并反归一化条件均值，使 macro AP 从 0.1224 升至 0.1286；独立 masked transition NLL 利用 Gaussian 第三输出块学习 `transition_scale`，使 transition standardized residual 对 abrupt/gradual 达到 2/2。该阶段因此继续做同 seed 30-epoch A01/A11；完整训练结论见下一段。
 
-完整训练确认 derived transition residual 可保持 2/2，但其 transition scale 近似常数；无条件联合 tail 破坏 same-deviation，基于 slope 或左右半窗的确定性 gate 也没有分离度。因此当前 transition 分支升级为显式 head：直接预测 `delta_mu`，并用 visible difference scale prior 调制独立 `transition_scale`。单 epoch 仍为 2/2，但最小 margin 仅 0.0073；在完整训练确认前不并入最终分数。
+完整训练确认 derived transition residual 可保持 2/2，但其 transition scale 近似常数；无条件联合 tail 破坏 same-deviation，基于 slope 或左右半窗的确定性 gate 也没有分离度。随后将 transition 分支升级为显式 head：直接预测 `delta_mu`，并用 visible difference scale prior 调制独立 `transition_scale`。该版本单 epoch 为 2/2，但 30-epoch 完整训练后 standardized transition ordering 退化到 1/2，第二个 margin 为 -0.0014；把 transition-loss weight 从 0.1 提高到 0.5 也未改善。P1-v1 的 120 个 cell 随后完整结束：A11-A01 matched-ordering 提升 `0.1867`，95% CI `[0.0667, 0.2933]`；A11-A00 macro AP 提升 `0.0637`，但 regime-FPR gap 只下降 `11.46%`，未达到预注册 `25%`，且 abrupt/gradual ordering 明显退化。方向 A 因而未彻底失败，但不能进入真实数据矩阵。P1-v2 停止 transition 路线，关闭其辅助损失，并只检验 normal-only、predicted-scale 分层的经验尾概率校准能否保留 same-deviation 收益同时修复跨 regime FPR。
 Step 2：运行 motivation 组的三 seed 主消融，只依据预声明的 paired comparison 判断机制。
 Step 3：用 `bootstrap_factorial.py` 对三个预声明的 A11 comparator 分别做 paired CI，再冻结候选并运行 robustness 组；MetroPT3 主要用于长序列时间/内存压力测试。
 Step 4：保存代码、配置和数据 hash 后，只运行一次 locked confirmation 组。

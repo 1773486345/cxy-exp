@@ -8,17 +8,38 @@ PatternAD is a multivariate time-series anomaly detection model for context-cond
 
 The current research path no longer uses temporal context as a post-hoc score multiplier. Local scale, trend, high-frequency activity, and mask structure are encoded inside the reconstruction backbone through FiLM-style conditioning. The model can estimate either a deterministic conditional mean or a conditional Gaussian/Student-t distribution. The repository keeps `reconstruction_distribution="mse"` as the backward-compatible default; probabilistic variants train with masked NLL and score conditional two-sided tail surprisal.
 
+## Canonical Server Environment
+
+All PatternAD development, tests, and experiments on the current server must use
+the existing global Conda environment below. Do not infer a similarly named
+environment or create a replacement before checking this contract.
+
+```text
+Conda executable: /media/h3c/users/shared_app/miniconda3/bin/conda
+Environment name: patternad_env
+Environment path: /media/h3c/users/wangyueyang1/.env/envs/patternad_env
+Python version:   3.8.20
+```
+
+Use it without relying on shell activation:
+
+```bash
+/media/h3c/users/shared_app/miniconda3/bin/conda run \
+  --no-capture-output -n patternad_env python --version
+```
+
+The shorter `conda run --no-capture-output -n patternad_env ...` form is valid
+when the global Conda executable above is already on `PATH`.
+
 ## Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-The project was developed under Python 3.8. On the current server, the intended Conda environment is `patternad_env` and can be used without activating the shell:
-
-```bash
-conda run --no-capture-output -n patternad_env python --version
-```
+The project dependencies are already installed in the canonical server
+environment. Use `pip install -r requirements.txt` only when constructing a new
+environment outside this server.
 
 ## Data
 
@@ -70,9 +91,11 @@ student_t -> conditional mean/scale/df + masked Student-t NLL
 
 For MSE, training uses `masked MSE + reconstruction_full_loss_weight * full mean-MSE`. For Gaussian and Student-t, it uses `masked NLL + reconstruction_full_loss_weight * full mean-MSE`. The auxiliary full-window term is intentionally mean-MSE, not full NLL, so visible values cannot drive the predicted scale toward zero by simple copying.
 
-The current Gaussian development path also uses target-blind visible scale to normalize the reconstruction input and de-normalize the conditional mean. A dedicated transition head predicts normalized transition mean and scale correction around a target-blind visible-difference scale prior, and receives a masked transition-NLL auxiliary loss. Transition diagnostics are persisted, but transition surprisal is not yet combined with the primary level-tail anomaly score.
+The current Gaussian development path also uses target-blind visible scale to normalize the reconstruction input and de-normalize the conditional mean. The rejected transition head remains available for diagnostics, but its auxiliary loss is disabled in every formal factorial cell and transition surprisal is not combined with the primary score.
 
 At inference, probabilistic variants default to `pattern_score_mode="tail_probability"`: `-log` of the conditional two-sided tail probability of the absolute standardized residual. Density NLL remains available as an explicit ablation, but its `log(scale)` normalization term is not used as cross-regime anomaly rarity.
+
+The v2 factorial explicitly selects `pattern_score_mode="contextual_tail_probability"`. It fits a normal-only empirical survival map within target-blind predicted-scale quantile bins, shrinks each bin toward the global ECDF, and never reads outer calibration or test labels. This preserves residual monotonicity while directly targeting cross-regime false-alarm invariance.
 
 Legacy aggregate and reliability-weighted scorers remain available only as explicit ablation paths.
 

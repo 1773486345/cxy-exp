@@ -54,6 +54,10 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "pattern_score_min_weight": 0.5,
     "pattern_score_max_weight": 1.5,
     "pattern_score_max_fit_windows": 20000,
+    "pattern_score_contextual_calibration_bins": 4,
+    "pattern_score_contextual_calibration_min_bin_size": 128,
+    "pattern_score_contextual_calibration_shrinkage": 128.0,
+    "pattern_score_contextual_calibration_max_cells": 500000,
     "use_context_conditioning": True,
     "context_window": 7,
     "context_film_strength": 0.2,
@@ -128,6 +132,58 @@ class PatternADConfig:
             )
         if "pattern_score_mode" not in kwargs and self.reconstruction_distribution != "mse":
             self.pattern_score_mode = "tail_probability"
+        self.pattern_score_contextual_calibration_bins = max(
+            1,
+            int(
+                getattr(
+                    self, "pattern_score_contextual_calibration_bins", 4
+                )
+            ),
+        )
+        self.pattern_score_contextual_calibration_min_bin_size = max(
+            1,
+            int(
+                getattr(
+                    self,
+                    "pattern_score_contextual_calibration_min_bin_size",
+                    128,
+                )
+            ),
+        )
+        self.pattern_score_contextual_calibration_shrinkage = max(
+            0.0,
+            float(
+                getattr(
+                    self,
+                    "pattern_score_contextual_calibration_shrinkage",
+                    128.0,
+                )
+            ),
+        )
+        self.pattern_score_contextual_calibration_max_cells = max(
+            2,
+            int(
+                getattr(
+                    self,
+                    "pattern_score_contextual_calibration_max_cells",
+                    500000,
+                )
+            ),
+        )
+        contextual_modes = {
+            "contextual_tail_probability",
+            "context_calibrated_tail",
+            "calibrated_tail_probability",
+        }
+        if str(self.pattern_score_mode).lower() in contextual_modes:
+            if self.reconstruction_distribution == "mse":
+                raise ValueError(
+                    "Contextual tail calibration requires gaussian or student_t reconstruction."
+                )
+            if not self.use_conditional_scoring:
+                raise ValueError(
+                    "Contextual tail calibration requires target-blind conditional scoring."
+                )
         self.distribution_min_scale = max(
             float(getattr(self, "distribution_min_scale", 1e-3)), 1e-8
         )
@@ -640,7 +696,7 @@ class PatternAD:
         self._last_score_components = {}
 
     def get_diagnostics(self):
-        return {
+        diagnostics = {
             "schema_version": 1,
             "model": "PatternAD",
             "distribution": self.config.reconstruction_distribution,
@@ -648,6 +704,11 @@ class PatternAD:
             "training": copy.deepcopy(self._fit_diagnostics),
             "score_calls": copy.deepcopy(self._score_call_diagnostics),
         }
+        if self.pattern_scorer is not None:
+            diagnostics["score_calibration"] = copy.deepcopy(
+                self.pattern_scorer.contextual_calibration_summary()
+            )
+        return diagnostics
 
     def get_last_score_components(self):
         return {
@@ -690,6 +751,19 @@ class PatternAD:
             min_weight=getattr(self.config, "pattern_score_min_weight", 0.5),
             max_weight=getattr(self.config, "pattern_score_max_weight", 1.5),
             distribution=getattr(self.config, "reconstruction_distribution", "mse"),
+            contextual_calibration_bins=getattr(
+                self.config, "pattern_score_contextual_calibration_bins", 4
+            ),
+            contextual_calibration_min_bin_size=getattr(
+                self.config,
+                "pattern_score_contextual_calibration_min_bin_size",
+                128,
+            ),
+            contextual_calibration_shrinkage=getattr(
+                self.config,
+                "pattern_score_contextual_calibration_shrinkage",
+                128.0,
+            ),
         )
 
     @staticmethod
@@ -1101,6 +1175,87 @@ class PatternAD:
     def _fit_pattern_scorer(self, data_loader):
         self.pattern_scorer = self._build_pattern_scorer()
         score_mode = str(getattr(self.config, "pattern_score_mode", "raw")).lower()
+        contextual_modes = {
+            "contextual_tail_probability",
+            "context_calibrated_tail",
+            "calibrated_tail_probability",
+        }
+        if score_mode in contextual_modes:
+            self.model.load_state_dict(self.early_stopping.check_point)
+            self.model.to(self.device)
+            self.model.eval()
+
+            total_batches = len(data_loader)
+            if total_batches < 1:
+                raise RuntimeError("No windows available for contextual calibration.")
+            cells_per_window = max(
+                1, int(self.config.seq_len) * int(self.config.enc_in)
+            )
+            max_cells = int(
+                self.config.pattern_score_contextual_calibration_max_cells
+            )
+            max_windows = max(1, max_cells // cells_per_window)
+            batch_size = max(1, int(self.config.batch_size))
+            selected_batch_count = min(
+                total_batches, int(math.ceil(max_windows / batch_size))
+            )
+            selected_batches = set(
+                np.rint(
+                    np.linspace(
+                        0, total_batches - 1, num=selected_batch_count
+                    )
+                ).astype(np.int64).tolist()
+            )
+            true_windows = []
+            pred_windows = []
+            scale_windows = []
+            mask_windows = []
+            collected_windows = 0
+            with torch.no_grad():
+                for batch_index, (batch_x_time, _, _, _) in enumerate(data_loader):
+                    if batch_index not in selected_batches:
+                        continue
+                    batch_x_time = batch_x_time.float().to(self.device)
+                    outputs, score_mask = self._predict_for_scoring(batch_x_time)
+                    if not isinstance(outputs, dict) or "scale" not in outputs:
+                        raise RuntimeError(
+                            "Contextual tail calibration requires predicted scales."
+                        )
+                    take = min(
+                        int(batch_x_time.shape[0]),
+                        max_windows - collected_windows,
+                    )
+                    if take <= 0:
+                        break
+                    true_windows.append(batch_x_time[:take].detach().cpu().numpy())
+                    pred_windows.append(
+                        self._output_mean(outputs)[:take].detach().cpu().numpy()
+                    )
+                    scale_windows.append(
+                        outputs["scale"][:take].detach().cpu().numpy()
+                    )
+                    if score_mask is None:
+                        mask_windows.append(
+                            np.ones_like(true_windows[-1], dtype=bool)
+                        )
+                    else:
+                        mask_windows.append(
+                            score_mask[:take].detach().cpu().numpy()
+                        )
+                    collected_windows += take
+                    if collected_windows >= max_windows:
+                        break
+            if not true_windows:
+                raise RuntimeError("No windows collected for contextual calibration.")
+            self.pattern_scorer.fit_contextual_tail(
+                np.concatenate(true_windows, axis=0),
+                np.concatenate(pred_windows, axis=0),
+                {"scale": np.concatenate(scale_windows, axis=0)},
+                score_mask=np.concatenate(mask_windows, axis=0),
+            )
+            self.model.train()
+            return
+
         if score_mode in {
             "raw",
             "nll",
