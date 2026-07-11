@@ -1,0 +1,137 @@
+{
+  "bootstrap": {
+    "ci_level": 0.95,
+    "n_bootstrap": 10000,
+    "seed": 2021,
+    "statistic": "mean of the crossed grid after independent generator/model seed resampling; with one model seed, resample generator seeds only",
+    "std_definition": "sample standard deviation of bootstrap statistics"
+  },
+  "comparisons": [
+    {
+      "lhs": "A11",
+      "name": "full_vs_baseline",
+      "rhs": "A00"
+    },
+    {
+      "lhs": "A10",
+      "name": "context_at_D0",
+      "rhs": "A00"
+    },
+    {
+      "lhs": "A11",
+      "name": "context_at_D1",
+      "rhs": "A01"
+    },
+    {
+      "lhs": "A01",
+      "name": "distribution_at_C0",
+      "rhs": "A00"
+    },
+    {
+      "lhs": "A11",
+      "name": "distribution_at_C1",
+      "rhs": "A10"
+    }
+  ],
+  "factorial_manifest_hash": "7eb2625d6e34a3c75afc5eed91ea269dab47af2ad132e7b13793eda378fa3764",
+  "factorial_manifest_path": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/frozen_inputs/factorial_ablation.json",
+  "gate_statuses": {
+    "dependency_break_average_precision": "pass",
+    "gate_preconditions": "eligible",
+    "matched_ordering_improvement": "fail",
+    "maximum_regime_fpr_gap_relative_reduction": "fail",
+    "ordinary_large_spike": "not_evaluated"
+  },
+  "generator_seeds": [
+    3101,
+    3102,
+    3103,
+    3104,
+    3105,
+    3106,
+    3107,
+    3108,
+    3109,
+    3110
+  ],
+  "grid_diagnostics": {
+    "balanced_crossed_grid": true,
+    "complete_development_generator_seed_group": true,
+    "complete_development_model_seed_group": true,
+    "gate_eligible": true,
+    "gate_ineligibility_reasons": [],
+    "generator_seeds": [
+      3101,
+      3102,
+      3103,
+      3104,
+      3105,
+      3106,
+      3107,
+      3108,
+      3109,
+      3110
+    ],
+    "main_four_variants_complete": true,
+    "model_seeds": [
+      2021,
+      2022,
+      2023
+    ],
+    "phase": "development",
+    "plan_axes_match_expected_identities": true,
+    "plan_complete_phase_grid": true,
+    "variants": [
+      "A00",
+      "A01",
+      "A10",
+      "A11"
+    ]
+  },
+  "input_root": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development",
+  "metrics": [
+    "macro_average_precision",
+    "matched_ordering_rate",
+    "maximum_regime_fpr_gap",
+    "same_deviation_different_context_average_precision",
+    "same_deviation_different_context_ap_over_prevalence",
+    "same_deviation_different_context_regime_fpr_gap",
+    "slow_drift_vs_abrupt_shift_average_precision",
+    "slow_drift_vs_abrupt_shift_ap_over_prevalence",
+    "slow_drift_vs_abrupt_shift_regime_fpr_gap",
+    "dependency_break_average_precision",
+    "dependency_break_ap_over_prevalence",
+    "dependency_break_regime_fpr_gap",
+    "context_ood_average_precision",
+    "context_ood_ap_over_prevalence",
+    "context_ood_regime_fpr_gap",
+    "same_deviation_different_context_matched_ordering_rate",
+    "slow_drift_vs_abrupt_shift_matched_ordering_rate"
+  ],
+  "model_seeds": [
+    2021,
+    2022,
+    2023
+  ],
+  "n_identities": 120,
+  "n_paired_rows": 150,
+  "output_sha256": {
+    "gate_diagnostics.csv": "43f49328785af2439ce08d90288a296a7811b43393707aa51b52698203e3024c",
+    "identity_metrics.csv": "337499d94357e97243ec42154edfa714f3602cb50cabe8d12be2f480a08cd5f7",
+    "paired_bootstrap.csv": "e9428235ed6cdbf0dc3710b46e64eee6781ffda194dfc9af1bd7cbb62504ead7",
+    "paired_deltas.csv": "8f8903efd4785e5d730476244bd8d8eaa8ede288d864c785edfe4ef0468e4b30"
+  },
+  "phase": "development",
+  "plan_hash": "b01454c5bd6d2d7d3fbd9fa6bd42e6f9091c555c21a5aca420fdaea89559b824",
+  "plan_path": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/run_plan.json",
+  "schema_version": 1,
+  "selection_policy": "all frozen identities and all manifest comparisons whose variants ran; no value-based selection",
+  "synthetic_config_hash": "761d11a27a42f271a84f75df4fa856ed28f67a6b0385ccf94a11590fa048eb33",
+  "synthetic_config_path": "/media/h3c/users/wangyueyang1/cxy/PatternAD-main/result/patternad_synthetic/p1_contextual_calibrated_v2_holdout/development/frozen_inputs/synthetic_suite.json",
+  "variants": [
+    "A00",
+    "A01",
+    "A10",
+    "A11"
+  ]
+}
