@@ -1,0 +1,11 @@
+{
+  "config_hash": "5a8e821d71b13100e5e384bb6051b42a8cfa8adb5968630d19267a21f1801764",
+  "outputs": {
+    "background_scores": "background_scores.npz",
+    "episode_scores": "episode_scores.csv",
+    "evaluation": "b0_evaluation.json",
+    "model_state": "model_state.pt",
+    "synthetic_suite": "synthetic_suite"
+  },
+  "status": "failed_gates"
+}

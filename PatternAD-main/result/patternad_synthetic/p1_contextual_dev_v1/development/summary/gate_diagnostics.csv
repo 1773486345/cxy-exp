@@ -1,6 +1,0 @@
-profile,criterion,comparison,metric,observed_value,ci_lower,ci_upper,operator,threshold,status,detail
-p1,gate_preconditions,,,,,,all_required,development_complete_four_cell_balanced_grid,eligible,all_gate_preconditions_met
-p1,matched_ordering_improvement,context_at_D1,matched_ordering_rate,0.18666666666666668,0.066666666666666666,0.2933333333333335,mean>=0.05 and ci_lower>0,0.05;0,pass,A11 minus A01 on matched generator/model seeds
-p1,maximum_regime_fpr_gap_relative_reduction,full_vs_baseline,maximum_regime_fpr_gap,0.11461068291390636,-0.31976840859438771,0.36831852130523152,>=,0.25,fail,relative reduction=(mean_A00-mean_A11)/mean_A00;valid_bootstrap=10000/10000
-p1,dependency_break_average_precision,full_vs_baseline,dependency_break_average_precision,0.0047192878900658075,0.0034660852072536069,0.0060014955827230486,>=,0,pass,A11 minus A00 on matched generator/model seeds
-p1,ordinary_large_spike,,,,,,not_defined,,not_evaluated,The current contextual synthetic suite defines no ordinary-large-spike criterion.

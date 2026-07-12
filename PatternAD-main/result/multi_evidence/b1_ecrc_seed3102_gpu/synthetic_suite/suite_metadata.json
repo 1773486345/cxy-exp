@@ -1,0 +1,174 @@
+{
+  "config_hash": "b1386dccf10aeb27f8f3e781cb6152073d23a735acfdd87330559a2c7ab24f54",
+  "contracts": [
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.885767936706543,
+      "coherent_unsupported_driver_difference": 2.289158344268799,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 1098,
+      "pair_id": "regime_0_pair_00",
+      "regime": 0,
+      "source_terminal_index": 64
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 1.9392184019088745,
+      "coherent_unsupported_driver_difference": 1.5226174592971802,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 832,
+      "pair_id": "regime_0_pair_01",
+      "regime": 0,
+      "source_terminal_index": 269
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 1.8200256824493408,
+      "coherent_unsupported_driver_difference": 1.4015859365463257,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 832,
+      "pair_id": "regime_0_pair_02",
+      "regime": 0,
+      "source_terminal_index": 475
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.262838840484619,
+      "coherent_unsupported_driver_difference": 1.7420140504837036,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 832,
+      "pair_id": "regime_0_pair_03",
+      "regime": 0,
+      "source_terminal_index": 680
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 1.4202284812927246,
+      "coherent_unsupported_driver_difference": 1.0815792083740234,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 1098,
+      "pair_id": "regime_0_pair_04",
+      "regime": 0,
+      "source_terminal_index": 886
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.388425827026367,
+      "coherent_unsupported_driver_difference": 1.8561887741088867,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 832,
+      "pair_id": "regime_0_pair_05",
+      "regime": 0,
+      "source_terminal_index": 1091
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.4329423904418945,
+      "coherent_unsupported_driver_difference": 1.8457016944885254,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 832,
+      "pair_id": "regime_0_pair_06",
+      "regime": 0,
+      "source_terminal_index": 1297
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 1.345186710357666,
+      "coherent_unsupported_driver_difference": 1.02363121509552,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 1098,
+      "pair_id": "regime_0_pair_07",
+      "regime": 0,
+      "source_terminal_index": 1503
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.8152835369110107,
+      "coherent_unsupported_driver_difference": 2.2773940563201904,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 205,
+      "pair_id": "regime_1_pair_00",
+      "regime": 1,
+      "source_terminal_index": 24
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.2672810554504395,
+      "coherent_unsupported_driver_difference": 1.7623050212860107,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 61,
+      "pair_id": "regime_1_pair_01",
+      "regime": 1,
+      "source_terminal_index": 226
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.5505332946777344,
+      "coherent_unsupported_driver_difference": 2.1143691539764404,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 205,
+      "pair_id": "regime_1_pair_02",
+      "regime": 1,
+      "source_terminal_index": 428
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.739131450653076,
+      "coherent_unsupported_driver_difference": 2.2549238204956055,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 1369,
+      "pair_id": "regime_1_pair_03",
+      "regime": 1,
+      "source_terminal_index": 630
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.123661518096924,
+      "coherent_unsupported_driver_difference": 1.7934391498565674,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 205,
+      "pair_id": "regime_1_pair_04",
+      "regime": 1,
+      "source_terminal_index": 928
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.73645281791687,
+      "coherent_unsupported_driver_difference": 2.06262469291687,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 205,
+      "pair_id": "regime_1_pair_05",
+      "regime": 1,
+      "source_terminal_index": 1130
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.108614921569824,
+      "coherent_unsupported_driver_difference": 1.7742339372634888,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 205,
+      "pair_id": "regime_1_pair_06",
+      "regime": 1,
+      "source_terminal_index": 1332
+    },
+    {
+      "coherent_omission_driver_max_abs_difference": 0.0,
+      "coherent_omission_target_difference": 2.932887077331543,
+      "coherent_unsupported_driver_difference": 2.486786365509033,
+      "coherent_unsupported_target_max_abs_difference": 0.0,
+      "donor_terminal_index": 205,
+      "pair_id": "regime_1_pair_07",
+      "regime": 1,
+      "source_terminal_index": 1535
+    }
+  ],
+  "episode_count": 64,
+  "generator_sha256": "c1aabb94eef9ecb5caa5b0cee271409f6f50b675f5d3e03107ea3141eb14b244",
+  "roles": [
+    "coherent_control",
+    "unsupported_target_break",
+    "target_omission_break",
+    "target_spike"
+  ],
+  "suite_id": "multi_evidence_b1_ecrc"
+}

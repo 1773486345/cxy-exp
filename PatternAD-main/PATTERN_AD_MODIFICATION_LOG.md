@@ -1,8 +1,43 @@
 # PatternAD Modification Log
 
-Date: 2026-07-11
+Date: 2026-07-12
 
-## Current Goal
+## Active Direction B1: Multi-Evidence Repair
+
+Direction A is closed. The active implementation is the independent
+`MultiEvidenceRepair` B1 experiment, not the historical `PatternAD` backbone.
+B1 uses a temporal target-history GRU and a target-blind cross-variable GRU
+with disjoint parameters. It exports `temporal_residual`, `cross_residual`,
+and `disagreement` separately; there is no shared encoder, agreement loss, or
+score fusion.
+
+The initial B0 global-tail experiment established the paired relation-break
+mechanism but failed normal FPR stability in heteroscedastic normal states.
+B1 introduces Evidence-Conditioned Reliability Calibration: fixed bins from
+branch-allowed input innovation scales, empirical reference tails per bin, and
+an independent outer-calibration threshold per exported component. It uses no
+hidden regime, target terminal in a reliability feature, test score, or test
+label for calibration.
+
+Five frozen GPU seeds (`3101..3105`) passed every B1 gate. Cross repair MAE
+improved `82.4%--87.6%` over the target-mean normal baseline; the maximum
+observable reliability-bin FPR was `5.18%--7.78%`; disagreement-bin FPR gap
+was `1.09%--4.40%`; all target-spike pairs triggered both residual paths.
+Machine-readable summary:
+
+```text
+result/multi_evidence/b1_ecrc_summary_3101_3105/b1_multiseed_summary.json
+```
+
+Active design/protocol: `B1_EXPERIMENT_PLAN.md`. Direction A's compact archive
+and source snapshot: `archive/direction_a/README.md`.
+
+## Archived Direction A Implementation History
+
+The entries below document the former PatternAD-A line. They are retained for
+provenance only and must not be interpreted as the active goal or commands.
+
+### Historical A Goal (closed)
 
 Build a multivariate time-series anomaly detector around the following motivation:
 
@@ -12,7 +47,7 @@ The same reconstruction residual can have different anomaly meaning under differ
 
 The model is no longer treated as an optional switch on top of the previous LLM-prompt baseline. The outer benchmark class is now `PatternAD`, and its scoring path is multivariate by design.
 
-## Main Design
+### Historical A Design
 
 `PatternAD` now uses a context-conditioned denoising reconstruction backbone. Each time step is encoded as a full multivariate state, and mask-aware local scale, trend, high-frequency activity, and mask structure are injected into the reconstruction backbone through FiLM-style conditioning before the Transformer encoder. Training masks both individual variable points and whole variable traces inside a window, forcing the model to recover missing values from temporal context and cross-variable evidence.
 
@@ -22,7 +57,7 @@ The previous post-hoc aggregate scorer and reliability-weighted scorer remain in
 
 This makes the implementation match direction A: not anomaly type classification, not relation-graph prototype learning, and not text-topology alignment. The key object is the residual's meaning under local dynamics, implemented as a conditional residual distribution rather than a collection of handcrafted post-hoc weights.
 
-## Files Changed
+### Historical A Files Changed
 
 - `ts_benchmark/baselines/PatternAD/PatternAD.py`
   - Rewritten as a multivariate-only `PatternAD` wrapper.
@@ -74,7 +109,7 @@ This makes the implementation match direction A: not anomaly type classification
 - `README.md`
   - Updated the project description and quickstart to match PatternAD.
 
-## Scoring Components
+### Historical A Scoring Components
 
 The compatibility default score is `raw`: mean squared reconstruction residual from complementary conditional predictions. Gaussian and Student-t use density NLL only when `pattern_score_mode="nll"`; selecting a non-MSE distribution without an explicit score mode switches to conditional two-sided tail surprisal. The following components are retained only as legacy ablation utilities in `pattern_scoring.py`:
 
@@ -86,7 +121,7 @@ The compatibility default score is `raw`: mean squared reconstruction residual f
 
 These components should not be treated as the main contribution unless an explicit ablation enables `pattern_score_mode="aggregate"` or `pattern_score_mode="reliability_weighted"`.
 
-## Legacy Component Calibration
+### Historical A Legacy Component Calibration
 
 The scorer fits on training-normal reconstruction outputs after model training:
 
@@ -98,7 +133,7 @@ train true windows + train reconstructed windows
 
 Test windows use these training statistics only. The number of calibration windows is capped by `pattern_score_max_fit_windows` to prevent the scorer from becoming heavy. This component calibration is unrelated to the strict label-threshold calibration protocol added on 2026-07-11.
 
-## Config
+### Historical A Config
 
 The current default model-related hyperparameters are:
 
@@ -130,7 +165,7 @@ The current default model-related hyperparameters are:
 
 Legacy scorer hyperparameters such as `pattern_score_local_window`, `pattern_score_trend_window`, `pattern_score_top_k`, and reliability-weight settings remain available only for ablation.
 
-## Removed From This Model
+### Historical A Removed Components
 
 - Single-variable anomaly detection entry points.
 - Optional compatibility switch for pattern-aware scoring.
@@ -140,7 +175,7 @@ Legacy scorer hyperparameters such as `pattern_score_local_window`, `pattern_sco
 - LLM zero-shot anomaly scoring.
 - Per-window text tokenization and LLM prompt encoding.
 
-## Suggested Experiments
+### Historical A Suggested Experiments
 
 Primary comparison after the current revision:
 
@@ -794,7 +829,7 @@ The complete P1-v1 crossed grid finished all 120 identities without failures. A1
 
 The failed transition family is now closed. Its auxiliary loss is zero in every formal cell, removing a D1/D0 training-objective confound. P1-v2 replaces the uncalibrated theoretical Gaussian tail with a normal-only context-stratified empirical tail. Target-blind predicted log-scale defines four quantile bins; each bin's empirical survival probability is shrunk toward the global ECDF, with undersized bins falling back completely to the global reference. The map is fitted only on masked residuals from the dedicated normal score-reference segment inside model fit; outer temporal calibration data, test values, and all labels are excluded. Scores remain monotone in absolute standardized residual within each bin and finite for values beyond the reference maximum.
 
-Expanded P1-v1 cells were consolidated from more than 1,300 files into `result/patternad_synthetic/p1_contextual_dev_v1/p1_raw_cells_20260712.tar.gz` (SHA256 `5b1be39f8942251289c7561f5ceac80362f4f0587d944e2cac68b8b5c6f77d34`). The strict summary, run plan, and frozen inputs remain unpacked. Regenerable seeds 3102-3110, obsolete single-seed prototype trees, old Weather P0 expansions, stale label results, and caches were removed. Runtime `result/` and generated synthetic seed directories are now ignored so future experiments do not dirty locked-run provenance.
+Expanded P1-v1 cells were temporarily consolidated from more than 1,300 files. After the stricter P1-v2 holdout superseded that preliminary grid and Direction A was closed, its raw archive, summary, run plan, and frozen inputs were purged as non-final development output. The headline P1-v1 metrics remain recorded in this log. Regenerable seeds 3102-3110, obsolete single-seed prototype trees, old Weather P0 expansions, stale label results, and caches were removed. Runtime `result/` and generated synthetic seed directories are now ignored so future experiments do not dirty locked-run provenance.
 
 ## 2026-07-12 Disjoint Empirical-Tail Reference Revision
 
@@ -829,8 +864,8 @@ The new development-only branch is a causal innovation head. Its GRU receives `x
 
 ## 2026-07-12 Causal Level-Innovation Result And Delta-Innovation Revision
 
-The single full-epoch A11 causal level-innovation diagnostic completed at
-`result/patternad_synthetic/dev_causal_innovation`. Its primary score was
+The single full-epoch A11 causal level-innovation diagnostic completed; its
+superseded raw one-cell directory was later purged after closure. Its primary score was
 intentionally unchanged (`macro AP 0.104447`, matched ordering `2/5`). The
 diagnostic component did not supply the missing mechanism: standardized causal
 innovation got `0/3` same-deviation orderings and `1/2` abrupt-versus-gradual
@@ -866,8 +901,7 @@ loss implied a diagnostic branch but the raw command override did not list it.
 
 ## 2026-07-12 Causal Delta Result And Conditional-Innovation Tail Revision
 
-The completed one-cell delta-innovation diagnostic is stored in
-`result/patternad_synthetic/dev_causal_delta_innovation`. It passed its stated
+The completed one-cell delta-innovation diagnostic passed its stated
 onset check: both abrupt-versus-gradual pairs were correct for
 `causal_delta_innovation_standardized_squared_residual`, with margins `+4.2737`
 and `+3.2558`. This confirms that a past-only delta target prevents the
@@ -886,7 +920,7 @@ empirical survival references on the disjoint normal score-reference segment
 only, then export `causal_delta_contextual_tail_surprisal`. The map uses the
 strictly past-only delta scale as its conditioning variable; outer calibration,
 test scores, labels, and injected intervals remain excluded from the fit. The
-primary level-tail score remains byte-for-byte separate. One rerun of the same
+primary level-tail score remains separately computed. One rerun of the same
 A11 identity is required because the previous result did not persist the
 normal-reference windows.
 
@@ -894,3 +928,60 @@ Advancement criterion for this rerun: the new component must retain `2/2`
 abrupt/gradual orderings and produce positive same-deviation ordering. Only
 then can the two normal-calibrated evidence streams enter a predeclared
 multi-seed diagnostic and a fixed p-value-combination proposal.
+
+## 2026-07-12 Causal Delta Tail Result, State-Tail Falsification, And Closure
+
+The scale-stratified causal-delta ECDF rerun completed; its superseded raw
+one-cell directory was later purged after closure. Its new
+`causal_delta_contextual_tail_surprisal` preserved the delta branch's
+abrupt-versus-gradual ordering (`2/2`), but every quiet-versus-volatile
+same-deviation comparison remained reversed (`0/3`; margins `-0.6918`,
+`-0.2176`, `-0.4905`). It therefore failed its only advancement gate. This
+rules out predicted delta scale as a sufficient conditioning variable; it does
+not authorize a scale-bin sweep or score combination.
+
+One final, deliberately different diagnostic tested whether the causal GRU
+already contains a sufficient past-only operating-state representation. The
+new `causal_delta_state_tail_surprisal` path is diagnostic-only and consists
+of:
+
+```text
+h_t = GRU(0, x_0, ..., x_{t-1})
+z_t,d = |(delta_x_t,d - mu_delta_t,d) / sigma_delta_t,d|
+normal reference: KMeans(h_t), K=4
+tail: empirical survival(z | state cluster, variable),
+      shrunk to variable/global normal references
+```
+
+It is implemented in `PatternAD.py` and `utils/pattern_scoring.py`. The state
+is requested only by the causal diagnostic path, is excluded from normal
+reconstruction/mask aggregation, excludes `t=0` from reference fitting, and
+uses no optimization/validation/outer-calibration/test/label values in its
+CDF or cluster fit. The evaluator now writes the state calibration provenance
+and a component-specific advancement gate into `contextual_evaluation.json`.
+Unit tests verify past-only state invariance, reconstruction-output isolation,
+tail monotonicity, small-cell fallback, and disabled formal cells.
+
+The fixed one-cell run used generator `3101`, model seed `2021`, a 30-epoch
+budget (early stopped at epoch 5, best epoch 2), 4 clusters, minimum cell size
+128, and shrinkage 128. The normal score-reference had 2,116 post-initial
+states and 10,580 cells. Results are stored in
+`result/patternad_synthetic/dev_causal_delta_state_tail/`:
+
+```text
+quiet-versus-volatile: 1/3             required 3/3
+abrupt-versus-gradual: 0/2             required 2/2
+maximum normal-regime FPR gap: 0.01873  required <= 0.05
+```
+
+The FPR condition passes, but both semantic-ordering conditions fail. This is
+not a trainability or leakage failure: the model trained, reference diagnostics
+are persisted, and all relevant CPU tests pass. It is a negative mechanism
+result. Do not tune KMeans cluster count, projection, shrinkage, quantile head,
+or a fusion weight after observing it.
+
+**Decision:** close Direction A's residual-semantics / conditional-calibration
+main claim. Do not launch P2, real-data, multi-seed, locked confirmation, or
+any score-combination experiment from these branches. A future effort must be
+framed as a distinct question (for example event-level transition mechanism or
+Direction B), not as a continuation of this PatternAD claim.

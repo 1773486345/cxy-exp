@@ -1,0 +1,11 @@
+{
+  "config_hash": "382ac197f8410dd6616ab8a621f680a40dc20463b2153a1cbc449d15a27636cb",
+  "outputs": {
+    "background_scores": "background_scores.npz",
+    "episode_scores": "episode_scores.csv",
+    "evaluation": "b1_evaluation.json",
+    "model_state": "model_state.pt",
+    "synthetic_suite": "synthetic_suite"
+  },
+  "status": "passed"
+}

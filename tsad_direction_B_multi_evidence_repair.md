@@ -1,7 +1,7 @@
 # 方向 B：多证据一致性修复
 
 记录日期：2026-06-30  
-更新日期：2026-07-02
+更新日期：2026-07-12
 
 方向定位：
 
@@ -9,6 +9,62 @@
 Multi-Evidence Consistency Repair
 多证据一致性修复
 ```
+
+## 当前状态：B1 已完成五 seed 机制确认
+
+方向 B 的活跃实现是 **B1 Evidence-Conditioned Reliability Calibration
+(ECRC)**，而不是本文件后半部分的泛化多分支设想。它只保留两个严格隔离的
+repair evidence paths，并不使用 score fusion：
+
+```text
+temporal branch: target[t-H:t] only
+cross branch:    non-target[t-H+1:t+1] only
+
+R_T = (y - mu_T)^2
+R_C = (y - mu_C)^2
+D   = (mu_T - mu_C)^2
+```
+
+两个 GRU/head 不共享参数。`R_T`、`R_C` 和 `D` 分开输出、分开校准；B1 没有
+`lambda`、没有 learned fusion、没有 agreement loss，也不把 `D` 反传给两个
+repair head。cross branch 观察同期其他变量是明确的同步证据假设，而非因果方向
+主张。
+
+### B1 的新动机
+
+B0 证明了双证据反事实有效，但其全局 normal tail 在显式异方差正常状态下产生
+系统性 FPR 偏移。因此 B1 问的是比“残差处于何种模式”更窄的问题：**在各自允许
+看到的输入下，这条证据路径此刻有多可靠？**
+
+对标准化窗口，B1 只用 branch-allowed adjacent innovation RMS 构造
+`v_T`、`v_C` 与 `v_D`，由 optimization-normal split 固定三分位边界，在独立
+reference-normal split 中拟合 `(component, reliability-bin)` empirical tails，
+最后仅由 outer-normal calibration 设置 component threshold。hidden generator
+regime、test scores、test labels 都不参与路由或阈值。这与方向 A 的 residual
+pattern semantics 不同：B1 不读取 target residual history，也不学习一个解释
+residual 意义的状态表征。
+
+### 已冻结的 B1 结果
+
+`config/multi_evidence/b1_reliability.json` 的 GPU seeds `3101..3105` 全部
+通过预注册 gates。跨变量修复相对 target-mean MAE 的提升为 `82.4%--87.6%`；
+背景 normal 的最大可观测 reliability-bin FPR 为 `5.18%--7.78%`，disagreement
+bin FPR gap 为 `1.09%--4.40%`；两类 dependency-break 的 cross/disagreement
+median tail margins 均超过 `4.0`，全部 `16/16` target spikes 同时触发两个
+residual paths。完整逐 seed evidence 位于：
+
+```text
+PatternAD-main/result/multi_evidence/b1_ecrc_seed3101_gpu/ ... seed3105_gpu/
+PatternAD-main/result/multi_evidence/b1_ecrc_summary_3101_3105/
+```
+
+可执行协议、gate 和下一阶段边界见
+`PatternAD-main/B1_EXPERIMENT_PLAN.md`。B1 目前只形成 controlled synthetic
+mechanism evidence，尚不声称真实 benchmark 优势；频域/趋势第三分支、图模块和
+融合分数都推迟到独立 B2 协议。
+
+本文件其余章节保留为研究背景和长期扩展清单；其中的三/四分支与融合表述不是
+当前实现或当前可执行实验。
 
 方向 B 关注的是修复任务本身：不要让一个统一模型通过一条混合信息通路给出一个重构值，而是让多个受限证据源分别估计同一个被遮蔽目标，并利用修复误差与证据冲突共同进行异常判别。
 
@@ -60,7 +116,7 @@ Transformer 和注意力机制进一步拓展了异常判别方式。Anomaly Tra
 
 ---
 
-## 4. 任务定义
+## 4. 长期任务定义（非 B1）
 
 最终任务仍然是多变量时序异常检测。方向 B 的代理任务是：
 
@@ -245,7 +301,7 @@ branch 之间可能出现冲突。
 
 ---
 
-## 8. 最小可行架构
+## 8. 后续扩展候选（非 B1）
 
 第一版建议只做三个分支，避免过重：
 
@@ -350,7 +406,7 @@ normalized_residual_k = r_k / sigma_k
 
 ---
 
-## 9. 实验验证
+## 9. 后续实验验证
 
 需要验证：
 
