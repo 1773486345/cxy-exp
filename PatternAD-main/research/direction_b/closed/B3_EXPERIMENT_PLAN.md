@@ -1,10 +1,10 @@
 # Direction B3: Observable Relation-State Conditioned Cross Repair
 
-Status: the checkpoint-isolation protocol is frozen. The `4401` target-blind
-baseline is complete; the sole authorized B3 smoke is its frozen-temporal
-counterpart. Two earlier B3 development candidates were discarded because
-their nominally unchanged temporal path was not identical to that baseline.
-This remains a possible model-level successor to the closed B2c calibration
+Status: closed after the frozen-temporal GPU smoke `4401`. The comparison is
+valid but failed eight strict gates, so no B3 confirmation seed or retuning is
+authorized. Two earlier B3 development candidates were discarded because their
+nominally unchanged temporal path was not identical to the baseline; they are
+not B3 results. This was a model-level successor to the closed B2c calibration
 hypothesis, not a retuning of B2c thresholds.
 
 ## B3a-4401 Execution Record
@@ -40,6 +40,31 @@ The frozen-temporal protocol below is the resulting correction. It changes
 neither B2a-GC nor B2c thresholds, generator margins, dimensions, or the
 temporal model: it freezes the selected B2a-GC temporal checkpoints and trains
 only the newly introduced B3 cross path.
+
+## Frozen-Temporal Result
+
+The sole authorized GPU smoke completed at:
+
+```text
+result/multi_evidence/b3a_frozen_temporal_seed4401_gpu/b3a_evaluation.json
+```
+
+It is a valid comparison: all frozen B2a-GC model/suite hashes matched; every
+temporal GRU/head checksum was unchanged before and after B3 cross training;
+and same-device background replay had exactly zero difference for `target`,
+`mu_temporal`, and `temporal_residual`. The terminal information and parameter
+isolation, synthetic contract, counterfactual ties, capacity control, all 24
+dependency-break paired ordering families, target-spike, and cross-normal-skill
+gates passed. Its strict status is nevertheless `failed_gates` (`64/72`).
+
+The eight failed gates are target coherent controls 0/1/2/4/5 at
+`3/16`, `4/16`, `6/16`, `3/16`, and `3/16` exceedances respectively (limit
+`2/16`); target-2 temporal-residual background reliability-bin FPR
+`10.46%` (limit `10%`); and disagreement reliability-bin FPR gaps of `5.46%`
+for target 1 and `5.05%` for target 3 (limit `5%`). Thus relation-history
+conditioning preserves the certified dependency-break signal but does not
+solve the normal-control/FPR limitation; it worsens the target-2 coherent
+control relative to the valid target-blind `4401` control. B3 is closed.
 
 ## Motivation
 
@@ -144,32 +169,15 @@ indices, and labels remain audit-only metadata.
   background outputs on the same CUDA device.
 
 The baseline is not a post-hoc ablation: it is a predeclared same-seed control.
-No confirmation seed is authorized unless B3a `4401` itself passes every
-frozen gate. If B3a fails, do not tune dimensions, epochs, losses, thresholds,
-or donor margins on the failed result. Record the result and reassess the
-Direction B premise.
+B3a `4401` failed, so no confirmation seed is authorized. Do not tune
+dimensions, epochs, losses, thresholds, or donor margins on this result.
+Direction B has exhausted B2a-GC's calibration-only and relation-history
+model-level remedies under the frozen continuous-drift transfer protocol.
 
 ## Execution Status
 
-The complete CPU multi-evidence regression suite passes `24/24`, including
-terminal blindness, capacity control, immutable temporal checkpoints, exact
-control-artifact hashing, runner provenance, B2a-GC contracts, and B2c
-calibration isolation. GPU was unavailable in the implementation environment;
-run this single foreground command on one available GPU:
-
-```bash
-/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python -B \
-  scripts/multi_evidence/run_b3_relation_conditioned.py \
-  --config config/multi_evidence/b3_relation_conditioned_drift_rotation.json \
-  --frozen-control-dir result/multi_evidence/b3a_baseline_seed4401_gpu \
-  --output-dir result/multi_evidence/b3a_frozen_temporal_seed4401_gpu \
-  --seed 4401 \
-  --device cuda:0 \
-  --torch-threads 1 \
-  --strict
-```
-
-The runner refuses an existing output directory, runs in the foreground, and
-does not spawn worker processes. It must be allowed to finish even if gates
-fail so the complete failure artifact is retained. Do not run a second B3 seed
-or alter the command based on this smoke result.
+The complete CPU multi-evidence regression suite passed `24/24` before the
+GPU run. The retained B3 GPU artifact passed the checkpoint-isolation and
+same-device replay gates, but failed its frozen performance gates. Do not run
+the command again, do not run another seed, and do not alter this protocol
+after the observed result.

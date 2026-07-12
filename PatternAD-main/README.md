@@ -1,13 +1,21 @@
 # PatternAD Research Workspace
 
-## Active Direction
+## Current Research State
 
-Direction B2c is closed after its frozen `4301` smoke failed six strict gates.
-The active design is Direction B3a: **Observable Relation-History Conditioned
-Cross Repair** on top of the independently audited B1 Multi-Evidence
-Consistency Repair heads. It is implemented independently from the archived
-PatternAD-A backbone so temporal and cross-variable evidence paths can be
-audited for information leakage.
+The active research definition is **Direction A2: dynamic-structure-aware
+event and transition semantics**. A2 asks whether a post-boundary trajectory
+is compatible with an event-pre observable state; it does not preselect a
+residual, model backbone, graph module, or modality. Its pre-model task and
+falsification contract are in
+[research/direction_a/A2_EXPERIMENT_PLAN.md](research/direction_a/A2_EXPERIMENT_PLAN.md).
+The current A2 artifact is generator-only and lives under
+[`config/a2/`](config/a2/) and [`scripts/a2/`](scripts/a2/).
+
+Direction B1 remains the active executable controlled-mechanism baseline.
+B2c and B3a are closed after their respective frozen smokes failed strict
+transfer gates. B3a, **Observable Relation-History Conditioned Cross Repair**,
+was implemented independently from the historical PatternAD-A backbone so its
+temporal and cross-variable evidence paths could be audited for leakage.
 
 ```text
 temporal repair: target history only
@@ -20,21 +28,19 @@ deployment fusion:   intentionally absent in B1
 
 The B1 synthetic five-seed confirmation passed every frozen gate. B2a-GC
 validated the terminal dependency-break signal (`24/24` paired gates), but
-failed normal-control/FPR gates; B2c's calibration-only remedy also failed.
-See [B2C_EXPERIMENT_PLAN.md](B2C_EXPERIMENT_PLAN.md) for retained negative
-evidence and [B3_EXPERIMENT_PLAN.md](B3_EXPERIMENT_PLAN.md) for the frozen
-next model-level test.
+failed normal-control/FPR gates; B2c's calibration-only remedy and B3a's
+relation-history model remedy also failed. See
+[research/direction_b/closed/B3_EXPERIMENT_PLAN.md](research/direction_b/closed/B3_EXPERIMENT_PLAN.md) for the final comparable B3
+negative evidence.
 
 ## B3a Status
 
-The same-seed B2a-GC `4401` control is complete and retained. Both prior B3a
-development candidates were discarded because their selected temporal
-checkpoints did not match that baseline; they are not research results. The
-frozen replacement loads those temporal checkpoints from the control, excludes
-them from optimization, and hashes both inputs and final temporal tensors. The
-single authorized `4401` GPU smoke is documented in
-`B3_EXPERIMENT_PLAN.md`; do not run B2c confirmation seeds `4302..4305` or a
-second B3 seed.
+The same-seed B2a-GC `4401` control and B3a frozen-temporal `4401` comparison
+are retained. B3a froze all temporal checkpoints, verified every control hash,
+and replayed temporal outputs with exact same-device equality, yet failed
+`8/72` strict gates. The remaining failures are normal coherent-control/FPR
+instability, not a checkpoint confound. Do not run B2c confirmation seeds
+`4302..4305`, another B3 seed, or a B3 retune.
 
 ## Run B1
 
@@ -87,16 +93,18 @@ config/multi_evidence/b1_reliability.json
 
 `tsad_direction_B_multi_evidence_repair.md` contains the research motivation;
 `scripts/multi_evidence/README.md` contains the runner-level usage note.
+[`research/direction_b/B_RESULT_INDEX.md`](research/direction_b/B_RESULT_INDEX.md)
+is the immutable index for retained B artifacts and their allowed interpretation.
 
-## Archived Direction A
+## A-v1 Archive
 
-Direction A, Pattern-Aware Residual Semantics, is closed. Its conditional
+A-v1, **Pattern-Aware Residual Semantics**, is closed. Its conditional
 residual scalar could not satisfy the matched quiet/volatile and
-abrupt/gradual mechanism gates simultaneously. The compact reproducibility
-archive, including final negative evidence and source snapshot, is at
-[archive/direction_a/README.md](archive/direction_a/README.md). The former
-PatternAD-A model and old dataset shell entry points are historical artifacts,
-not current experiment commands.
+abrupt/gradual mechanism gates simultaneously. This does not close Direction
+A's broader dynamic-structure motivation. The compact negative-evidence and
+source archive is at [archive/direction_a/README.md](archive/direction_a/README.md).
+The former PatternAD-A model and old dataset shell entry points are historical
+artifacts, not A2 experiment commands.
 
 ## Repository Data
 

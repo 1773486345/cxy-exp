@@ -16,7 +16,7 @@ The active Direction B1 runner and protocol are:
 ```text
 scripts/multi_evidence/run_b1_reliability.py
 config/multi_evidence/b1_reliability.json
-B1_EXPERIMENT_PLAN.md
+research/direction_b/B1_EXPERIMENT_PLAN.md
 ```
 
 Use `scripts/multi_evidence/README.md` for the current command. Do not launch

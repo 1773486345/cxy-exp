@@ -29,13 +29,16 @@ generator-only terminal contract and B1's isolated heads, but fits a distinct
 outer-normal conformal cutoff for every target/component/reliability stratum.
 Cross and disagreement use the pre-declared `0.025 + 0.025` Bonferroni budget;
 temporal remains at `0.05`. Its completed `4301` smoke failed; do not run
-confirmation seeds. See `B2C_EXPERIMENT_PLAN.md` for the retained artifact and
-`B3_EXPERIMENT_PLAN.md` for the active model-level direction.
+confirmation seeds. See
+[`../../research/direction_b/closed/B2C_EXPERIMENT_PLAN.md`](../../research/direction_b/closed/B2C_EXPERIMENT_PLAN.md)
+for the retained artifact and
+[`../../research/direction_b/closed/B3_EXPERIMENT_PLAN.md`](../../research/direction_b/closed/B3_EXPERIMENT_PLAN.md)
+for the final model-level negative evidence.
 
-`run_b3_relation_conditioned.py` is the frozen B3a checkpoint-isolation smoke.
-It reads the retained B2a-GC `4401` control, verifies hashes of its model and
-inputs, freezes each selected temporal GRU/head, and trains only the
-relation-conditioned cross path. It writes per-target temporal hashes and a
-same-device temporal-output replay check. The sole authorized command and
-stop rule are in `B3_EXPERIMENT_PLAN.md`; do not change its seed, control, or
-output identity.
+`run_b3_relation_conditioned.py` produced the frozen B3a checkpoint-isolation
+smoke. It read the retained B2a-GC `4401` control, verified hashes of its model
+and inputs, froze each selected temporal GRU/head, and trained only the
+relation-conditioned cross path. The completed result passed its temporal hash
+and same-device replay checks but failed eight performance gates; do not rerun
+or retune it. See
+[`../../research/direction_b/closed/B3_EXPERIMENT_PLAN.md`](../../research/direction_b/closed/B3_EXPERIMENT_PLAN.md).

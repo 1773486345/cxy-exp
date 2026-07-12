@@ -1,8 +1,8 @@
 # Direction A Archive
 
-Direction A is closed as of 2026-07-12. Its conditional residual-semantics
-claim failed the predeclared paired mechanism gates and must not be presented
-as the active PatternAD research path.
+A-v1 is closed as of 2026-07-12. Its conditional residual-semantics claim
+failed the predeclared paired mechanism gates and must not be presented as
+evidence for Direction A2 or as the active PatternAD research path.
 
 This directory retains the smallest useful reproduction record after the raw
 development outputs were removed.
@@ -28,5 +28,7 @@ Removed after this archive was made:
 - the previous live `dev_causal_delta_state_tail/` result copy.
 
 The frozen inputs and source snapshot are sufficient to inspect the failed
-protocol or regenerate its raw artifacts. The active plan is
-[`../../B1_EXPERIMENT_PLAN.md`](../../B1_EXPERIMENT_PLAN.md).
+protocol or regenerate its raw artifacts. The active A2 pre-model protocol is
+[`../../research/direction_a/A2_EXPERIMENT_PLAN.md`](../../research/direction_a/A2_EXPERIMENT_PLAN.md);
+B1 remains at
+[`../../research/direction_b/B1_EXPERIMENT_PLAN.md`](../../research/direction_b/B1_EXPERIMENT_PLAN.md).

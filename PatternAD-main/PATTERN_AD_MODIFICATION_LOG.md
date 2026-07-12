@@ -1,10 +1,17 @@
 # PatternAD Modification Log
 
-Date: 2026-07-12
+Date: 2026-07-13
 
-## Active Direction B3a: Relation-History Conditioned Cross Repair
+## A2 Definition Active; B3a Relation-History Repair Closed
 
-Direction A is closed. The active implementation is the independent
+A-v1 is closed, not Direction A as a whole. A-v1 tested one conditional
+residual/innovation-tail formulation and is retained as negative evidence.
+Direction A2 now defines a separate pre-model question: whether a trajectory
+is compatible with its event-pre observable state. Its contract is frozen in
+`research/direction_a/A2_EXPERIMENT_PLAN.md` before a new architecture, score, or modality is
+selected.
+
+The active executable repair implementation is the independent
 `MultiEvidenceRepair` experiment, not the historical `PatternAD` backbone.
 B1/B2 use a temporal target-history GRU and a target-blind cross-variable GRU
 with disjoint parameters. B3a retains the temporal branch but changes cross
@@ -30,8 +37,10 @@ Machine-readable summary:
 result/multi_evidence/b1_ecrc_summary_3101_3105/b1_multiseed_summary.json
 ```
 
-Active design/protocol: `B1_EXPERIMENT_PLAN.md`. Direction A's compact archive
-and source snapshot: `archive/direction_a/README.md`.
+Active executable baseline/protocol: `research/direction_b/B1_EXPERIMENT_PLAN.md`.
+A2's active pre-model contract: `research/direction_a/A2_EXPERIMENT_PLAN.md`.
+A-v1's compact archive and source
+snapshot: `archive/direction_a/README.md`.
 
 ### B2 Transfer Record
 
@@ -52,9 +61,9 @@ controls and target-1 FPR stability under B1's global-after-stratified outer
 threshold. This is evidence for a calibration limitation, not a reason to
 claim B1 has no cross-evidence signal.
 
-The B2c-FW-ECRC calibration hypothesis is closed after its frozen seed `4301`
-smoke. The active next stage is B3a, observable relation-history conditioned
-cross repair, frozen in `B3_EXPERIMENT_PLAN.md` before implementation.
+The B2c-FW-ECRC calibration hypothesis closed after its frozen seed `4301`
+smoke. B3a then tested the separately frozen observable relation-history
+conditioned cross repair in `research/direction_b/closed/B3_EXPERIMENT_PLAN.md`.
 
 ### B2c Closed Calibration Record
 
@@ -98,8 +107,8 @@ The CPU recomputation differed from saved GPU raw scores by at most `0.00195`,
 so it is supporting attribution evidence rather than an exact same-device
 comparison. B2c is closed: do not tune it or run `4302..4305`.
 
-The B3a model-level proposal now uses the frozen checkpoint-isolation protocol
-in `B3_EXPERIMENT_PLAN.md`. Its relation-history GRU plus driver GRU per target has
+The B3a model-level proposal used the frozen checkpoint-isolation protocol in
+`research/direction_b/closed/B3_EXPERIMENT_PLAN.md`. Its relation-history GRU plus driver GRU per target has
 `4,815` cross parameters versus the B2a-GC control's `4,833`. The valid `4401`
 GPU baseline exists at
 `result/multi_evidence/b3a_baseline_seed4401_gpu/b2a_gc_evaluation.json` and
@@ -117,15 +126,24 @@ frozen replacement loads the selected temporal GRU/head tensors from the valid
 `4401` B2a-GC control, excludes them from optimization, selects only the B3
 cross path by cross validation loss, verifies the retained inputs by SHA-256,
 and records source/final temporal tensor hashes plus a same-device background
-replay check. It authorizes exactly one `4401` smoke; failure closes the smoke
-without a retune or confirmation seeds.
+replay check. The authorized `4401` smoke completed at
+`result/multi_evidence/b3a_frozen_temporal_seed4401_gpu/b3a_evaluation.json`.
+It is a valid failure: every frozen control hash matched, temporal checkpoints
+were byte-identical before and after cross training, and same-device temporal
+background replay was exactly zero. It passed isolation, contract, capacity,
+all dependency-break ordering families, target-spike, and cross-skill gates,
+but failed `8/72`: coherent controls for targets 0/1/2/4/5 (`3/16`, `4/16`,
+`6/16`, `3/16`, `3/16`), target-2 temporal reliability-bin FPR (`10.46%`),
+and target-1/3 disagreement-bin gaps (`5.46%`/`5.05%`). Relation-history cross
+conditioning therefore does not resolve this protocol's normal-control/FPR
+limitation. B3 is closed; do not retune or run confirmation seeds.
 
 ## Archived Direction A Implementation History
 
 The entries below document the former PatternAD-A line. They are retained for
 provenance only and must not be interpreted as the active goal or commands.
 
-### Historical A Goal (closed)
+### Historical A-v1 Goal (closed)
 
 Build a multivariate time-series anomaly detector around the following motivation:
 
@@ -917,7 +935,7 @@ The complete P1-v1 crossed grid finished all 120 identities without failures. A1
 
 The failed transition family is now closed. Its auxiliary loss is zero in every formal cell, removing a D1/D0 training-objective confound. P1-v2 replaces the uncalibrated theoretical Gaussian tail with a normal-only context-stratified empirical tail. Target-blind predicted log-scale defines four quantile bins; each bin's empirical survival probability is shrunk toward the global ECDF, with undersized bins falling back completely to the global reference. The map is fitted only on masked residuals from the dedicated normal score-reference segment inside model fit; outer temporal calibration data, test values, and all labels are excluded. Scores remain monotone in absolute standardized residual within each bin and finite for values beyond the reference maximum.
 
-Expanded P1-v1 cells were temporarily consolidated from more than 1,300 files. After the stricter P1-v2 holdout superseded that preliminary grid and Direction A was closed, its raw archive, summary, run plan, and frozen inputs were purged as non-final development output. The headline P1-v1 metrics remain recorded in this log. Regenerable seeds 3102-3110, obsolete single-seed prototype trees, old Weather P0 expansions, stale label results, and caches were removed. Runtime `result/` and generated synthetic seed directories are now ignored so future experiments do not dirty locked-run provenance.
+Expanded P1-v1 cells were temporarily consolidated from more than 1,300 files. After the stricter P1-v2 holdout superseded that preliminary grid and A-v1 was closed, its raw archive, summary, run plan, and frozen inputs were purged as non-final development output. The headline P1-v1 metrics remain recorded in this log. Regenerable seeds 3102-3110, obsolete single-seed prototype trees, old Weather P0 expansions, stale label results, and caches were removed. Runtime `result/` and generated synthetic seed directories are now ignored so future experiments do not dirty locked-run provenance.
 
 ## 2026-07-12 Disjoint Empirical-Tail Reference Revision
 

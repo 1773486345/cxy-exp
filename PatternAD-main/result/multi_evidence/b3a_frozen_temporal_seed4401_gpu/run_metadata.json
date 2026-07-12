@@ -1,0 +1,12 @@
+{
+  "config_hash": "ec3161fe8593907e97787b1f7e9b5d9df6df91941e89390506701d79984ddbf4",
+  "outputs": {
+    "background_scores": "background_scores.npz",
+    "episode_scores": "episode_scores.csv",
+    "evaluation": "b3a_evaluation.json",
+    "frozen_control": "result/multi_evidence/b3a_baseline_seed4401_gpu",
+    "model_state": "multi_target_model_state.pt"
+  },
+  "phase": "B3a-RelationConditioned-FrozenTemporal",
+  "status": "failed_gates"
+}

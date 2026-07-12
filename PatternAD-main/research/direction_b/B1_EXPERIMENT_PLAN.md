@@ -1,8 +1,10 @@
 # Direction B1 Experiment Plan
 
-Status: B1 synthetic confirmation completed on 2026-07-12. Direction B is the
-active research path. Direction A is closed and archived under
-[`archive/direction_a/`](archive/direction_a/README.md).
+Status: B1 synthetic confirmation completed on 2026-07-12. B1 is the retained
+controlled-mechanism baseline and executable repair implementation. A-v1 is
+closed and archived under [`archive/direction_a/`](archive/direction_a/README.md);
+Direction A2 is a separate active pre-model research definition in
+[`../direction_a/A2_EXPERIMENT_PLAN.md`](../direction_a/A2_EXPERIMENT_PLAN.md).
 
 ## Claim Boundary
 
@@ -61,7 +63,7 @@ calibration split provides one finite-sample conformal upper threshold per
 component after this stratified tail mapping. No hidden generator regime,
 test score, or test label routes a bin or fits a threshold.
 
-This is evidence-reliability calibration, not Direction A residual semantics:
+This is evidence-reliability calibration, not A-v1 residual semantics:
 it conditions only on the permitted input quality of each evidence route, not
 on target residual history or a latent pattern label.
 

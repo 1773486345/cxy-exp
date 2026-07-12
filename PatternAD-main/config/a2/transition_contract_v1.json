@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "suite_id": "a2_transition_contract_v1",
+  "seed": 5101,
+  "dimensions": 4,
+  "channel_names": ["target", "driver_a", "driver_b", "driver_c"],
+  "burn_in": 128,
+  "train_length": 2048,
+  "background_length": 1024,
+  "history_length": 24,
+  "horizon_length": 12,
+  "normal_process": {
+    "latent_ar": 0.9,
+    "latent_std": 0.18,
+    "loadings": [1.0, 0.82, -0.64, 0.48],
+    "channel_ar": [0.18, 0.15, 0.22, 0.12],
+    "channel_noise": [0.055, 0.05, 0.06, 0.05],
+    "regime_segment_length": 96,
+    "regime_noise_scales": [0.75, 1.25],
+    "normal_transition_max_profile_increment": 0.18
+  },
+  "episodes": {
+    "target_channel": 0,
+    "pairs_per_regime": 8,
+    "transition_amplitude": 1.15,
+    "coordination_amplitude_multiplier": 0.7,
+    "abrupt_step_index": 2,
+    "unsupported_driver_multiplier": -0.75,
+    "minimum_coordination_error_target_std": 0.5
+  }
+}
