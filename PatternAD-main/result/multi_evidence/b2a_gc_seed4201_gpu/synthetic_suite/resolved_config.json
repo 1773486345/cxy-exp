@@ -1,0 +1,252 @@
+{
+  "burn_in": 256,
+  "calibration": {
+    "min_reference_per_stratum": 50,
+    "mode": "input_energy_stratified",
+    "reliability_strata": 3
+  },
+  "channel_names": [
+    "channel_0",
+    "channel_1",
+    "channel_2",
+    "channel_3",
+    "channel_4",
+    "channel_5"
+  ],
+  "counterfactual_contract": {
+    "maximum_relation_value_delta": 0.1,
+    "minimum_structural_cross_gap_target_std": 1.5,
+    "minimum_terminal_target_gap_target_std": 1.5,
+    "source_candidates_per_chronological_block": 16
+  },
+  "dimensions": 6,
+  "episodes": {
+    "drift_controls_per_phase": 4,
+    "pairs_per_phase": 4,
+    "phase_bins": 4,
+    "target_spike_multiplier": 3.0
+  },
+  "evaluation": {
+    "background_component_fpr_max": 0.1,
+    "background_disagreement_fpr_gap_max": 0.05,
+    "coherent_exceedance_max": 2,
+    "cross_mean_mae_relative_improvement_min": 0.1,
+    "drift_control_exceedance_max": 2,
+    "drift_phase_disagreement_gap_max": 0.05,
+    "drift_phase_fpr_max": 0.1,
+    "paired_order_min": 14,
+    "paired_tail_margin_min": 0.5,
+    "target_fpr": 0.05,
+    "target_spike_exceedance_min": 14
+  },
+  "history_length": 24,
+  "model": {
+    "batch_size": 64,
+    "d_model": 32,
+    "dropout": 0.0,
+    "epochs": 20,
+    "learning_rate": 0.003,
+    "patience": 4
+  },
+  "normal_process": {
+    "factor_noise_cholesky": [
+      [
+        0.16,
+        0.0
+      ],
+      [
+        0.05,
+        0.13
+      ]
+    ],
+    "factor_transition": [
+      [
+        0.78,
+        0.12
+      ],
+      [
+        -0.08,
+        0.66
+      ]
+    ],
+    "lag_base": [
+      [
+        0.16,
+        0.05,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.13,
+        0.04,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.18,
+        0.05,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.15,
+        0.05,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.14,
+        0.05
+      ],
+      [
+        0.04,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.17
+      ]
+    ],
+    "lag_drift": [
+      [
+        0.0,
+        0.018,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -0.022,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.02,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.016,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.022
+      ],
+      [
+        -0.018,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "loading_base": [
+      [
+        1.0,
+        0.22
+      ],
+      [
+        0.68,
+        -0.58
+      ],
+      [
+        -0.53,
+        0.78
+      ],
+      [
+        0.44,
+        0.91
+      ],
+      [
+        -0.84,
+        -0.27
+      ],
+      [
+        0.3,
+        -0.88
+      ]
+    ],
+    "loading_drift": [
+      [
+        0.18,
+        -0.06
+      ],
+      [
+        -0.1,
+        0.14
+      ],
+      [
+        0.13,
+        0.08
+      ],
+      [
+        -0.16,
+        0.05
+      ],
+      [
+        0.06,
+        -0.15
+      ],
+      [
+        0.11,
+        0.12
+      ]
+    ],
+    "observation_noise": [
+      0.06,
+      0.055,
+      0.06,
+      0.055,
+      0.065,
+      0.06
+    ],
+    "relation_period": 192
+  },
+  "schema_version": 1,
+  "seed": 4201,
+  "split": {
+    "outer_calibration_fraction": 0.2,
+    "reference_fraction": 0.2,
+    "validation_fraction": 0.15
+  },
+  "suite_id": "multi_evidence_b2a_gc_drift_rotation",
+  "target_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "test_length": 1536,
+  "train_length": 3072
+}

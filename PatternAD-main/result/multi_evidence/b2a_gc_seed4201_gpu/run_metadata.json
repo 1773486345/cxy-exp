@@ -1,0 +1,12 @@
+{
+  "config_hash": "b3d602b60cbfaa68d705aa75e70be660af6d0eefea12833b47ca2d61db3af029",
+  "outputs": {
+    "background_scores": "background_scores.npz",
+    "episode_scores": "episode_scores.csv",
+    "evaluation": "b2a_gc_evaluation.json",
+    "model_state": "multi_target_model_state.pt",
+    "synthetic_suite": "synthetic_suite"
+  },
+  "phase": "B2a-GC",
+  "status": "failed_gates"
+}

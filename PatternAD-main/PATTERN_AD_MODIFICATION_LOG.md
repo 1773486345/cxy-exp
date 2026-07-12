@@ -2,14 +2,15 @@
 
 Date: 2026-07-12
 
-## Active Direction B1: Multi-Evidence Repair
+## Active Direction B3a: Relation-History Conditioned Cross Repair
 
 Direction A is closed. The active implementation is the independent
-`MultiEvidenceRepair` B1 experiment, not the historical `PatternAD` backbone.
-B1 uses a temporal target-history GRU and a target-blind cross-variable GRU
-with disjoint parameters. It exports `temporal_residual`, `cross_residual`,
-and `disagreement` separately; there is no shared encoder, agreement loss, or
-score fusion.
+`MultiEvidenceRepair` experiment, not the historical `PatternAD` backbone.
+B1/B2 use a temporal target-history GRU and a target-blind cross-variable GRU
+with disjoint parameters. B3a retains the temporal branch but changes cross
+repair to condition an all-driver encoder on an independent, terminal-blind
+target-driver relation-history encoder. It exports `temporal_residual`,
+`cross_residual`, and `disagreement` separately; there is no score fusion.
 
 The initial B0 global-tail experiment established the paired relation-break
 mechanism but failed normal FPR stability in heteroscedastic normal states.
@@ -31,6 +32,93 @@ result/multi_evidence/b1_ecrc_summary_3101_3105/b1_multiseed_summary.json
 
 Active design/protocol: `B1_EXPERIMENT_PLAN.md`. Direction A's compact archive
 and source snapshot: `archive/direction_a/README.md`.
+
+### B2 Transfer Record
+
+The frozen B2a-v1 `4101` smoke failed and stopped before confirmation seeds.
+It exposed an under-specified donor contract as well as normal-control/FPR
+failures. B2a-GC then corrected only the generator-side terminal contract,
+using a local relation match and target-specific structural/terminal margins.
+Its `4201` GPU result is complete at:
+
+```text
+result/multi_evidence/b2a_gc_seed4201_gpu/b2a_gc_evaluation.json
+```
+
+The B2a-GC contract passed (minimum structural/terminal margins `2.164/2.136`
+standard deviations), all `24/24` dependency-break paired orderings passed,
+and cross normal MAE improved `60.4%--72.5%`. It nevertheless failed normal
+controls and target-1 FPR stability under B1's global-after-stratified outer
+threshold. This is evidence for a calibration limitation, not a reason to
+claim B1 has no cross-evidence signal.
+
+The B2c-FW-ECRC calibration hypothesis is closed after its frozen seed `4301`
+smoke. The active next stage is B3a, observable relation-history conditioned
+cross repair, frozen in `B3_EXPERIMENT_PLAN.md` before implementation.
+
+### B2c Closed Calibration Record
+
+- `scripts/multi_evidence/familywise_calibration.py` implements the
+  target/component/stratum outer-normal threshold table, strict minimum outer
+  support, and component-specific conformal upper thresholds.
+- `scripts/multi_evidence/multi_target_familywise_calibration.py` preserves
+  targetwise `[time, target]` isolation while applying those tables; it does
+  not flatten targets or borrow a threshold from another target or stratum.
+- `scripts/multi_evidence/run_b2c_fw_ecrc.py` reuses the B2a-GC generator and
+  independent B1 repair heads unchanged, records module provenance, and emits
+  `b2c_evaluation.json` even when strict gates fail.
+- `config/multi_evidence/b2c_fw_ecrc_drift_rotation.json` fixes seed `4301`,
+  `alpha_T=0.05`, `alpha_C=0.025`, `alpha_D=0.025`, and at least 50 outer
+  normal samples per stratum. `tests/test_multi_evidence_familywise_calibration.py`
+  covers per-component thresholds, fail-closed support, terminal restrictions,
+  and target isolation.
+
+The B2c generator precheck completed with 96 valid paired contracts and
+minimum structural/terminal margins `2.156/2.288` standard deviations; syntax
+checks passed for the new calibration modules, runner, and unit test. The
+CPU-only family-wise calibration unit suite passed all 4 tests (`0.901s`).
+
+Frozen GPU smoke `4301` completed at:
+
+```text
+result/multi_evidence/b2c_fw_ecrc_seed4301_gpu/b2c_evaluation.json
+```
+
+It is a complete strict failure (`64/70` gates passed): target-0 coherent
+control `3/16`; target-0 target spike `10/16`; target-2 target spike `13/16`;
+target-3 unsupported-break disagreement ordering `13/16`; target-4 coherent
+control `3/16`; target-5 disagreement reliability-bin FPR gap `0.05825` over
+the `0.05` limit. Contract, isolation, all cross-skill gates, and all other
+paired orderings passed. There is no residual B2c process.
+
+A saved-checkpoint CPU replay with B1 global ECRC used the same normal splits
+and no retraining; it also failed (`58` pass / `8` fail performance gates), at
+`result/multi_evidence/b2c_fw_ecrc_seed4301_gpu/analysis/b2c_global_ecrc_same_model.json`.
+The CPU recomputation differed from saved GPU raw scores by at most `0.00195`,
+so it is supporting attribution evidence rather than an exact same-device
+comparison. B2c is closed: do not tune it or run `4302..4305`.
+
+The B3a model-level proposal now uses the frozen checkpoint-isolation protocol
+in `B3_EXPERIMENT_PLAN.md`. Its relation-history GRU plus driver GRU per target has
+`4,815` cross parameters versus the B2a-GC control's `4,833`. The valid `4401`
+GPU baseline exists at
+`result/multi_evidence/b3a_baseline_seed4401_gpu/b2a_gc_evaluation.json` and
+failed seven gates (all six coherent controls plus target-2 temporal-tail FPR).
+
+The first B3a `4401` candidate was not comparable: adding relation modules
+shifted PyTorch constructor RNG consumption and altered the unchanged temporal
+branch. Its raw directory was deleted after this cause was recorded; it must
+not be reported as a B3 result. A second candidate aligned initialization but
+still selected different temporal checkpoints for targets 1 and 3 because its
+global validation loss included the modified cross path; that raw directory
+was also deleted. The B2a-GC/B2c/B3 focused suite passed `12/12`, but fixed
+epoch alignment is insufficient for a selected-checkpoint comparison. The
+frozen replacement loads the selected temporal GRU/head tensors from the valid
+`4401` B2a-GC control, excludes them from optimization, selects only the B3
+cross path by cross validation loss, verifies the retained inputs by SHA-256,
+and records source/final temporal tensor hashes plus a same-device background
+replay check. It authorizes exactly one `4401` smoke; failure closes the smoke
+without a retune or confirmation seeds.
 
 ## Archived Direction A Implementation History
 

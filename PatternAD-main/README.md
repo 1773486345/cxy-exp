@@ -2,22 +2,39 @@
 
 ## Active Direction
 
-The active research path is Direction B1: **Multi-Evidence Consistency Repair
-with Evidence-Conditioned Reliability Calibration (ECRC)**. It is implemented
-independently from the archived PatternAD-A backbone so its temporal and
-cross-variable evidence paths can be audited for information leakage.
+Direction B2c is closed after its frozen `4301` smoke failed six strict gates.
+The active design is Direction B3a: **Observable Relation-History Conditioned
+Cross Repair** on top of the independently audited B1 Multi-Evidence
+Consistency Repair heads. It is implemented independently from the archived
+PatternAD-A backbone so temporal and cross-variable evidence paths can be
+audited for information leakage.
 
 ```text
 temporal repair: target history only
-cross repair:    all non-target channels, including synchronous terminal values
+cross repair:    terminal-blind target/driver history + all non-target channels
+                 including synchronous terminal values
 
 exported components: temporal residual, cross residual, disagreement
 deployment fusion:   intentionally absent in B1
 ```
 
-The B1 synthetic five-seed confirmation passed every frozen gate. See
-[B1_EXPERIMENT_PLAN.md](B1_EXPERIMENT_PLAN.md) for the exact contract,
-calibration, gates, result locations, and the boundary before real-data work.
+The B1 synthetic five-seed confirmation passed every frozen gate. B2a-GC
+validated the terminal dependency-break signal (`24/24` paired gates), but
+failed normal-control/FPR gates; B2c's calibration-only remedy also failed.
+See [B2C_EXPERIMENT_PLAN.md](B2C_EXPERIMENT_PLAN.md) for retained negative
+evidence and [B3_EXPERIMENT_PLAN.md](B3_EXPERIMENT_PLAN.md) for the frozen
+next model-level test.
+
+## B3a Status
+
+The same-seed B2a-GC `4401` control is complete and retained. Both prior B3a
+development candidates were discarded because their selected temporal
+checkpoints did not match that baseline; they are not research results. The
+frozen replacement loads those temporal checkpoints from the control, excludes
+them from optimization, and hashes both inputs and final temporal tensors. The
+single authorized `4401` GPU smoke is documented in
+`B3_EXPERIMENT_PLAN.md`; do not run B2c confirmation seeds `4302..4305` or a
+second B3 seed.
 
 ## Run B1
 
