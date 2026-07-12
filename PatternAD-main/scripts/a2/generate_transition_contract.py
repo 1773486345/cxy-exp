@@ -20,8 +20,8 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "a2" / "transition_contract_v1.json"
 ROLE_ORDER: Sequence[str] = (
-    "normal_gradual_transition",
-    "incompatible_abrupt_transition",
+    "normal_scheduled_transition",
+    "incompatible_timing_transition",
     "normal_coordinated_transition",
     "unsupported_transition",
     "no_event_normal_control",
@@ -66,6 +66,22 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ValueError("train_length is too short for an A2 normal reference stream.")
     if int(config["background_length"]) <= 2 * (history + horizon):
         raise ValueError("background_length is too short for A2 source windows.")
+    normal_splits = config["normal_splits"]
+    split_names = (
+        "optimization_length",
+        "validation_length",
+        "reference_length",
+        "outer_calibration_length",
+    )
+    split_lengths = [int(normal_splits[name]) for name in split_names]
+    guard_length = int(normal_splits["guard_length"])
+    required_guard = history + horizon - 1
+    if guard_length != required_guard:
+        raise ValueError("normal_splits.guard_length must equal history_length + horizon_length - 1.")
+    if any(length < history + horizon for length in split_lengths):
+        raise ValueError("Each A2 normal split must contain at least one complete window.")
+    if sum(split_lengths) + 3 * guard_length != int(config["train_length"]):
+        raise ValueError("normal_splits and guards must partition train_length exactly.")
     process = config["normal_process"]
     for name in ("loadings", "channel_ar", "channel_noise"):
         value = np.asarray(process[name], dtype=np.float64)
@@ -82,22 +98,70 @@ def validate_config(config: Mapping[str, Any]) -> None:
     noise_scales = np.asarray(process["regime_noise_scales"], dtype=np.float64)
     if noise_scales.shape != (2,) or np.any(noise_scales <= 0.0):
         raise ValueError("normal_process.regime_noise_scales must contain two positives.")
-    maximum_increment = float(process["normal_transition_max_profile_increment"])
-    if not 0.0 < maximum_increment < 1.0:
-        raise ValueError("normal_transition_max_profile_increment must be in (0, 1).")
     episodes = config["episodes"]
     target = int(episodes["target_channel"])
     if not 0 <= target < dimensions:
         raise ValueError("episodes.target_channel is outside dimensions.")
-    if int(episodes["pairs_per_regime"]) < 1:
-        raise ValueError("episodes.pairs_per_regime must be positive.")
+    if int(episodes["pairs_per_regime"]) < 2:
+        raise ValueError(
+            "episodes.pairs_per_regime must be at least two to expose both cue modes."
+        )
+    bank_counts = episodes["normal_transition_sources_per_regime"]
+    for split_name in ("optimization", "validation", "reference", "outer_calibration"):
+        if int(bank_counts[split_name]) < 2:
+            raise ValueError(
+                "normal_transition_sources_per_regime must contain at least two "
+                f"episodes for {split_name}."
+            )
     if float(episodes["transition_amplitude"]) <= 0.0:
         raise ValueError("episodes.transition_amplitude must be positive.")
     if not 0.0 < float(episodes["coordination_amplitude_multiplier"]) <= 1.0:
         raise ValueError("coordination_amplitude_multiplier must be in (0, 1].")
-    abrupt_step = int(episodes["abrupt_step_index"])
-    if not 1 <= abrupt_step < horizon - 1:
-        raise ValueError("abrupt_step_index must lie inside the A2 horizon.")
+    cue_channel = int(episodes["cue_channel"])
+    if not 0 <= cue_channel < dimensions or cue_channel == target:
+        raise ValueError("cue_channel must be a non-target channel.")
+    cue_length = int(episodes["cue_length"])
+    if not 1 <= cue_length <= history:
+        raise ValueError("cue_length must be in [1, history_length].")
+    cue_encoding = str(episodes.get("cue_encoding", "additive_v1"))
+    if cue_encoding not in {"additive_v1", "anchored_overwrite_v1"}:
+        raise ValueError(
+            "episodes.cue_encoding must be 'additive_v1' or 'anchored_overwrite_v1'."
+        )
+    cue_amplitude_tolerance = float(episodes.get("cue_amplitude_tolerance", 0.0))
+    if cue_encoding == "anchored_overwrite_v1" and not 0.0 < cue_amplitude_tolerance <= 1e-5:
+        raise ValueError(
+            "anchored_overwrite_v1 requires cue_amplitude_tolerance in (0, 1e-5]."
+        )
+    cue_amplitudes = np.asarray(episodes["cue_amplitudes"], dtype=np.float64)
+    normal_onsets = np.asarray(episodes["normal_transition_onsets"], dtype=np.int64)
+    incompatible_onsets = np.asarray(
+        episodes["incompatible_transition_onsets"], dtype=np.int64
+    )
+    if (
+        cue_amplitudes.shape != (2,)
+        or normal_onsets.shape != (2,)
+        or incompatible_onsets.shape != (2,)
+        or not float(cue_amplitudes[0]) < 0.0 < float(cue_amplitudes[1])
+    ):
+        raise ValueError(
+            "A2 must define negative/positive observable cues for its two timing modes."
+        )
+    ramp_length = int(episodes["transition_ramp_length"])
+    if ramp_length < 2:
+        raise ValueError("transition_ramp_length must be at least two.")
+    for name, onsets in (
+        ("normal_transition_onsets", normal_onsets),
+        ("incompatible_transition_onsets", incompatible_onsets),
+    ):
+        if np.any(onsets < 1) or np.any(onsets + ramp_length > horizon):
+            raise ValueError(f"{name} does not fit inside the A2 horizon.")
+    if set(normal_onsets.tolist()) != set(incompatible_onsets.tolist()):
+        raise ValueError(
+            "Normal and incompatible onset distributions must match so a global timing rule cannot solve A2."
+        )
+    if np.array_equal(normal_onsets, incompatible_onsets):
+        raise ValueError("Incompatible timing must disagree with the cue-conditioned normal timing.")
     if abs(float(episodes["unsupported_driver_multiplier"]) - 1.0) < 1e-9:
         raise ValueError("unsupported_driver_multiplier must differ from one.")
     if float(episodes["minimum_coordination_error_target_std"]) <= 0.0:
@@ -165,15 +229,54 @@ def _simulate_baseline_continuation(
     return output.astype(np.float32)
 
 
-def _smooth_profile(horizon: int) -> np.ndarray:
-    position = np.linspace(0.0, 1.0, horizon, dtype=np.float64)
-    return (position * position * (3.0 - 2.0 * position)).astype(np.float32)
+def _stationary_transition_carrier(event_pre: np.ndarray, horizon: int) -> np.ndarray:
+    """Use a shared flat carrier so paired observed-window summaries can tie."""
+    return np.repeat(np.asarray(event_pre[-1:], dtype=np.float32), horizon, axis=0)
 
 
-def _abrupt_profile(horizon: int, step_index: int) -> np.ndarray:
+def _timed_transition_profile(
+    horizon: int, onset: int, ramp_length: int
+) -> np.ndarray:
+    """A fixed-rate rise whose onset, but not shape, varies by cue mode."""
     profile = np.zeros(horizon, dtype=np.float32)
-    profile[step_index:] = 1.0
+    profile[onset : onset + ramp_length] = np.linspace(
+        1.0 / ramp_length, 1.0, ramp_length, dtype=np.float32
+    )
+    profile[onset + ramp_length :] = 1.0
     return profile
+
+
+def _trajectory_increment_statistics(values: np.ndarray) -> Dict[str, float]:
+    increments = np.diff(np.asarray(values, dtype=np.float64), axis=0)
+    return {
+        "max_increment": float(np.max(np.abs(increments))),
+        "increment_l1": float(np.sum(np.abs(increments))),
+        "increment_l2": float(np.sum(np.square(increments))),
+    }
+
+
+def _with_event_pre_cue(
+    event_pre: np.ndarray,
+    cue_channel: int,
+    cue_length: int,
+    cue_amplitude: float,
+    cue_encoding: str,
+) -> np.ndarray:
+    """Encode the expected transition timing in observable event-pre history."""
+    output = np.asarray(event_pre, dtype=np.float32).copy()
+    profile = np.linspace(
+        0.0, cue_amplitude, cue_length, dtype=np.float32
+    )
+    if cue_encoding == "additive_v1":
+        output[-cue_length:, cue_channel] += profile
+    elif cue_encoding == "anchored_overwrite_v1":
+        # The raw final-minus-initial cue rule is exactly the declared amplitude
+        # for every generator seed, rather than a random-background perturbation.
+        anchor = output[-cue_length, cue_channel]
+        output[-cue_length:, cue_channel] = anchor + profile
+    else:
+        raise ValueError(f"Unsupported A2 cue encoding: {cue_encoding}")
+    return output
 
 
 def _select_sources(
@@ -196,6 +299,23 @@ def _select_sources(
     return selected
 
 
+def _normal_split_ranges(config: Mapping[str, Any]) -> Dict[str, tuple[int, int]]:
+    """Return time-disjoint normal-data ranges, excluding their guard intervals."""
+    normal_splits = config["normal_splits"]
+    guard_length = int(normal_splits["guard_length"])
+    ranges: Dict[str, tuple[int, int]] = {}
+    start = 0
+    for index, name in enumerate(
+        ("optimization", "validation", "reference", "outer_calibration")
+    ):
+        end = start + int(normal_splits[f"{name}_length"])
+        ranges[name] = (start, end)
+        start = end + (guard_length if index < 3 else 0)
+    if start != int(config["train_length"]):
+        raise ValueError("A2 normal split ranges do not consume train_length exactly.")
+    return ranges
+
+
 def _episode(
     source_id: str,
     role: str,
@@ -205,6 +325,9 @@ def _episode(
     future: np.ndarray,
     primary_pair_id: str | None,
     coordination_pair_id: str | None,
+    cue_mode: int | None,
+    expected_onset: int | None,
+    observed_onset: int | None,
 ) -> Dict[str, Any]:
     return {
         "source_id": source_id,
@@ -213,8 +336,85 @@ def _episode(
         "source_start": int(source_start),
         "primary_pair_id": primary_pair_id,
         "coordination_pair_id": coordination_pair_id,
+        "cue_mode": cue_mode,
+        "expected_onset": expected_onset,
+        "observed_onset": observed_onset,
         "values": np.concatenate((event_pre, future), axis=0).astype(np.float32),
     }
+
+
+def _normal_transition_bank_episode(
+    split_name: str,
+    regime: int,
+    ordinal: int,
+    source_start: int,
+    values: np.ndarray,
+    history: int,
+    horizon: int,
+    cue_channel: int,
+    cue_length: int,
+    cue_amplitudes: np.ndarray,
+    cue_encoding: str,
+    normal_onsets: np.ndarray,
+    ramp_length: int,
+    transition_amplitude: float,
+    coordination_amplitude_multiplier: float,
+    loadings: np.ndarray,
+) -> List[Dict[str, Any]]:
+    """Build normal scheduled, coordinated, and no-event trajectories in one split."""
+    cue_mode = ordinal % 2
+    event_pre = _with_event_pre_cue(
+        values[source_start - history : source_start],
+        cue_channel,
+        cue_length,
+        float(cue_amplitudes[cue_mode]),
+        cue_encoding,
+    )
+    profile = _timed_transition_profile(
+        horizon, int(normal_onsets[cue_mode]), ramp_length
+    )
+    sign = 1.0 if ordinal % 2 == 0 else -1.0
+    scheduled_future = _stationary_transition_carrier(event_pre, horizon) + (
+        sign * transition_amplitude * profile[:, None] * loadings[None, :]
+    )
+    coordinated_future = _stationary_transition_carrier(event_pre, horizon) + (
+        -sign
+        * transition_amplitude
+        * coordination_amplitude_multiplier
+        * profile[:, None]
+        * loadings[None, :]
+    )
+    no_event_pre = np.asarray(values[source_start - history : source_start], dtype=np.float32)
+    no_event_future = np.asarray(values[source_start : source_start + horizon], dtype=np.float32)
+    return [
+        {
+            "split": split_name,
+            "role": "normal_scheduled_transition",
+            "regime": int(regime),
+            "source_start": int(source_start),
+            "cue_mode": int(cue_mode),
+            "expected_onset": int(normal_onsets[cue_mode]),
+            "values": np.concatenate((event_pre, scheduled_future), axis=0).astype(np.float32),
+        },
+        {
+            "split": split_name,
+            "role": "normal_coordinated_transition",
+            "regime": int(regime),
+            "source_start": int(source_start),
+            "cue_mode": int(cue_mode),
+            "expected_onset": int(normal_onsets[cue_mode]),
+            "values": np.concatenate((event_pre, coordinated_future), axis=0).astype(np.float32),
+        },
+        {
+            "split": split_name,
+            "role": "no_event_normal_control",
+            "regime": int(regime),
+            "source_start": int(source_start),
+            "cue_mode": None,
+            "expected_onset": None,
+            "values": np.concatenate((no_event_pre, no_event_future), axis=0).astype(np.float32),
+        },
+    ]
 
 
 def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
@@ -229,6 +429,7 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
     )
     history = int(config["history_length"])
     horizon = int(config["horizon_length"])
+    normal_split_ranges = _normal_split_ranges(config)
     episodes_config = config["episodes"]
     process = config["normal_process"]
     target = int(episodes_config["target_channel"])
@@ -237,29 +438,44 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
         dtype=np.int64,
     )
     loadings = np.asarray(process["loadings"], dtype=np.float32)
-    target_std = float(np.std(train_values[:, target], dtype=np.float64))
+    optimization_start, optimization_end = normal_split_ranges["optimization"]
+    target_std = float(
+        np.std(train_values[optimization_start:optimization_end, target], dtype=np.float64)
+    )
     target_std = max(target_std, 1e-6)
-    gradual_profile = _smooth_profile(horizon)
-    abrupt_profile = _abrupt_profile(horizon, int(episodes_config["abrupt_step_index"]))
-    normal_max_increment = float(np.max(np.abs(np.diff(gradual_profile))))
-    abrupt_max_increment = float(np.max(np.abs(np.diff(abrupt_profile))))
-    allowed_increment = float(process["normal_transition_max_profile_increment"])
-    if normal_max_increment > allowed_increment:
-        raise ValueError("A2 normal gradual profile violates the configured support bound.")
-    if abrupt_max_increment <= allowed_increment:
-        raise ValueError("A2 abrupt profile is not outside normal transition support.")
     sources = _select_sources(
         background_regime, history, horizon, int(episodes_config["pairs_per_regime"])
     )
     episodes: List[Dict[str, Any]] = []
     contracts: List[Dict[str, Any]] = []
+    normal_transition_banks: Dict[str, List[Dict[str, Any]]] = {
+        name: [] for name in normal_split_ranges
+    }
+    cue_channel = int(episodes_config["cue_channel"])
+    cue_length = int(episodes_config["cue_length"])
+    cue_amplitudes = np.asarray(episodes_config["cue_amplitudes"], dtype=np.float32)
+    cue_encoding = str(episodes_config.get("cue_encoding", "additive_v1"))
+    normal_onsets = np.asarray(episodes_config["normal_transition_onsets"], dtype=np.int64)
+    incompatible_onsets = np.asarray(
+        episodes_config["incompatible_transition_onsets"], dtype=np.int64
+    )
+    ramp_length = int(episodes_config["transition_ramp_length"])
     for regime in (0, 1):
         for ordinal, source_start in enumerate(sources[regime]):
             source_id = f"regime_{regime}_source_{ordinal:02d}"
-            event_pre = background_values[source_start - history : source_start].copy()
-            base_future = _simulate_baseline_continuation(
-                event_pre, horizon, config, regime, rng
+            cue_mode = ordinal % 2
+            event_pre = _with_event_pre_cue(
+                background_values[source_start - history : source_start],
+                cue_channel,
+                cue_length,
+                float(cue_amplitudes[cue_mode]),
+                cue_encoding,
             )
+            transition_carrier = _stationary_transition_carrier(event_pre, horizon)
+            no_event_pre = background_values[source_start - history : source_start]
+            # A no-event control must be a directly sampled normal continuation,
+            # not a separately simulated forecast from an estimated latent state.
+            no_event_future = background_values[source_start : source_start + horizon]
             sign = 1.0 if ordinal % 2 == 0 else -1.0
             primary_amplitude = sign * float(episodes_config["transition_amplitude"])
             coordinated_amplitude = (
@@ -267,42 +483,58 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
                 * float(episodes_config["transition_amplitude"])
                 * float(episodes_config["coordination_amplitude_multiplier"])
             )
-            gradual_delta = primary_amplitude * gradual_profile[:, None] * loadings[None, :]
-            abrupt_delta = primary_amplitude * abrupt_profile[:, None] * loadings[None, :]
+            normal_profile = _timed_transition_profile(
+                horizon, int(normal_onsets[cue_mode]), ramp_length
+            )
+            incompatible_profile = _timed_transition_profile(
+                horizon, int(incompatible_onsets[cue_mode]), ramp_length
+            )
+            scheduled_delta = (
+                primary_amplitude * normal_profile[:, None] * loadings[None, :]
+            )
+            incompatible_delta = (
+                primary_amplitude * incompatible_profile[:, None] * loadings[None, :]
+            )
             coordinated_delta = (
-                coordinated_amplitude * gradual_profile[:, None] * loadings[None, :]
+                coordinated_amplitude * normal_profile[:, None] * loadings[None, :]
             )
             unsupported_delta = coordinated_delta.copy()
             unsupported_delta[:, drivers] *= float(
                 episodes_config["unsupported_driver_multiplier"]
             )
-            gradual = base_future + gradual_delta
-            abrupt = base_future + abrupt_delta
-            coordinated = base_future + coordinated_delta
-            unsupported = base_future + unsupported_delta
+            scheduled = transition_carrier + scheduled_delta
+            incompatible = transition_carrier + incompatible_delta
+            coordinated = transition_carrier + coordinated_delta
+            unsupported = transition_carrier + unsupported_delta
             primary_pair_id = f"{source_id}_primary"
             coordination_pair_id = f"{source_id}_coordination"
             episodes.extend(
                 (
                     _episode(
                         source_id,
-                        "normal_gradual_transition",
+                        "normal_scheduled_transition",
                         regime,
                         int(source_start),
                         event_pre,
-                        gradual,
+                        scheduled,
                         primary_pair_id,
                         None,
+                        cue_mode,
+                        int(normal_onsets[cue_mode]),
+                        int(normal_onsets[cue_mode]),
                     ),
                     _episode(
                         source_id,
-                        "incompatible_abrupt_transition",
+                        "incompatible_timing_transition",
                         regime,
                         int(source_start),
                         event_pre,
-                        abrupt,
+                        incompatible,
                         primary_pair_id,
                         None,
+                        cue_mode,
+                        int(normal_onsets[cue_mode]),
+                        int(incompatible_onsets[cue_mode]),
                     ),
                     _episode(
                         source_id,
@@ -313,6 +545,9 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
                         coordinated,
                         None,
                         coordination_pair_id,
+                        cue_mode,
+                        int(normal_onsets[cue_mode]),
+                        int(normal_onsets[cue_mode]),
                     ),
                     _episode(
                         source_id,
@@ -323,14 +558,20 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
                         unsupported,
                         None,
                         coordination_pair_id,
+                        cue_mode,
+                        int(normal_onsets[cue_mode]),
+                        int(normal_onsets[cue_mode]),
                     ),
                     _episode(
                         source_id,
                         "no_event_normal_control",
                         regime,
                         int(source_start),
-                        event_pre,
-                        base_future,
+                        no_event_pre,
+                        no_event_future,
+                        None,
+                        None,
+                        None,
                         None,
                         None,
                     ),
@@ -346,6 +587,8 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
                 raise ValueError(
                     "A2 unsupported transition does not meet the coordination-error contract."
                 )
+            scheduled_statistics = _trajectory_increment_statistics(scheduled)
+            incompatible_statistics = _trajectory_increment_statistics(incompatible)
             contracts.append(
                 {
                     "source_id": source_id,
@@ -353,12 +596,28 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
                     "source_start": int(source_start),
                     "primary_pair_id": primary_pair_id,
                     "coordination_pair_id": coordination_pair_id,
+                    "cue_mode": int(cue_mode),
+                    "cue_channel": cue_channel,
+                    "expected_onset": int(normal_onsets[cue_mode]),
+                    "incompatible_onset": int(incompatible_onsets[cue_mode]),
                     "event_pre_max_abs_difference": 0.0,
                     "primary_endpoint_max_abs_difference": float(
-                        np.max(np.abs(gradual[-1] - abrupt[-1]))
+                        np.max(np.abs(scheduled[-1] - incompatible[-1]))
                     ),
                     "primary_trajectory_max_abs_difference": float(
-                        np.max(np.abs(gradual - abrupt))
+                        np.max(np.abs(scheduled - incompatible))
+                    ),
+                    "primary_increment_max_abs_difference": abs(
+                        scheduled_statistics["max_increment"]
+                        - incompatible_statistics["max_increment"]
+                    ),
+                    "primary_increment_l1_abs_difference": abs(
+                        scheduled_statistics["increment_l1"]
+                        - incompatible_statistics["increment_l1"]
+                    ),
+                    "primary_increment_l2_abs_difference": abs(
+                        scheduled_statistics["increment_l2"]
+                        - incompatible_statistics["increment_l2"]
                     ),
                     "coordination_target_trajectory_max_abs_difference": float(
                         np.max(
@@ -374,20 +633,51 @@ def generate_suite(config: Mapping[str, Any]) -> Dict[str, Any]:
                             )
                         )
                     ),
-                    "normal_profile_max_increment": normal_max_increment,
-                    "abrupt_profile_max_increment": abrupt_max_increment,
-                    "normal_transition_max_profile_increment": allowed_increment,
+                    "scheduled_trajectory_increment_statistics": scheduled_statistics,
+                    "incompatible_trajectory_increment_statistics": incompatible_statistics,
                     "coordination_error_target_std": coordination_error,
                     "minimum_coordination_error_target_std": required_error,
                 }
             )
+    for split_name, (split_start, split_end) in normal_split_ranges.items():
+        bank_sources = _select_sources(
+            train_regime[split_start:split_end],
+            history,
+            horizon,
+            int(episodes_config["normal_transition_sources_per_regime"][split_name]),
+        )
+        for regime in (0, 1):
+            for ordinal, relative_source_start in enumerate(bank_sources[regime]):
+                normal_transition_banks[split_name].extend(
+                    _normal_transition_bank_episode(
+                        split_name,
+                        regime,
+                        ordinal,
+                        split_start + int(relative_source_start),
+                        train_values,
+                        history,
+                        horizon,
+                        cue_channel,
+                        cue_length,
+                        cue_amplitudes,
+                        cue_encoding,
+                        normal_onsets,
+                        ramp_length,
+                        float(episodes_config["transition_amplitude"]),
+                        float(episodes_config["coordination_amplitude_multiplier"]),
+                        loadings,
+                    )
+                )
     return {
         "train_values": train_values,
         "train_regime": train_regime,
         "background_values": background_values,
         "background_regime": background_regime,
+        "normal_split_ranges": normal_split_ranges,
         "episodes": episodes,
         "contracts": contracts,
+        "normal_transition_banks": normal_transition_banks,
+        "normal_transition_references": normal_transition_banks["reference"],
     }
 
 
@@ -408,6 +698,13 @@ def write_suite(config: Mapping[str, Any], suite: Mapping[str, Any], output_dir:
         train_regime=np.asarray(suite["train_regime"], dtype=np.int64),
         background_values=np.asarray(suite["background_values"], dtype=np.float32),
         background_regime=np.asarray(suite["background_regime"], dtype=np.int64),
+        normal_split_names=np.asarray(list(suite["normal_split_ranges"].keys())),
+        normal_split_starts=np.asarray(
+            [item[0] for item in suite["normal_split_ranges"].values()], dtype=np.int64
+        ),
+        normal_split_ends=np.asarray(
+            [item[1] for item in suite["normal_split_ranges"].values()], dtype=np.int64
+        ),
     )
     np.savez_compressed(
         output_dir / "episodes.npz",
@@ -424,6 +721,56 @@ def write_suite(config: Mapping[str, Any], suite: Mapping[str, Any], output_dir:
         coordination_pair_ids=np.asarray(
             [episode["coordination_pair_id"] or "" for episode in episodes]
         ),
+        cue_modes=np.asarray(
+            [episode["cue_mode"] if episode["cue_mode"] is not None else -1 for episode in episodes],
+            dtype=np.int64,
+        ),
+        expected_onsets=np.asarray(
+            [episode["expected_onset"] if episode["expected_onset"] is not None else -1 for episode in episodes],
+            dtype=np.int64,
+        ),
+        observed_onsets=np.asarray(
+            [episode["observed_onset"] if episode["observed_onset"] is not None else -1 for episode in episodes],
+            dtype=np.int64,
+        ),
+    )
+    banks = dict(suite["normal_transition_banks"])
+    all_bank_episodes = [episode for bank in banks.values() for episode in bank]
+    references = list(banks["reference"])
+    np.savez_compressed(
+        output_dir / "normal_transition_banks.npz",
+        windows=np.stack([episode["values"] for episode in all_bank_episodes], axis=0),
+        split_names=np.asarray([episode["split"] for episode in all_bank_episodes]),
+        roles=np.asarray([episode["role"] for episode in all_bank_episodes]),
+        regimes=np.asarray([episode["regime"] for episode in all_bank_episodes], dtype=np.int64),
+        source_starts=np.asarray(
+            [episode["source_start"] for episode in all_bank_episodes], dtype=np.int64
+        ),
+        cue_modes=np.asarray(
+            [episode["cue_mode"] if episode["cue_mode"] is not None else -1 for episode in all_bank_episodes],
+            dtype=np.int64,
+        ),
+        expected_onsets=np.asarray(
+            [episode["expected_onset"] if episode["expected_onset"] is not None else -1 for episode in all_bank_episodes],
+            dtype=np.int64,
+        ),
+    )
+    np.savez_compressed(
+        output_dir / "normal_transition_references.npz",
+        windows=np.stack([reference["values"] for reference in references], axis=0),
+        roles=np.asarray([reference["role"] for reference in references]),
+        regimes=np.asarray([reference["regime"] for reference in references], dtype=np.int64),
+        source_starts=np.asarray(
+            [reference["source_start"] for reference in references], dtype=np.int64
+        ),
+        cue_modes=np.asarray(
+            [reference["cue_mode"] if reference["cue_mode"] is not None else -1 for reference in references],
+            dtype=np.int64,
+        ),
+        expected_onsets=np.asarray(
+            [reference["expected_onset"] if reference["expected_onset"] is not None else -1 for reference in references],
+            dtype=np.int64,
+        ),
     )
     _write_json(output_dir / "resolved_config.json", dict(config))
     metadata = {
@@ -432,6 +779,14 @@ def write_suite(config: Mapping[str, Any], suite: Mapping[str, Any], output_dir:
         "generator_sha256": _file_sha256(Path(__file__)),
         "episode_count": int(len(episodes)),
         "source_count": int(len(suite["contracts"])),
+        "normal_transition_reference_count": int(len(references)),
+        "normal_transition_bank_counts": {
+            split_name: int(len(bank)) for split_name, bank in banks.items()
+        },
+        "normal_split_ranges": {
+            name: [int(start), int(end)]
+            for name, (start, end) in suite["normal_split_ranges"].items()
+        },
         "roles": list(ROLE_ORDER),
         "contracts": list(suite["contracts"]),
         "contains_model_scores": False,

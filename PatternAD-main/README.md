@@ -5,11 +5,18 @@
 The active research definition is **Direction A2: dynamic-structure-aware
 event and transition semantics**. A2 asks whether a post-boundary trajectory
 is compatible with an event-pre observable state; it does not preselect a
-residual, model backbone, graph module, or modality. Its pre-model task and
+residual, model backbone, graph module, or modality. Its synthetic development
+task and
 falsification contract are in
 [research/direction_a/A2_EXPERIMENT_PLAN.md](research/direction_a/A2_EXPERIMENT_PLAN.md).
-The current A2 artifact is generator-only and lives under
-[`config/a2/`](config/a2/) and [`scripts/a2/`](scripts/a2/).
+The A2 generator, audit, and separate model families live under
+[`config/a2/`](config/a2/) and [`scripts/a2/`](scripts/a2/). The first
+conditional-mixture-density family (M1) failed its frozen four-seed
+confirmation; the current development candidate is the separately implemented
+contrastive compatibility-energy family (M2). M2's initial A2-v1 contract was
+not seed-stable; A2-v2 fixed that defect, but M2-v2 passed only `2/4` complete
+confirmation gates because normal-score calibration was unstable. M2 is closed
+as an A2 detector route. Neither route has a real-data claim.
 
 Direction B1 remains the active executable controlled-mechanism baseline.
 B2c and B3a are closed after their respective frozen smokes failed strict

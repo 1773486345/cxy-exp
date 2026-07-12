@@ -1,0 +1,1416 @@
+{
+  "all_gates_passed": true,
+  "condition_on_event_pre": true,
+  "contract_audit": {
+    "episode_count": 80,
+    "event_pre_cue_observability_accuracy": 1.0,
+    "event_pre_cue_observability_margin": 0.49233245849609375,
+    "normal_split_ranges": {
+      "optimization": [
+        0,
+        768
+      ],
+      "outer_calibration": [
+        1769,
+        2153
+      ],
+      "reference": [
+        1222,
+        1734
+      ],
+      "validation": [
+        803,
+        1187
+      ]
+    },
+    "normal_transition_bank_counts": {
+      "optimization": 288,
+      "outer_calibration": 144,
+      "reference": 192,
+      "validation": 144
+    },
+    "normal_transition_reference_count": 192,
+    "passed": true,
+    "primary_cue_only_majority_accuracy": 0.5,
+    "primary_cue_onset_majority_accuracy": 1.0,
+    "primary_incompatible_onset_marginal": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+    ],
+    "primary_normal_onset_marginal": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6
+    ],
+    "primary_onset_only_majority_accuracy": 0.5,
+    "source_count": 16,
+    "violations": []
+  },
+  "contract_config_hash": "ffc1520fb838b97cd0b5b5e319aa7534279bc724b15fa6369fc6d841453ed9bf",
+  "device": "cpu",
+  "episode_scores": [
+    {
+      "compatibility_tail": 0.19162904254520116,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_0_source_00_primary",
+      "raw_compatibility_score": 0.19215399026870728,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_00"
+    },
+    {
+      "compatibility_tail": 1.7464787646948985,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_0_source_00_primary",
+      "raw_compatibility_score": 0.6348966360092163,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_00"
+    },
+    {
+      "compatibility_tail": 0.7068648167887445,
+      "coordination_pair_id": "regime_0_source_00_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.4431014060974121,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_00"
+    },
+    {
+      "compatibility_tail": 4.113602378826515,
+      "coordination_pair_id": "regime_0_source_00_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.1677361726760864,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_00"
+    },
+    {
+      "compatibility_tail": 1.0931774926821527,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.5519604682922363,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_00"
+    },
+    {
+      "compatibility_tail": 0.10025660373965045,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_01_primary",
+      "raw_compatibility_score": 0.16186237335205078,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_01"
+    },
+    {
+      "compatibility_tail": 0.2702903297399117,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_01_primary",
+      "raw_compatibility_score": 0.3376842737197876,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_01"
+    },
+    {
+      "compatibility_tail": 0.03685509238915442,
+      "coordination_pair_id": "regime_0_source_01_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.08583122491836548,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_01"
+    },
+    {
+      "compatibility_tail": 5.717027701406222,
+      "coordination_pair_id": "regime_0_source_01_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.3430559635162354,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_01"
+    },
+    {
+      "compatibility_tail": 0.2876820724517809,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.3436782956123352,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_01"
+    },
+    {
+      "compatibility_tail": 0.09301019521888317,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_02_primary",
+      "raw_compatibility_score": 0.16019999980926514,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_02"
+    },
+    {
+      "compatibility_tail": 2.106109788761997,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_02_primary",
+      "raw_compatibility_score": 0.7203515768051147,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_02"
+    },
+    {
+      "compatibility_tail": 0.21985947611301976,
+      "coordination_pair_id": "regime_0_source_02_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.3089577555656433,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_02"
+    },
+    {
+      "compatibility_tail": 5.717027701406222,
+      "coordination_pair_id": "regime_0_source_02_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.1909903287887573,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_02"
+    },
+    {
+      "compatibility_tail": 0.6865897800137862,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.48548394441604614,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_02"
+    },
+    {
+      "compatibility_tail": 0.12770952483191372,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_0_source_03_primary",
+      "raw_compatibility_score": 0.15451812744140625,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_03"
+    },
+    {
+      "compatibility_tail": 0.21500239373050986,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_0_source_03_primary",
+      "raw_compatibility_score": 0.22603321075439453,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_03"
+    },
+    {
+      "compatibility_tail": 0.01648388972168937,
+      "coordination_pair_id": "regime_0_source_03_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.0783277153968811,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_03"
+    },
+    {
+      "compatibility_tail": 4.51906748693468,
+      "coordination_pair_id": "regime_0_source_03_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.435075044631958,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_03"
+    },
+    {
+      "compatibility_tail": 0.39193310188958813,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.3590712547302246,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_03"
+    },
+    {
+      "compatibility_tail": 0.07867303207247597,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_04_primary",
+      "raw_compatibility_score": 0.15504246950149536,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_04"
+    },
+    {
+      "compatibility_tail": 2.0794415416798357,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_04_primary",
+      "raw_compatibility_score": 0.7170860767364502,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_04"
+    },
+    {
+      "compatibility_tail": 0.16406811648460423,
+      "coordination_pair_id": "regime_0_source_04_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.2890748977661133,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_04"
+    },
+    {
+      "compatibility_tail": 5.717027701406222,
+      "coordination_pair_id": "regime_0_source_04_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.2115778923034668,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_04"
+    },
+    {
+      "compatibility_tail": 0.3325326386171327,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.37293559312820435,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_04"
+    },
+    {
+      "compatibility_tail": 0.06805346324501564,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_05_primary",
+      "raw_compatibility_score": 0.1527698040008545,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_05"
+    },
+    {
+      "compatibility_tail": 0.17185025692665928,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_05_primary",
+      "raw_compatibility_score": 0.2897392511367798,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_05"
+    },
+    {
+      "compatibility_tail": 0.016584128015535295,
+      "coordination_pair_id": "regime_0_source_05_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.06856346130371094,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_05"
+    },
+    {
+      "compatibility_tail": 5.717027701406222,
+      "coordination_pair_id": "regime_0_source_05_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.3573644161224365,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_05"
+    },
+    {
+      "compatibility_tail": 0.2363887780642304,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.32063210010528564,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_05"
+    },
+    {
+      "compatibility_tail": 0.06805346324501564,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_06_primary",
+      "raw_compatibility_score": 0.15316396951675415,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_06"
+    },
+    {
+      "compatibility_tail": 2.0281482472922856,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_06_primary",
+      "raw_compatibility_score": 0.7104501128196716,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_06"
+    },
+    {
+      "compatibility_tail": 0.18759861389479837,
+      "coordination_pair_id": "regime_0_source_06_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.30237215757369995,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_06"
+    },
+    {
+      "compatibility_tail": 5.717027701406222,
+      "coordination_pair_id": "regime_0_source_06_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.2155824899673462,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_06"
+    },
+    {
+      "compatibility_tail": 0.38915153261664054,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.40042394399642944,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_06"
+    },
+    {
+      "compatibility_tail": 0.06453852113757118,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_07_primary",
+      "raw_compatibility_score": 0.1525934934616089,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_0_source_07"
+    },
+    {
+      "compatibility_tail": 0.13729787541999947,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "regime_0_source_07_primary",
+      "raw_compatibility_score": 0.2384779453277588,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_0_source_07"
+    },
+    {
+      "compatibility_tail": 0.023295562603522068,
+      "coordination_pair_id": "regime_0_source_07_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.07414907217025757,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_0_source_07"
+    },
+    {
+      "compatibility_tail": 5.717027701406222,
+      "coordination_pair_id": "regime_0_source_07_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.4233005046844482,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "unsupported_transition",
+      "source_id": "regime_0_source_07"
+    },
+    {
+      "compatibility_tail": 0.48058573857627246,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.44106680154800415,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 0,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_0_source_07"
+    },
+    {
+      "compatibility_tail": 0.08231595257155143,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_00_primary",
+      "raw_compatibility_score": 0.14315712451934814,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_00"
+    },
+    {
+      "compatibility_tail": 2.121172214136309,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_00_primary",
+      "raw_compatibility_score": 0.6763143539428711,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_00"
+    },
+    {
+      "compatibility_tail": 0.29589005286961056,
+      "coordination_pair_id": "regime_1_source_00_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.3062249422073364,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_00"
+    },
+    {
+      "compatibility_tail": 4.29592393562047,
+      "coordination_pair_id": "regime_1_source_00_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.1924731731414795,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_00"
+    },
+    {
+      "compatibility_tail": 1.628695729038515,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.619755744934082,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_00"
+    },
+    {
+      "compatibility_tail": 0.14646007417728968,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_01_primary",
+      "raw_compatibility_score": 0.15871858596801758,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_01"
+    },
+    {
+      "compatibility_tail": 0.23548092507405055,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_01_primary",
+      "raw_compatibility_score": 0.2639425992965698,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_01"
+    },
+    {
+      "compatibility_tail": 0.0027285146532040625,
+      "coordination_pair_id": "regime_1_source_01_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.061690449714660645,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_01"
+    },
+    {
+      "compatibility_tail": 4.51906748693468,
+      "coordination_pair_id": "regime_1_source_01_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.346906065940857,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_01"
+    },
+    {
+      "compatibility_tail": 0.8191879014553104,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.511940062046051,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_01"
+    },
+    {
+      "compatibility_tail": 0.5254644945141108,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_02_primary",
+      "raw_compatibility_score": 0.39695173501968384,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_02"
+    },
+    {
+      "compatibility_tail": 3.072148503998354,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_02_primary",
+      "raw_compatibility_score": 0.8852130174636841,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_02"
+    },
+    {
+      "compatibility_tail": 0.7636982915519105,
+      "coordination_pair_id": "regime_1_source_02_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.4611748456954956,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_02"
+    },
+    {
+      "compatibility_tail": 5.905361848054571,
+      "coordination_pair_id": "regime_1_source_02_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.4982798099517822,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_02"
+    },
+    {
+      "compatibility_tail": -0.0,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.02819228172302246,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_02"
+    },
+    {
+      "compatibility_tail": 0.09123131622950378,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_03_primary",
+      "raw_compatibility_score": 0.1442859172821045,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_03"
+    },
+    {
+      "compatibility_tail": 0.19825158330569453,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_03_primary",
+      "raw_compatibility_score": 0.19927924871444702,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_03"
+    },
+    {
+      "compatibility_tail": 0.04457562458870444,
+      "coordination_pair_id": "regime_1_source_03_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.09878939390182495,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_03"
+    },
+    {
+      "compatibility_tail": 5.905361848054571,
+      "coordination_pair_id": "regime_1_source_03_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.5149097442626953,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_03"
+    },
+    {
+      "compatibility_tail": 0.9853809222264454,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.5214251279830933,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_03"
+    },
+    {
+      "compatibility_tail": 0.06472019068117196,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_04_primary",
+      "raw_compatibility_score": 0.1335207223892212,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_04"
+    },
+    {
+      "compatibility_tail": 2.0986993582842506,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_04_primary",
+      "raw_compatibility_score": 0.6757099628448486,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_04"
+    },
+    {
+      "compatibility_tail": 0.2528726677859197,
+      "coordination_pair_id": "regime_1_source_04_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.2885873317718506,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_04"
+    },
+    {
+      "compatibility_tail": 4.51906748693468,
+      "coordination_pair_id": "regime_1_source_04_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.211112380027771,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_04"
+    },
+    {
+      "compatibility_tail": 2.7698676321254205,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.8099729418754578,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_04"
+    },
+    {
+      "compatibility_tail": 0.2049182746638838,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_05_primary",
+      "raw_compatibility_score": 0.210010826587677,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_05"
+    },
+    {
+      "compatibility_tail": 0.7520702535567912,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_05_primary",
+      "raw_compatibility_score": 0.4541451930999756,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_05"
+    },
+    {
+      "compatibility_tail": 0.06472019068117196,
+      "coordination_pair_id": "regime_1_source_05_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.13501346111297607,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_05"
+    },
+    {
+      "compatibility_tail": 4.51906748693468,
+      "coordination_pair_id": "regime_1_source_05_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.2613880634307861,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_05"
+    },
+    {
+      "compatibility_tail": 3.266304518439312,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.9221867322921753,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_05"
+    },
+    {
+      "compatibility_tail": 0.06472019068117196,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_06_primary",
+      "raw_compatibility_score": 0.13522642850875854,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_06"
+    },
+    {
+      "compatibility_tail": 2.144161732361008,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_06_primary",
+      "raw_compatibility_score": 0.6809252500534058,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_06"
+    },
+    {
+      "compatibility_tail": 0.24587963229494916,
+      "coordination_pair_id": "regime_1_source_06_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.28456491231918335,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_06"
+    },
+    {
+      "compatibility_tail": 4.113602378826515,
+      "coordination_pair_id": "regime_1_source_06_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.1762194633483887,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_06"
+    },
+    {
+      "compatibility_tail": 1.9558275857126592,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 2.4589311633847397,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.7053267955780029,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 0,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_06"
+    },
+    {
+      "compatibility_tail": 0.12461833226224084,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_07_primary",
+      "raw_compatibility_score": 0.151422917842865,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_scheduled_transition",
+      "source_id": "regime_1_source_07"
+    },
+    {
+      "compatibility_tail": 0.21500239373050986,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "regime_1_source_07_primary",
+      "raw_compatibility_score": 0.22804641723632812,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "incompatible_timing_transition",
+      "source_id": "regime_1_source_07"
+    },
+    {
+      "compatibility_tail": 0.01648388972168937,
+      "coordination_pair_id": "regime_1_source_07_coordination",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.074154794216156,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "normal_coordinated_transition",
+      "source_id": "regime_1_source_07"
+    },
+    {
+      "compatibility_tail": 4.51906748693468,
+      "coordination_pair_id": "regime_1_source_07_coordination",
+      "outer_exceedance": 1,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 1.423513412475586,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "unsupported_transition",
+      "source_id": "regime_1_source_07"
+    },
+    {
+      "compatibility_tail": 0.8116116472478079,
+      "coordination_pair_id": "",
+      "outer_exceedance": 0,
+      "outer_threshold": 3.266304518439312,
+      "primary_pair_id": "",
+      "raw_compatibility_score": 0.48016589879989624,
+      "raw_score_name": "event_pre_future_contrastive_energy",
+      "regime": 1,
+      "reliability_bin": 1,
+      "role": "no_event_normal_control",
+      "source_id": "regime_1_source_07"
+    }
+  ],
+  "experiment_config": {
+    "calibration": {
+      "outer_alpha": 0.05,
+      "reliability_bin_count": 2
+    },
+    "device": "cpu",
+    "experiment_id": "a2_contrastive_energy_m2_v1",
+    "model": {
+      "batch_size": 64,
+      "condition_on_event_pre": true,
+      "contrastive_temperature": 0.2,
+      "epochs": 100,
+      "forecast_weight": 0.25,
+      "hidden_size": 32,
+      "learning_rate": 0.003,
+      "patience": 12
+    },
+    "schema_version": 1,
+    "seed": 6303
+  },
+  "experiment_id": "a2_contrastive_energy_m2_v1",
+  "fit": {
+    "best_epoch": 11,
+    "best_validation_loss": 3.961036302013281,
+    "condition_on_event_pre": true,
+    "contrastive_temperature": 0.2,
+    "forecast_weight": 0.25,
+    "normalizer": {
+      "mean": [
+        -0.02197791263461113,
+        -0.024048512801527977,
+        0.024470923468470573,
+        -0.009507521986961365
+      ],
+      "std": [
+        0.5308970808982849,
+        0.5226950645446777,
+        0.35818544030189514,
+        0.24355675280094147
+      ]
+    },
+    "optimization_windows": 1021,
+    "outer_alpha": 0.05,
+    "outer_calibration_windows": 493,
+    "outer_thresholds": {
+      "0": 2.4589311633847397,
+      "1": 3.266304518439312
+    },
+    "parameter_count": 14160,
+    "reference_tails": {
+      "0": {
+        "count": 303,
+        "maximum": 1.1641936302185059,
+        "minimum": 0.06072413921356201
+      },
+      "1": {
+        "count": 366,
+        "maximum": 1.4847310781478882,
+        "minimum": 0.0605008602142334
+      }
+    },
+    "reference_windows": 669,
+    "reliability_bin_count": 2,
+    "reliability_boundaries": [
+      0.15097571736197637
+    ],
+    "seed": 6303,
+    "training_history": [
+      {
+        "epoch": 1,
+        "optimization_loss": 4.458418027427591,
+        "validation_loss": 4.370302941204327
+      },
+      {
+        "epoch": 2,
+        "optimization_loss": 4.314266524749218,
+        "validation_loss": 4.282869929957825
+      },
+      {
+        "epoch": 3,
+        "optimization_loss": 4.226403682402369,
+        "validation_loss": 4.240236598144438
+      },
+      {
+        "epoch": 4,
+        "optimization_loss": 4.104437704301137,
+        "validation_loss": 4.153394100873998
+      },
+      {
+        "epoch": 5,
+        "optimization_loss": 3.9525872189898217,
+        "validation_loss": 4.155516012686987
+      },
+      {
+        "epoch": 6,
+        "optimization_loss": 3.7713462220583325,
+        "validation_loss": 3.9869512254277786
+      },
+      {
+        "epoch": 7,
+        "optimization_loss": 3.638359880821011,
+        "validation_loss": 3.9863198195219525
+      },
+      {
+        "epoch": 8,
+        "optimization_loss": 3.574042967087375,
+        "validation_loss": 3.9782712067842
+      },
+      {
+        "epoch": 9,
+        "optimization_loss": 3.526368306969802,
+        "validation_loss": 3.991081989319281
+      },
+      {
+        "epoch": 10,
+        "optimization_loss": 3.477020187079031,
+        "validation_loss": 3.998918186578499
+      },
+      {
+        "epoch": 11,
+        "optimization_loss": 3.4310162520431984,
+        "validation_loss": 3.961036302013281
+      },
+      {
+        "epoch": 12,
+        "optimization_loss": 3.4113755191108037,
+        "validation_loss": 4.008577570228499
+      },
+      {
+        "epoch": 13,
+        "optimization_loss": 3.39849808517329,
+        "validation_loss": 3.976380133967371
+      },
+      {
+        "epoch": 14,
+        "optimization_loss": 3.3436670887131648,
+        "validation_loss": 4.112412756886975
+      },
+      {
+        "epoch": 15,
+        "optimization_loss": 3.3280114389656807,
+        "validation_loss": 4.0958651335679495
+      },
+      {
+        "epoch": 16,
+        "optimization_loss": 3.3136611409799124,
+        "validation_loss": 4.082516349111561
+      },
+      {
+        "epoch": 17,
+        "optimization_loss": 3.2371741877713704,
+        "validation_loss": 4.09532167558496
+      },
+      {
+        "epoch": 18,
+        "optimization_loss": 3.2659025642944246,
+        "validation_loss": 4.049412623380309
+      },
+      {
+        "epoch": 19,
+        "optimization_loss": 3.1805168146251113,
+        "validation_loss": 4.172147590780355
+      },
+      {
+        "epoch": 20,
+        "optimization_loss": 3.1673401116624285,
+        "validation_loss": 4.149543872469579
+      },
+      {
+        "epoch": 21,
+        "optimization_loss": 3.0893604510211103,
+        "validation_loss": 4.23091594345913
+      },
+      {
+        "epoch": 22,
+        "optimization_loss": 3.081368342903055,
+        "validation_loss": 4.270505813265911
+      },
+      {
+        "epoch": 23,
+        "optimization_loss": 3.0333844529543286,
+        "validation_loss": 4.210306966522403
+      }
+    ],
+    "validation_windows": 493
+  },
+  "gates": {
+    "background_normal": {
+      "fpr_gap": 0.006614792406795314,
+      "passed": true,
+      "reliability_boundaries": [
+        0.15097571736197637
+      ],
+      "strata": {
+        "reliability_bin_0": {
+          "count": 451,
+          "exceedances": 34,
+          "fpr": 0.07538802660753881
+        },
+        "reliability_bin_1": {
+          "count": 538,
+          "exceedances": 37,
+          "fpr": 0.0687732342007435
+        }
+      }
+    },
+    "event_pre_isolation": {
+      "max_state_difference": 0.0,
+      "passed": true
+    },
+    "normal_skill": {
+      "last_value_mae": 0.26406288146972656,
+      "mixture_mean_mae": 0.23586216568946838,
+      "passed": true,
+      "relative_improvement": 0.10679545577666222
+    },
+    "normal_transition_controls": {
+      "passed": true,
+      "roles": {
+        "no_event_normal_control": {
+          "below_threshold": 16,
+          "count": 16,
+          "exceedances": 0,
+          "fpr": 0.0
+        },
+        "normal_coordinated_transition": {
+          "below_threshold": 16,
+          "count": 16,
+          "exceedances": 0,
+          "fpr": 0.0
+        },
+        "normal_scheduled_transition": {
+          "below_threshold": 16,
+          "count": 16,
+          "exceedances": 0,
+          "fpr": 0.0
+        }
+      }
+    },
+    "primary_ordering": {
+      "median_tail_margin": 1.0510008505213024,
+      "pair_count": 16,
+      "passed": true,
+      "positive_pairs": 16,
+      "tail_margins": [
+        1.5548497221496973,
+        0.17003372600026123,
+        2.0130995935431137,
+        0.08729286889859614,
+        2.0007685096073597,
+        0.10379679368164364,
+        1.96009478404727,
+        0.07275935428242829,
+        2.038856261564758,
+        0.08902085089676087,
+        2.546684009484243,
+        0.10702026707619075,
+        2.0339791676030785,
+        0.5471519788929075,
+        2.0794415416798357,
+        0.09038406146826902
+      ]
+    },
+    "secondary_coordination_ordering": {
+      "median_tail_margin": 4.829001264392068,
+      "pair_count": 16,
+      "passed": true,
+      "positive_pairs": 16,
+      "tail_margins": [
+        3.4067375620377707,
+        5.680172609017068,
+        5.497168225293202,
+        4.502583597212991,
+        5.552959584921617,
+        5.700443573390687,
+        5.529429087511423,
+        5.6937321388027,
+        4.000033882750859,
+        4.516338972281476,
+        5.14166355650266,
+        5.860786223465866,
+        4.26619481914876,
+        4.454347296253508,
+        3.867722746531566,
+        4.502583597212991
+      ]
+    }
+  },
+  "normal_split_window_counts": {
+    "optimization": 1021,
+    "outer_calibration": 493,
+    "reference": 669,
+    "validation": 493
+  },
+  "raw_score_name": "event_pre_future_contrastive_energy",
+  "seed": 6303
+}

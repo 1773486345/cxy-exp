@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "suite_id": "a2_transition_contract_v1",
-  "seed": 5101,
+  "suite_id": "a2_transition_contract_v2",
+  "seed": 5110,
   "dimensions": 4,
   "channel_names": ["target", "driver_a", "driver_b", "driver_c"],
   "burn_in": 128,
@@ -39,6 +39,8 @@
     "cue_channel": 1,
     "cue_length": 6,
     "cue_amplitudes": [-1.2, 1.2],
+    "cue_encoding": "anchored_overwrite_v1",
+    "cue_amplitude_tolerance": 0.0000005,
     "normal_transition_onsets": [4, 6],
     "incompatible_transition_onsets": [6, 4],
     "transition_ramp_length": 3,

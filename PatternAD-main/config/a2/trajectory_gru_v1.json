@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "experiment_id": "a2_transition_gru_v1",
+  "seed": 6101,
+  "device": "cpu",
+  "model": {
+    "hidden_size": 32,
+    "mixture_components": 3,
+    "learning_rate": 0.003,
+    "epochs": 100,
+    "patience": 12,
+    "batch_size": 64
+  },
+  "calibration": {
+    "outer_alpha": 0.1,
+    "reliability_bin_count": 2
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "confirmation_id": "a2_m2_v2_confirmation_v1",
+  "contract_seeds": [5111, 5112, 5113, 5114],
+  "model_seeds": [6311, 6312, 6313, 6314]
+}

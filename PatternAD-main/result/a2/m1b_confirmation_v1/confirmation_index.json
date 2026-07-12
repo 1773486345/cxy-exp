@@ -1,0 +1,32 @@
+{
+  "confirmation_id": "a2_m1b_confirmation_v1",
+  "experiment_id": "a2_transition_gru_m1b_alpha05",
+  "passed_runs": 0,
+  "run_count": 4,
+  "runs": [
+    {
+      "all_gates_passed": false,
+      "contract_seed": 5102,
+      "model_seed": 6202,
+      "summary": "result/a2/m1b_confirmation_v1/contract5102_model6202/summary.json"
+    },
+    {
+      "all_gates_passed": false,
+      "contract_seed": 5103,
+      "model_seed": 6203,
+      "summary": "result/a2/m1b_confirmation_v1/contract5103_model6203/summary.json"
+    },
+    {
+      "all_gates_passed": false,
+      "contract_seed": 5104,
+      "model_seed": 6204,
+      "summary": "result/a2/m1b_confirmation_v1/contract5104_model6204/summary.json"
+    },
+    {
+      "all_gates_passed": false,
+      "contract_seed": 5105,
+      "model_seed": 6205,
+      "summary": "result/a2/m1b_confirmation_v1/contract5105_model6205/summary.json"
+    }
+  ]
+}

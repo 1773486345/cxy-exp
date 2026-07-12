@@ -1,0 +1,10 @@
+{
+  "status": "invalid_incomplete_confirmation",
+  "reason": "The A2-v1 contract passed its cue observability audit for seeds 5106 and 5107 but failed it for a later frozen seed before the batch completed. The confirmation runner did not preflight all frozen contract seeds before creating result directories.",
+  "retained_artifacts": [
+    "contract5106_model6302",
+    "contract5107_model6303"
+  ],
+  "interpretation": "Retained only for debugging and provenance. These artifacts must not be pooled, reported, or interpreted as an M2 confirmation result.",
+  "replacement": "A2-v2 uses seed-stable anchored raw cues. It requires a new M2-v2 development run, event-pre ablation, and a preflighted confirmation."
+}
