@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "experiment_name": "mechanism_graph_ad_real_benchmark_v1",
+  "description": "Single-GPU real-data evaluation config for the end-to-end MechanismGraphAD model. Dataset names and model parameters are supplied by the runner so every variant uses the same protocol.",
+  "data_config": {
+    "feature_dict": {
+      "if_univariate": false,
+      "if_trend": null,
+      "has_timestamp": null,
+      "if_season": null
+    },
+    "data_set_name": "large_detect"
+  },
+  "model_config": {
+    "models": [],
+    "recommend_model_hyper_params": {
+      "input_chunk_length": 64,
+      "output_chunk_length": 1
+    }
+  },
+  "evaluation_config": {
+    "metrics": "all",
+    "strategy_args": {
+      "strategy_name": "all_detect_score",
+      "seed": 2021
+    }
+  },
+  "report_config": {
+    "aggregate_type": "mean",
+    "report_metrics": ["auc_pr", "auc_roc", "VUS_PR", "VUS_ROC"],
+    "fill_type": "mean_value",
+    "null_value_threshold": "0.3"
+  }
+}
