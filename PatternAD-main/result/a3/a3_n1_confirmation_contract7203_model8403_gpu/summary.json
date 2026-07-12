@@ -1,0 +1,2173 @@
+{
+  "all_gates_passed": true,
+  "background_protocol_hash": "810526ef372cb9af496327d9f0935d37c9871202fb644f7f5d037ae34ccb00b2",
+  "contract_config_hash": "9f92af613cf436737f84c074d12862563e1f55b6ed8e40272b36277e1afd605b",
+  "device": "cuda",
+  "episode_scores": [
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.6202173829078674,
+        0.003985914401710033,
+        0.008920342661440372,
+        0.0045370496809482574,
+        0.08708472549915314,
+        0.030185410752892494
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.754930853843689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_00",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.6202173829078674,
+        7.603556156158447,
+        3.5501761436462402,
+        5.059847354888916,
+        5.7893266677856445,
+        0.03359643742442131
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 22.656719207763672,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_00",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        5.6633148193359375,
+        7.623965740203857,
+        2.7888574600219727,
+        7.499101161956787,
+        5.557408332824707,
+        7.413471221923828
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 36.546119689941406,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_00",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_00",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        4.892730712890625,
+        0.008057588711380959
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.873260498046875,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_00",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.6202173829078674,
+        0.003985914401710033,
+        0.008920342661440372,
+        0.0045370496809482574,
+        0.08708472549915314,
+        0.030185410752892494
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.754930853843689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_01",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.6202173829078674,
+        7.603556156158447,
+        3.5501761436462402,
+        5.059847354888916,
+        5.7893266677856445,
+        0.03359643742442131
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 22.656719207763672,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_01",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        7.085082054138184,
+        6.84087610244751,
+        3.5845000743865967,
+        8.611027717590332,
+        3.8421502113342285,
+        0.1013728678226471
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 30.06501007080078,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_01",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_01",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        4.892730712890625,
+        0.008057588711380959
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.873260498046875,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_01",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        1.2591884136199951,
+        0.006725413724780083,
+        0.008772643283009529,
+        0.004745411686599255,
+        0.09141086041927338,
+        0.02826700732111931
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 1.3991098403930664,
+      "null_route_tail": 1.81781957589792,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_02",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        10.03950023651123,
+        7.079203128814697,
+        3.194535255432129,
+        5.159661769866943,
+        8.779623985290527,
+        0.07762324810028076
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 34.33014678955078,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_02",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        5.6633148193359375,
+        7.623965740203857,
+        3.3649356365203857,
+        6.650301456451416,
+        5.853370666503906,
+        0.1186361014842987
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 29.274524688720703,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_02",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_02",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        4.892730712890625,
+        0.008057588711380959
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.873260498046875,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_02",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        1.2591884136199951,
+        0.006725413724780083,
+        0.008772643283009529,
+        0.004745411686599255,
+        0.09141086041927338,
+        0.02826700732111931
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 1.3991098403930664,
+      "null_route_tail": 1.81781957589792,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_03",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        10.03950023651123,
+        7.079203128814697,
+        3.194535255432129,
+        5.159661769866943,
+        5.819133758544922,
+        0.03470518812537193
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 31.326738357543945,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_03",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        5.6633148193359375,
+        7.623965740203857,
+        3.3649356365203857,
+        6.650301456451416,
+        5.853370666503906,
+        0.1186361014842987
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 29.274524688720703,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_03",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_03",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        4.892730712890625,
+        0.008057588711380959
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.873260498046875,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_03",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.6202173829078674,
+        0.003985914401710033,
+        0.008920342661440372,
+        0.0045370496809482574,
+        0.08708472549915314,
+        0.030185410752892494
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.754930853843689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_04",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.6202173829078674,
+        7.603556156158447,
+        3.5501761436462402,
+        5.059847354888916,
+        5.7893266677856445,
+        0.03359643742442131
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 22.656719207763672,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_04",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        7.085082054138184,
+        6.84087610244751,
+        3.5845000743865967,
+        7.363965034484863,
+        5.539700508117676,
+        0.12279420346021652
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 30.53691864013672,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_04",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_04",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        4.892730712890625,
+        0.008057588711380959
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.873260498046875,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_04",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.6202173829078674,
+        0.003985914401710033,
+        0.008920342661440372,
+        0.0045370496809482574,
+        0.08708472549915314,
+        0.030185410752892494
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.754930853843689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_05",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.6202173829078674,
+        7.603556156158447,
+        3.5501761436462402,
+        5.059847354888916,
+        5.7893266677856445,
+        0.03359643742442131
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 22.656719207763672,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_05",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        5.6633148193359375,
+        7.623965740203857,
+        2.7888574600219727,
+        7.499101161956787,
+        5.557408332824707,
+        0.12013012915849686
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 29.252777099609375,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_05",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_05",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        6.219465255737305,
+        0.0650390163064003
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 27.256973266601562,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_05",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        1.2591884136199951,
+        0.006725413724780083,
+        0.008772643283009529,
+        0.004745411686599255,
+        0.09141086041927338,
+        0.02826700732111931
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 1.3991098403930664,
+      "null_route_tail": 1.81781957589792,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_06",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        7.879718780517578,
+        7.309403419494629,
+        3.5690956115722656,
+        5.074133396148682,
+        5.798285961151123,
+        0.034046005457639694
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 29.664682388305664,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_06",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        5.6633148193359375,
+        7.623965740203857,
+        3.3649356365203857,
+        6.650301456451416,
+        5.853370666503906,
+        0.1186361014842987
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 29.274524688720703,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_06",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_06",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        4.892730712890625,
+        0.008057588711380959
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.873260498046875,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_06",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.6202173829078674,
+        0.003985914401710033,
+        0.008920342661440372,
+        0.0045370496809482574,
+        0.08708472549915314,
+        0.030185410752892494
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.754930853843689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_07",
+      "role": "normal_routed_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.6202173829078674,
+        7.603556156158447,
+        3.5501761436462402,
+        5.059847354888916,
+        5.7893266677856445,
+        0.03359643742442131
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 22.656719207763672,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_07",
+      "role": "misrouted_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": 0,
+      "future_mode": 0,
+      "node_surprisal": [
+        5.6633148193359375,
+        7.623965740203857,
+        2.7888574600219727,
+        7.499101161956787,
+        5.557408332824707,
+        0.12013012915849686
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 29.252777099609375,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m0_07",
+      "role": "partial_propagation_response",
+      "trigger_state": 1
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_07",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.0013098479248583317,
+        9.49389934539795,
+        5.751947402954102,
+        5.725314140319824,
+        4.892730712890625,
+        0.008057588711380959
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.873260498046875,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m0_07",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.9664812088012695,
+        0.019781922921538353,
+        0.012451647780835629,
+        0.006257939152419567,
+        0.09951096773147583,
+        0.04400201514363289
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 1.148485541343689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_00",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.9664812088012695,
+        7.080943584442139,
+        2.9469027519226074,
+        6.719112873077393,
+        5.396042346954346,
+        3.7312333583831787
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 26.840715408325195,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_00",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        6.0339765548706055,
+        8.937644958496094,
+        4.3651933670043945,
+        4.299405574798584,
+        7.553629398345947,
+        3.463376760482788
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 34.653228759765625,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_00",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_00",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_00",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.9664812088012695,
+        0.019781922921538353,
+        0.012451647780835629,
+        0.006257939152419567,
+        0.09951096773147583,
+        0.04400201514363289
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 1.148485541343689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_01",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.9664812088012695,
+        7.080943584442139,
+        2.9469027519226074,
+        6.719112873077393,
+        5.396042346954346,
+        3.7312333583831787
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 26.840715408325195,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_01",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        7.87631368637085,
+        7.7982282638549805,
+        6.057560443878174,
+        5.627208709716797,
+        7.946468353271484,
+        1.0130789279937744
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 36.3188591003418,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_01",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_01",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_01",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.9664812088012695,
+        0.019781922921538353,
+        0.012451647780835629,
+        0.006257939152419567,
+        0.09951096773147583,
+        0.04400201514363289
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 1.148485541343689,
+      "null_route_tail": 1.6967416443446839,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_02",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        0.9664812088012695,
+        7.080943584442139,
+        2.9469027519226074,
+        6.719112873077393,
+        5.396042346954346,
+        3.7312333583831787
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 26.840715408325195,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_02",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        6.0339765548706055,
+        8.937644958496094,
+        4.3651933670043945,
+        4.299405574798584,
+        7.553629398345947,
+        0.8133803009986877
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 32.00322723388672,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_02",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_02",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_02",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        4.461306571960449,
+        0.01766929402947426,
+        0.01254430040717125,
+        0.0061643472872674465,
+        0.09811321645975113,
+        0.042577654123306274
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 4.638375282287598,
+      "null_route_tail": 2.541119794628553,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_03",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        2.2569594383239746,
+        6.857683181762695,
+        2.7472469806671143,
+        6.606775760650635,
+        5.318000793457031,
+        3.668210029602051
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 27.454875946044922,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_03",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        7.87631368637085,
+        7.7982282638549805,
+        7.448685646057129,
+        5.058504104614258,
+        7.685841083526611,
+        4.750118732452393
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 40.61769104003906,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_03",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_03",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_03",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        2.2569594383239746,
+        0.016347641125321388,
+        0.012524522840976715,
+        0.006142191588878632,
+        0.09718014299869537,
+        0.04186156764626503
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 2.4310154914855957,
+      "null_route_tail": 2.1844448506898204,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_04",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        2.2569594383239746,
+        6.857683181762695,
+        2.7472469806671143,
+        6.606775760650635,
+        4.795379161834717,
+        1.2130892276763916
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 24.477134704589844,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_04",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        6.0339765548706055,
+        8.937644958496094,
+        4.3651933670043945,
+        9.35771656036377,
+        6.134860992431641,
+        4.274663925170898
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 39.10405731201172,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_04",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_04",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_04",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        2.601982593536377,
+        0.015232895500957966,
+        0.013230038806796074,
+        0.006008182652294636,
+        2.9086833000183105,
+        0.5669710636138916
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 6.112107753753662,
+      "null_route_tail": 3.2974458768100297,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_05",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        2.601982593536377,
+        7.374510288238525,
+        2.9216864109039307,
+        6.697057247161865,
+        5.3453593254089355,
+        3.6403183937072754
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 28.580913543701172,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_05",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        6.802899360656738,
+        8.741586685180664,
+        6.05697774887085,
+        5.653994083404541,
+        7.960326194763184,
+        5.210305213928223
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 40.426090240478516,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_05",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_05",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_05",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        1.7308729887008667,
+        0.04255537688732147,
+        0.012483082711696625,
+        0.006007116287946701,
+        0.09688674658536911,
+        0.04137970134615898
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 1.9301849603652954,
+      "null_route_tail": 1.9003405995859235,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_06",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        1.7308729887008667,
+        7.655699253082275,
+        3.070152759552002,
+        6.650420188903809,
+        4.836664199829102,
+        1.165160894393921
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 25.108970642089844,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_06",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        5.680823802947998,
+        8.038368225097656,
+        8.158001899719238,
+        7.580427646636963,
+        7.222874641418457,
+        1.519758701324463
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 38.20025634765625,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_06",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_06",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_06",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        2.4265851974487305,
+        0.022664440795779228,
+        0.01327297743409872,
+        0.0059931338764727116,
+        0.09797120094299316,
+        0.04135831072926521
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 2.6078453063964844,
+      "null_route_tail": 2.3724970821927602,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_07",
+      "role": "normal_routed_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 0,
+      "node_surprisal": [
+        2.2569594383239746,
+        6.857683181762695,
+        2.7472469806671143,
+        6.606775760650635,
+        5.318000793457031,
+        3.668210029602051
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 27.454875946044922,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_07",
+      "role": "misrouted_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": 1,
+      "future_mode": 1,
+      "node_surprisal": [
+        7.87631368637085,
+        7.7982282638549805,
+        4.633285999298096,
+        4.227806568145752,
+        7.602091312408447,
+        5.215394973754883
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 37.353118896484375,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "triggered_m1_07",
+      "role": "partial_propagation_response",
+      "trigger_state": 2
+    },
+    {
+      "cue_mode": null,
+      "future_mode": null,
+      "node_surprisal": [
+        0.0013098479248583317,
+        0.0010401559993624687,
+        0.00537640368565917,
+        0.0014632957754656672,
+        0.004982317797839642,
+        0.06609348952770233
+      ],
+      "null_route_exceedance": 0,
+      "null_route_surprisal": 0.08026550710201263,
+      "null_route_tail": -0.0,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_07",
+      "role": "normal_no_trigger",
+      "trigger_state": 0
+    },
+    {
+      "cue_mode": null,
+      "future_mode": 1,
+      "node_surprisal": [
+        0.0013098479248583317,
+        10.235936164855957,
+        8.88862419128418,
+        7.856078624725342,
+        6.414615631103516,
+        0.03684524819254875
+      ],
+      "null_route_exceedance": 1,
+      "null_route_surprisal": 33.43341064453125,
+      "null_route_tail": 6.432940092739179,
+      "null_route_threshold": 2.936432531272699,
+      "pair_id": "untriggered_m1_07",
+      "role": "untriggered_response",
+      "trigger_state": 0
+    }
+  ],
+  "experiment_config": {
+    "background_subspace": {
+      "channels": "all_raw",
+      "components": 1,
+      "fit_split": "optimization"
+    },
+    "calibration": {
+      "outer_alpha": 0.05
+    },
+    "device": "cuda",
+    "experiment_id": "a3_n1_background_nulling_route_graph_development_v1",
+    "model": {
+      "batch_size": 64,
+      "condition_on_event_pre": true,
+      "epochs": 80,
+      "hidden_size": 32,
+      "learning_rate": 0.003,
+      "patience": 10
+    },
+    "schema_version": 1,
+    "seed": 8403,
+    "token_extractor": {
+      "token_energy_threshold": 0.6
+    },
+    "trigger_extractor": {
+      "cue_length": 6,
+      "linear_tolerance": 5e-06,
+      "minimum_amplitude": 1.0
+    }
+  },
+  "experiment_id": "a3_n1_background_nulling_route_graph_development_v1",
+  "fit": {
+    "background_factor": [
+      -0.479959509854789,
+      -0.5739430884495976,
+      -0.41777013235502797,
+      0.3998049247670368,
+      -0.2979783770218335,
+      -0.1306186265140183
+    ],
+    "background_factor_singular_values": [
+      11.859911079996342,
+      5.522928744042558,
+      4.381490922973142,
+      4.123139964463113,
+      3.5907507462441712,
+      3.4115587165878205
+    ],
+    "best_epoch": 60,
+    "best_validation_loss": 0.656562773029456,
+    "condition_on_event_pre": true,
+    "normal_optimization_value_count": 768,
+    "optimization_windows": 925,
+    "outer_alpha": 0.05,
+    "outer_calibration_windows": 445,
+    "outer_threshold": 2.936432531272699,
+    "parameter_count": 8601,
+    "reference_tail": {
+      "count": 621,
+      "maximum": 12.473137855529785,
+      "minimum": 0.08026573807001114
+    },
+    "reference_windows": 621,
+    "response_vocab_size": 25,
+    "seed": 8403,
+    "training_history": [
+      {
+        "epoch": 1,
+        "optimization_loss": 11.012990706160261,
+        "validation_loss": 4.218432445740432
+      },
+      {
+        "epoch": 2,
+        "optimization_loss": 3.2015937928895695,
+        "validation_loss": 2.2788286273399097
+      },
+      {
+        "epoch": 3,
+        "optimization_loss": 2.2347115635227515,
+        "validation_loss": 1.7621162671721384
+      },
+      {
+        "epoch": 4,
+        "optimization_loss": 1.8837490184887036,
+        "validation_loss": 1.5151822690213663
+      },
+      {
+        "epoch": 5,
+        "optimization_loss": 1.690503127639358,
+        "validation_loss": 1.3458070390679864
+      },
+      {
+        "epoch": 6,
+        "optimization_loss": 1.5293489177806958,
+        "validation_loss": 1.2121343312638528
+      },
+      {
+        "epoch": 7,
+        "optimization_loss": 1.3988535123258024,
+        "validation_loss": 1.1010818202843826
+      },
+      {
+        "epoch": 8,
+        "optimization_loss": 1.2947104747875318,
+        "validation_loss": 1.0128060394458556
+      },
+      {
+        "epoch": 9,
+        "optimization_loss": 1.2123435685441302,
+        "validation_loss": 0.9456990809922807
+      },
+      {
+        "epoch": 10,
+        "optimization_loss": 1.149971643396326,
+        "validation_loss": 0.8999985148397724
+      },
+      {
+        "epoch": 11,
+        "optimization_loss": 1.1018268482105151,
+        "validation_loss": 0.8607957154177548
+      },
+      {
+        "epoch": 12,
+        "optimization_loss": 1.059929388922614,
+        "validation_loss": 0.8399719645468037
+      },
+      {
+        "epoch": 13,
+        "optimization_loss": 1.0292248906315984,
+        "validation_loss": 0.8105361284834616
+      },
+      {
+        "epoch": 14,
+        "optimization_loss": 1.0049779861037795,
+        "validation_loss": 0.7953323985753434
+      },
+      {
+        "epoch": 15,
+        "optimization_loss": 0.9848975929054054,
+        "validation_loss": 0.7797902932327785
+      },
+      {
+        "epoch": 16,
+        "optimization_loss": 0.9676304337785051,
+        "validation_loss": 0.7692089230826732
+      },
+      {
+        "epoch": 17,
+        "optimization_loss": 0.9517284991290118,
+        "validation_loss": 0.7590542675404066
+      },
+      {
+        "epoch": 18,
+        "optimization_loss": 0.938840004173485,
+        "validation_loss": 0.7457293156827434
+      },
+      {
+        "epoch": 19,
+        "optimization_loss": 0.927325620908995,
+        "validation_loss": 0.7420439709438367
+      },
+      {
+        "epoch": 20,
+        "optimization_loss": 0.9163270197687923,
+        "validation_loss": 0.7337417752555248
+      },
+      {
+        "epoch": 21,
+        "optimization_loss": 0.9085828461518158,
+        "validation_loss": 0.719998050003909
+      },
+      {
+        "epoch": 22,
+        "optimization_loss": 0.8986058910472973,
+        "validation_loss": 0.7238377067480194
+      },
+      {
+        "epoch": 23,
+        "optimization_loss": 0.8918174826132285,
+        "validation_loss": 0.7134557938307858
+      },
+      {
+        "epoch": 24,
+        "optimization_loss": 0.8849452993032094,
+        "validation_loss": 0.7127969656097755
+      },
+      {
+        "epoch": 25,
+        "optimization_loss": 0.8798468100058066,
+        "validation_loss": 0.7002725183294061
+      },
+      {
+        "epoch": 26,
+        "optimization_loss": 0.8744611255542653,
+        "validation_loss": 0.7016320110706801
+      },
+      {
+        "epoch": 27,
+        "optimization_loss": 0.8703053469271274,
+        "validation_loss": 0.7044053613469842
+      },
+      {
+        "epoch": 28,
+        "optimization_loss": 0.8647965817838101,
+        "validation_loss": 0.69375019502104
+      },
+      {
+        "epoch": 29,
+        "optimization_loss": 0.8614776755668021,
+        "validation_loss": 0.693256316024266
+      },
+      {
+        "epoch": 30,
+        "optimization_loss": 0.8573125169083878,
+        "validation_loss": 0.6914356896046842
+      },
+      {
+        "epoch": 31,
+        "optimization_loss": 0.8563675029857739,
+        "validation_loss": 0.6862715753276697
+      },
+      {
+        "epoch": 32,
+        "optimization_loss": 0.8536072004163587,
+        "validation_loss": 0.6900473755397154
+      },
+      {
+        "epoch": 33,
+        "optimization_loss": 0.8482413977545661,
+        "validation_loss": 0.6800588179170416
+      },
+      {
+        "epoch": 34,
+        "optimization_loss": 0.8464180961815087,
+        "validation_loss": 0.6806029394771276
+      },
+      {
+        "epoch": 35,
+        "optimization_loss": 0.8450337466678104,
+        "validation_loss": 0.684250715877233
+      },
+      {
+        "epoch": 36,
+        "optimization_loss": 0.8435489180281356,
+        "validation_loss": 0.6801109892598699
+      },
+      {
+        "epoch": 37,
+        "optimization_loss": 0.8391569519042968,
+        "validation_loss": 0.6798345265763529
+      },
+      {
+        "epoch": 38,
+        "optimization_loss": 0.8370708094416438,
+        "validation_loss": 0.6783618734124002
+      },
+      {
+        "epoch": 39,
+        "optimization_loss": 0.8355957897289379,
+        "validation_loss": 0.6744581951184219
+      },
+      {
+        "epoch": 40,
+        "optimization_loss": 0.832995751870645,
+        "validation_loss": 0.681318242362376
+      },
+      {
+        "epoch": 41,
+        "optimization_loss": 0.8325647653115762,
+        "validation_loss": 0.6729369838586015
+      },
+      {
+        "epoch": 42,
+        "optimization_loss": 0.8307376655372414,
+        "validation_loss": 0.6767457319109628
+      },
+      {
+        "epoch": 43,
+        "optimization_loss": 0.8286205559807854,
+        "validation_loss": 0.6728159250838033
+      },
+      {
+        "epoch": 44,
+        "optimization_loss": 0.8280607275060705,
+        "validation_loss": 0.6694188814484672
+      },
+      {
+        "epoch": 45,
+        "optimization_loss": 0.8245931800636085,
+        "validation_loss": 0.6724217468433166
+      },
+      {
+        "epoch": 46,
+        "optimization_loss": 0.8225174073915223,
+        "validation_loss": 0.6685178799575634
+      },
+      {
+        "epoch": 47,
+        "optimization_loss": 0.8225197580698375,
+        "validation_loss": 0.6685339445478461
+      },
+      {
+        "epoch": 48,
+        "optimization_loss": 0.8226171380120355,
+        "validation_loss": 0.6678570361619585
+      },
+      {
+        "epoch": 49,
+        "optimization_loss": 0.8190812043885927,
+        "validation_loss": 0.6735244558098611
+      },
+      {
+        "epoch": 50,
+        "optimization_loss": 0.8180661546861803,
+        "validation_loss": 0.6667074589247114
+      },
+      {
+        "epoch": 51,
+        "optimization_loss": 0.8169676290976035,
+        "validation_loss": 0.6693175776620929
+      },
+      {
+        "epoch": 52,
+        "optimization_loss": 0.8168437442264042,
+        "validation_loss": 0.6607284738776389
+      },
+      {
+        "epoch": 53,
+        "optimization_loss": 0.8174331747519004,
+        "validation_loss": 0.6765668869018555
+      },
+      {
+        "epoch": 54,
+        "optimization_loss": 0.8154550150278452,
+        "validation_loss": 0.66346395256814
+      },
+      {
+        "epoch": 55,
+        "optimization_loss": 0.8135815718367293,
+        "validation_loss": 0.6679801319422347
+      },
+      {
+        "epoch": 56,
+        "optimization_loss": 0.813635629189981,
+        "validation_loss": 0.6697746866204766
+      },
+      {
+        "epoch": 57,
+        "optimization_loss": 0.8126393622321052,
+        "validation_loss": 0.6585197427299585
+      },
+      {
+        "epoch": 58,
+        "optimization_loss": 0.8091976743131071,
+        "validation_loss": 0.6684507552157627
+      },
+      {
+        "epoch": 59,
+        "optimization_loss": 0.810949426599451,
+        "validation_loss": 0.6713384113954695
+      },
+      {
+        "epoch": 60,
+        "optimization_loss": 0.8082511716275602,
+        "validation_loss": 0.656562773029456
+      },
+      {
+        "epoch": 61,
+        "optimization_loss": 0.8078763271022488,
+        "validation_loss": 0.6666281475110001
+      },
+      {
+        "epoch": 62,
+        "optimization_loss": 0.8062931390710779,
+        "validation_loss": 0.6639264631807135
+      },
+      {
+        "epoch": 63,
+        "optimization_loss": 0.8076346897434544,
+        "validation_loss": 0.664384578319078
+      },
+      {
+        "epoch": 64,
+        "optimization_loss": 0.8036841810071791,
+        "validation_loss": 0.6640332961350345
+      },
+      {
+        "epoch": 65,
+        "optimization_loss": 0.8042066501926731,
+        "validation_loss": 0.6623478171530734
+      },
+      {
+        "epoch": 66,
+        "optimization_loss": 0.802734422425966,
+        "validation_loss": 0.6633230080765284
+      },
+      {
+        "epoch": 67,
+        "optimization_loss": 0.801434800431535,
+        "validation_loss": 0.6677772114785869
+      },
+      {
+        "epoch": 68,
+        "optimization_loss": 0.8031239854967271,
+        "validation_loss": 0.6609407167756156
+      },
+      {
+        "epoch": 69,
+        "optimization_loss": 0.8028071264318518,
+        "validation_loss": 0.659777997049053
+      },
+      {
+        "epoch": 70,
+        "optimization_loss": 0.7998685517182221,
+        "validation_loss": 0.6706740025723918
+      }
+    ],
+    "validation_windows": 445
+  },
+  "gates": {
+    "event_pre_isolation": {
+      "max_state_difference": 0.0,
+      "passed": true
+    },
+    "independent_background": {
+      "count": 2048,
+      "exceedances": 69,
+      "fpr": 0.03369140625,
+      "maximum_accepted_exceedances": 182,
+      "passed": true,
+      "per_regime": {
+        "0": {
+          "count": 1024,
+          "exceedances": 3,
+          "fpr": 0.0029296875,
+          "maximum_accepted_exceedances": 86,
+          "passed": true,
+          "upper_bound": 0.007307670774970188
+        },
+        "1": {
+          "count": 1024,
+          "exceedances": 66,
+          "fpr": 0.064453125,
+          "maximum_accepted_exceedances": 86,
+          "passed": true,
+          "upper_bound": 0.07825847928183352
+        }
+      },
+      "upper_bound": 0.04088922859918037
+    },
+    "normal_only_preflight": {
+      "metrics": {
+        "factor": [
+          -0.479959509854789,
+          -0.5739430884495976,
+          -0.41777013235502797,
+          0.3998049247670368,
+          -0.2979783770218335,
+          -0.1306186265140183
+        ],
+        "factor_background_alignment": 0.9993688003267396,
+        "fit_source": "normal_optimization_increments_only",
+        "increment_count": 767,
+        "minimum_factor_alignment": 0.9,
+        "minimum_route_retention": 0.95,
+        "route_contract": {
+          "independent_background": {
+            "base_contract_hash": "9f92af613cf436737f84c074d12862563e1f55b6ed8e40272b36277e1afd605b",
+            "confidence_level": 0.95,
+            "dimensions": 6,
+            "fixed_trigger_false_acceptances": 0,
+            "independent_block_count": 2048,
+            "maximum_accepted_empirical_fpr": 0.0888671875,
+            "maximum_accepted_exceedances": 182,
+            "operating_fpr": 0.1,
+            "per_regime_maximum_accepted_empirical_fpr": 0.083984375,
+            "per_regime_maximum_accepted_exceedances": 86,
+            "per_regime_upper_bound_at_maximum_accepted": 0.09936098505019698,
+            "protocol_hash": "810526ef372cb9af496327d9f0935d37c9871202fb644f7f5d037ae34ccb00b2",
+            "regime_counts": [
+              1024,
+              1024
+            ],
+            "unique_raw_window_count": 2048,
+            "unique_source_count": 2048,
+            "unique_spawn_key_count": 2048,
+            "upper_bound_at_maximum_accepted": 0.09975946291998423,
+            "window_length": 36
+          },
+          "minimum_abs_response_component": 0.6,
+          "raw_contract": {
+            "cue_only_primary_accuracy": 0.5,
+            "deterministic_normal_token_count": 528,
+            "max_cue_amplitude_error": 7.152557368605983e-08,
+            "normal_bank_finite_count": 528,
+            "primary_raw_relation_count": 16,
+            "response_mode_only_primary_accuracy": 0.5,
+            "secondary_target_tie_count": 16
+          },
+          "route_alignment": {
+            "absolute_cosine": 2.3285377595855347e-17,
+            "background_loading": [
+              0.88,
+              0.61,
+              -0.56,
+              0.43
+            ],
+            "dot_product": -5.551115123125783e-17,
+            "response_channels": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "response_mode": [
+              1.0,
+              -1.0,
+              1.0,
+              0.6744186046511628
+            ]
+          },
+          "route_cosine_limit": 0.05
+        },
+        "route_retention_after_projection": 0.9997364636032534,
+        "singular_values": [
+          11.859911079996342,
+          5.522928744042558,
+          4.381490922973142,
+          4.123139964463113,
+          3.5907507462441712,
+          3.4115587165878205
+        ]
+      },
+      "passed": true
+    },
+    "normal_transition_controls": {
+      "passed": true,
+      "roles": {
+        "normal_no_trigger": {
+          "below_threshold": 16,
+          "count": 16
+        },
+        "normal_routed_response": {
+          "below_threshold": 15,
+          "count": 16
+        }
+      }
+    },
+    "primary_misrouted_null_route": {
+      "margins": [
+        4.736198448394496,
+        4.736198448394496,
+        4.615120516841259,
+        4.615120516841259,
+        4.736198448394496,
+        4.736198448394496,
+        4.615120516841259,
+        4.736198448394496,
+        4.736198448394496,
+        4.736198448394496,
+        4.736198448394496,
+        3.8918202981106265,
+        4.2484952420493585,
+        3.1354942159291497,
+        4.532599493153256,
+        4.060443010546419
+      ],
+      "median_tail_margin": 4.675659482617878,
+      "pair_count": 16,
+      "passed": true,
+      "positive_pairs": 16
+    },
+    "secondary_partial_propagation_null_route": {
+      "margins": [
+        4.736198448394496,
+        4.736198448394496,
+        4.615120516841259,
+        4.615120516841259,
+        4.736198448394496,
+        4.736198448394496,
+        4.615120516841259,
+        4.736198448394496,
+        4.736198448394496,
+        4.736198448394496,
+        4.736198448394496,
+        3.8918202981106265,
+        4.2484952420493585,
+        3.1354942159291497,
+        4.532599493153256,
+        4.060443010546419
+      ],
+      "median_tail_margin": 4.675659482617878,
+      "pair_count": 16,
+      "passed": true,
+      "positive_pairs": 16
+    },
+    "untriggered_null_route": {
+      "margins": [
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179,
+        6.432940092739179
+      ],
+      "median_tail_margin": 6.432940092739179,
+      "pair_count": 16,
+      "passed": true,
+      "positive_pairs": 16
+    }
+  },
+  "normal_split_window_counts": {
+    "optimization": {
+      "combined": 925,
+      "normal_event_bank": 192,
+      "ordinary_normal": 733
+    },
+    "outer_calibration": {
+      "combined": 445,
+      "normal_event_bank": 96,
+      "ordinary_normal": 349
+    },
+    "reference": {
+      "combined": 621,
+      "normal_event_bank": 144,
+      "ordinary_normal": 477
+    },
+    "validation": {
+      "combined": 445,
+      "normal_event_bank": 96,
+      "ordinary_normal": 349
+    }
+  },
+  "preflight_config_hash": "dd42bcc442cfb513ec7139e5af1627ebaeb73bf97ef4fd8341f3bd605ea7a4e8",
+  "seed": 8403
+}

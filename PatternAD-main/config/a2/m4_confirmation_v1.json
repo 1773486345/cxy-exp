@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "confirmation_id": "a2_m4_landmark_direction_confirmation_v1",
+  "development_contract_seed": 5120,
+  "contract_seeds": [5121, 5122, 5123, 5124],
+  "model_seeds": [6331, 6332, 6333, 6334]
+}

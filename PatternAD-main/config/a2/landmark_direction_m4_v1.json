@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "experiment_id": "a2_landmark_direction_m4_v1",
+  "seed": 6330,
+  "device": "cpu",
+  "model": {
+    "condition_on_event_pre": true,
+    "neighbor_count": 32,
+    "state_increment_length": 8,
+    "landmark_smoothing": 1.0,
+    "direction_weight": 1.0
+  },
+  "calibration": {
+    "outer_alpha": 0.05,
+    "reliability_bin_count": 1
+  }
+}

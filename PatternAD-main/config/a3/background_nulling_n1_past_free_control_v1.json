@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "experiment_id": "a3_n1_background_nulling_route_graph_past_free_control_v1",
+  "seed": 8401,
+  "device": "cuda",
+  "trigger_extractor": {
+    "cue_length": 6,
+    "minimum_amplitude": 1.0,
+    "linear_tolerance": 0.000005
+  },
+  "background_subspace": {
+    "components": 1,
+    "fit_split": "optimization",
+    "channels": "all_raw"
+  },
+  "token_extractor": {
+    "token_energy_threshold": 0.60
+  },
+  "model": {
+    "hidden_size": 32,
+    "condition_on_event_pre": false,
+    "learning_rate": 0.003,
+    "epochs": 80,
+    "patience": 10,
+    "batch_size": 64
+  },
+  "calibration": {
+    "outer_alpha": 0.05
+  }
+}

@@ -248,36 +248,31 @@ def run_experiment(
     calibration_config = experiment_config["calibration"]
     common_model_keys = {
         "hidden_size",
-        "mixture_components",
         "condition_on_event_pre",
         "learning_rate",
         "epochs",
         "patience",
         "batch_size",
     }
-    extra_model_kwargs = {
-        key: value for key, value in model_config.items() if key not in common_model_keys
+    model_kwargs: Dict[str, Any] = {
+        "dimensions": dimensions,
+        "history_length": history,
+        "horizon_length": horizon,
+        "outer_alpha": float(calibration_config["outer_alpha"]),
+        "reliability_bin_count": int(calibration_config["reliability_bin_count"]),
+        "device": _select_device(str(experiment_config["device"])),
     }
-    model = model_factory(
-        dimensions=dimensions,
-        history_length=history,
-        horizon_length=horizon,
-        hidden_size=int(model_config["hidden_size"]),
-        condition_on_event_pre=bool(model_config.get("condition_on_event_pre", True)),
-        learning_rate=float(model_config["learning_rate"]),
-        epochs=int(model_config["epochs"]),
-        patience=int(model_config["patience"]),
-        batch_size=int(model_config["batch_size"]),
-        outer_alpha=float(calibration_config["outer_alpha"]),
-        reliability_bin_count=int(calibration_config["reliability_bin_count"]),
-        device=_select_device(str(experiment_config["device"])),
-        **(
-            {"mixture_components": int(model_config["mixture_components"])}
-            if "mixture_components" in model_config
-            else {}
-        ),
-        **extra_model_kwargs,
-    ).fit(
+    for key in common_model_keys:
+        if key in model_config:
+            model_kwargs[key] = model_config[key]
+    extra_model_kwargs = {
+        key: value
+        for key, value in model_config.items()
+        if key not in common_model_keys and key != "mixture_components"
+    }
+    if "mixture_components" in model_config:
+        model_kwargs["mixture_components"] = int(model_config["mixture_components"])
+    model = model_factory(**model_kwargs, **extra_model_kwargs).fit(
         _normal_split_windows(suite, "optimization", history, horizon),
         _normal_split_windows(suite, "validation", history, horizon),
         _normal_split_windows(suite, "reference", history, horizon),
@@ -340,6 +335,15 @@ def run_experiment(
             "passed": normal_skill_pass,
         },
     }
+    additional_gates = getattr(model, "additional_gates", lambda: {})()
+    if not isinstance(additional_gates, Mapping):
+        raise TypeError("A2 model additional_gates() must return a mapping.")
+    for name, gate in additional_gates.items():
+        if name in gates:
+            raise ValueError(f"A2 model attempted to replace shared gate {name!r}.")
+        if not isinstance(gate, Mapping) or "passed" not in gate:
+            raise ValueError(f"A2 model gate {name!r} must contain a passed field.")
+        gates[str(name)] = dict(gate)
     summary: Dict[str, Any] = {
         "experiment_id": str(experiment_config["experiment_id"]),
         "seed": seed,

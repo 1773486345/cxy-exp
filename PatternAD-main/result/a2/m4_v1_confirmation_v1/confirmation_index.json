@@ -1,0 +1,71 @@
+{
+  "ablation_result": "result/a2/m4_v1_event_pre_control_seed6330.json",
+  "confirmation_id": "a2_m4_landmark_direction_confirmation_v1",
+  "contract_preflight": [
+    {
+      "contract_seed": 5121,
+      "cue_maximum_amplitude_error": 1.0728836064011205e-07,
+      "cue_observability_accuracy": 1.0,
+      "cue_observability_margin": 1.2000000104308128,
+      "model_seed": 6331,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "contract_seed": 5122,
+      "cue_maximum_amplitude_error": 8.586794142395604e-08,
+      "cue_observability_accuracy": 1.0,
+      "cue_observability_margin": 1.1999999284744263,
+      "model_seed": 6332,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "contract_seed": 5123,
+      "cue_maximum_amplitude_error": 1.0728836064011205e-07,
+      "cue_observability_accuracy": 1.0,
+      "cue_observability_margin": 1.200000002514571,
+      "model_seed": 6333,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "contract_seed": 5124,
+      "cue_maximum_amplitude_error": 1.0440708142489541e-07,
+      "cue_observability_accuracy": 1.0,
+      "cue_observability_margin": 1.2000000327825546,
+      "model_seed": 6334,
+      "passed": true,
+      "violations": []
+    }
+  ],
+  "experiment_id": "a2_landmark_direction_m4_v1",
+  "passed_runs": 1,
+  "run_count": 4,
+  "runs": [
+    {
+      "all_gates_passed": true,
+      "contract_seed": 5121,
+      "model_seed": 6331,
+      "summary": "result/a2/m4_v1_confirmation_v1/contract5121_model6331/summary.json"
+    },
+    {
+      "all_gates_passed": false,
+      "contract_seed": 5122,
+      "model_seed": 6332,
+      "summary": "result/a2/m4_v1_confirmation_v1/contract5122_model6332/summary.json"
+    },
+    {
+      "all_gates_passed": false,
+      "contract_seed": 5123,
+      "model_seed": 6333,
+      "summary": "result/a2/m4_v1_confirmation_v1/contract5123_model6333/summary.json"
+    },
+    {
+      "all_gates_passed": false,
+      "contract_seed": 5124,
+      "model_seed": 6334,
+      "summary": "result/a2/m4_v1_confirmation_v1/contract5124_model6334/summary.json"
+    }
+  ]
+}

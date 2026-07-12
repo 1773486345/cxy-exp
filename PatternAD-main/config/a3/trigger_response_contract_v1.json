@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "suite_id": "a3_trigger_response_contract_v1",
+  "seed": 7101,
+  "dimensions": 6,
+  "channel_names": ["source", "target", "support_positive", "support_negative", "context", "nuisance"],
+  "history_length": 24,
+  "horizon_length": 12,
+  "train_length": 2153,
+  "background_length": 768,
+  "burn_in": 64,
+  "normal_splits": {
+    "optimization_length": 768,
+    "validation_length": 384,
+    "reference_length": 512,
+    "outer_calibration_length": 384,
+    "guard_length": 35
+  },
+  "normal_process": {
+    "latent_ar": 0.58,
+    "latent_std": 0.22,
+    "loadings": [0.72, 0.88, 0.61, -0.56, 0.43, 0.17],
+    "channel_ar": [0.52, 0.48, 0.44, 0.41, 0.38, 0.57],
+    "channel_noise": [0.10, 0.11, 0.10, 0.10, 0.12, 0.16],
+    "regime_segment_length": 384,
+    "regime_noise_scales": [0.8, 1.35]
+  },
+  "episodes": {
+    "pairs_per_mode": 8,
+    "normal_transition_sources_per_regime": {
+      "optimization": 64,
+      "validation": 32,
+      "reference": 48,
+      "outer_calibration": 32
+    },
+    "source_channel": 0,
+    "response_channels": [1, 2, 3, 4],
+    "cue_length": 6,
+    "cue_amplitudes": [-1.2, 1.2],
+    "cue_amplitude_tolerance": 5e-7,
+    "response_onsets": [2, 6],
+    "response_ramp_length": 3,
+    "response_amplitude": 2.50,
+    "response_patterns": [
+      [1.0, 0.78, -0.70, 0.42],
+      [-1.0, -0.78, 0.70, -0.42]
+    ],
+    "partial_propagation_channels": [2, 3],
+    "token_energy_threshold": 0.60,
+    "minimum_response_margin": 0.20
+  }
+}

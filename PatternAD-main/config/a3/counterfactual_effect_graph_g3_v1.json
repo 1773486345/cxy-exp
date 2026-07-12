@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "experiment_id": "a3_g3_counterfactual_effect_graph_development_v1",
+  "seed": 8301,
+  "device": "cuda",
+  "trigger_extractor": {
+    "cue_length": 6,
+    "minimum_amplitude": 1.0,
+    "linear_tolerance": 0.000005
+  },
+  "counterfactual": {
+    "ridge_penalty": 0.001
+  },
+  "effect_extractor": {
+    "token_energy_threshold": 0.60
+  },
+  "model": {
+    "hidden_size": 32,
+    "condition_on_event_pre": true,
+    "learning_rate": 0.003,
+    "epochs": 80,
+    "patience": 10,
+    "batch_size": 64
+  },
+  "calibration": {
+    "outer_alpha": 0.10
+  }
+}

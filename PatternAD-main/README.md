@@ -2,8 +2,8 @@
 
 ## Current Research State
 
-The active research definition is **Direction A2: dynamic-structure-aware
-event and transition semantics**. A2 asks whether a post-boundary trajectory
+Direction A remains the active dynamic-structure research direction. Its A2
+branch asked whether a post-boundary trajectory
 is compatible with an event-pre observable state; it does not preselect a
 residual, model backbone, graph module, or modality. Its synthetic development
 task and
@@ -12,11 +12,51 @@ falsification contract are in
 The A2 generator, audit, and separate model families live under
 [`config/a2/`](config/a2/) and [`scripts/a2/`](scripts/a2/). The first
 conditional-mixture-density family (M1) failed its frozen four-seed
-confirmation; the current development candidate is the separately implemented
-contrastive compatibility-energy family (M2). M2's initial A2-v1 contract was
-not seed-stable; A2-v2 fixed that defect, but M2-v2 passed only `2/4` complete
-confirmation gates because normal-score calibration was unstable. M2 is closed
-as an A2 detector route. Neither route has a real-data claim.
+confirmation; the contrastive compatibility-energy family (M2) passed only
+`2/4` A2-v2 confirmation gates because normal-score calibration was unstable.
+Both are closed as A2 detector routes. M3, a separately frozen finite
+transition-code model with global calibration and a codebook-coverage gate,
+also failed its only development run through codebook collapse and `8/16`
+primary ordering; it is closed without a sweep. M4, an explicit event-pre
+landmark-and-direction support score, passed development and its event-pre
+ablation but only `1/4` frozen confirmation runs; it is also closed. Further
+A2 scoring work is paused pending a separately justified task or contract. No
+A2 route has a real-data claim.
+
+**Direction A3: trigger-response graph semantics** is now a separately
+specified model task. It asks whether an observable event-pre trigger permits
+the candidate's *joint* multichannel activation, delay, and direction graph.
+The A3 model design and development record are in
+[research/direction_a/A3_EXPERIMENT_PLAN.md](research/direction_a/A3_EXPERIMENT_PLAN.md),
+with isolated code under `config/a3/`, `scripts/a3/`, and
+`ts_benchmark/baselines/A3TriggerResponse/`. Its first factorized GRU graph
+decoder, G1, closed at frozen development: all three paired relation gates were
+`15/16`, but routed-normal delay control (`10/16`) and activation FPR (`10.23%`)
+failed the predeclared requirements. G2 then passed all three paired graph
+relations (`16/16`) and normal controls in its one frozen GPU run, but failed
+the ordinary-background FPR gate (`11.60%` vs. `10%`). It is closed without
+ablation, confirmation, or tuning. G3, the counterfactual effect-graph
+grammar, also completed its one frozen GPU run. It passes the raw audit,
+past-only isolation, all three paired gates (`16/16` each), and normal-event
+controls, but ordinary-background FPR is `92/733 = 12.55%`; it is closed
+without ablation, confirmation, or tuning. No A3 route has a real-data or
+transfer claim.
+
+Before another A3 model is designed, its background-calibration evaluation now
+uses the contract in
+[research/direction_a/A3_BACKGROUND_CALIBRATION_V2.md](research/direction_a/A3_BACKGROUND_CALIBRATION_V2.md):
+2,048 independent, regime-balanced normal blocks and frozen pooled/per-regime
+one-sided Wilson FPR bounds. This is protocol work, not a new detector result.
+
+The A3-v1 response route was nearly collinear (`0.99688` cosine) with the
+normal latent loading, explaining its common background-calibration failure.
+The route-identifiable successor contract and N1 proposal are in
+[`research/direction_a/`](research/direction_a/); neither reopens G1/G2/G3.
+N1's normal-only preflight, CPU smoke, and frozen GPU development pass. Its
+required past-free control also passes its decision rule: removing the only
+event-pre state reduces the primary relation from `16/16` to `13/16`. The sole
+remaining N1 work is its pre-registered four-pair CUDA confirmation; no N1
+real-data claim is authorized yet.
 
 Direction B1 remains the active executable controlled-mechanism baseline.
 B2c and B3a are closed after their respective frozen smokes failed strict

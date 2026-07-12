@@ -149,3 +149,59 @@ calibration failed on two seeds: one has `12.48%` high-stratum FPR and the
 other has `14.05%` / `10.24%` FPR plus only `10/16` no-event controls below
 threshold. M2 is closed. Do not rerun this command with calibration or model
 variants; the artifacts are retained as negative evidence.
+
+`run_transition_code_compatibility.py` was the separate A2-M3 development
+runner. It predicted a finite normal within-horizon transition code from the
+event-pre state, then scored a candidate with code surprisal plus distance to
+normal code support. It used one global calibration stratum; the codebook,
+rather than post-hoc bins, represented normal transition heterogeneity. The
+five-code support coverage requirement was an additional mandatory gate.
+
+Its only authorized development run used fresh contract/model seeds `5115/6320`:
+
+```bash
+/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python -B \
+  scripts/a2/run_transition_code_compatibility.py \
+  --contract-config config/a2/transition_contract_v2.json \
+  --contract-seed 5115 \
+  --experiment-config config/a2/transition_code_m3_v1.json \
+  --output-dir result/a2/m3_v1_development_seed6320 \
+  --torch-threads 1
+```
+
+The run completed at `result/a2/m3_v1_development_seed6320/` and failed: the
+codebook occupancy was `[1021, 0, 0, 0, 0]` against a minimum of eight for each
+code, and primary timing ordering was `8/16` with median tail margin `-0.01143`.
+Its secondary coordination ordering, normal controls, global background FPR,
+and normal-skill gates passed, but that does not override the failed primary
+and code-coverage gates. M3 is closed. Do not run the unconditional control,
+fresh confirmation, or any M3 variant; retain the runner and result only as
+negative evidence.
+
+`run_landmark_compatibility.py` is the distinct A2-M4 development runner. It
+uses the event-pre terminal state plus seven event-pre increments to retrieve
+time-disjoint normal reference neighbors. A candidate score combines the
+surprisal of its strongest future-increment landmark with its direction mismatch
+from matching-landmark neighbors. It is not an M1 density, M2 energy, or M3
+codebook score; it uses one global calibration stratum.
+
+The only authorized first M4 command is the frozen development run:
+
+```bash
+/media/h3c/users/wangyueyang1/.env/envs/patternad_env/bin/python -B \
+  scripts/a2/run_landmark_compatibility.py \
+  --contract-config config/a2/transition_contract_v2.json \
+  --contract-seed 5120 \
+  --experiment-config config/a2/landmark_direction_m4_v1.json \
+  --output-dir result/a2/m4_v1_development_seed6330 \
+  --torch-threads 1
+```
+
+The matching unconditional control and the four confirmation pairs are already
+frozen. Development passed and its matched event-pre ablation passed: removing
+the event-pre state reduced primary ordering to `5/16`. The four preflighted
+confirmation runs are complete at `result/a2/m4_v1_confirmation_v1/`, but only
+`1/4` passed all gates. Background FPR and normal controls pass on every seed;
+primary structural ordering fails on three seeds at `11/16`, `12/16`, and
+`13/16`, and the raw landmark-direction score has the same limitation. M4 is
+closed. Do not run new M4 seeds or variants.

@@ -1,7 +1,8 @@
 # Direction A2 Development Protocol
 
-Status: active synthetic-model development. The A2 question and falsification
-contract are fixed; A2-M1 is the first implementation under that contract.
+Status: paused after four independently frozen A2-v2 model routes. The A2
+question and its v2 falsification contract remain archived as negative
+evidence; no fifth score model is authorized on that same task.
 
 ## Claim Boundary
 
@@ -302,6 +303,149 @@ created an output directory and required the exact v2 ablation artifact. No
 real-data result, B comparison, or M2 retune is authorized from this result.
 Any future A2 work must be a separately named model hypothesis with a new
 frozen candidate/configuration and must not be described as an M2 repair.
+
+## A2-M3: Discrete Transition-Code Compatibility
+
+M3 was a new A2 candidate rather than a modification of M2. Its
+hypothesis is that normal future trajectories can be represented by a small
+set of within-horizon transition codes, and that the event-pre state predicts
+which normal code is allowed. A candidate is anomalous when its nearest normal
+transition code is improbable under its event-pre state or lies far from all
+normal code support.
+
+The model observes only `P_t = X[t-H:t)` and a candidate future
+`Y_t = X[t:t+L)`. The event-pre GRU produces code probabilities. A separate
+GRU encodes internal candidate increments `Y[:,1:] - Y[:,:-1]`; its nearest
+learned normal code defines the candidate label and normal-support distance.
+The score is code surprisal plus normalized code-support distance. It neither
+uses residuals, episode role, onset, cue mode, regime, driver identity, nor
+generator metadata. A small forecast head is retained only for the existing
+normal-skill gate, not as the anomaly score.
+
+This differs from M2 materially: M2 evaluated a continuous event-pre/future
+pair energy and used two volatility strata for tail calibration. M3 evaluates
+a finite conditional code prediction plus distance to a finite normal support
+set and uses one global reference stratum. Normal heterogeneity is represented
+inside the codebook, not repaired afterwards by score bins. `M3` additionally
+requires every one of its five predetermined codes to have at least eight
+optimization windows; a collapsed codebook is a failed run even if other gates
+pass.
+
+The development configuration is frozen at contract/model seeds `5115/6320`:
+`config/a2/transition_contract_v2.json` with a seed override and
+`config/a2/transition_code_m3_v1.json`. Its unconditional control differs only
+in `model.condition_on_event_pre: true -> false` and is frozen at
+`config/a2/transition_code_unconditional_m3_v1.json`. Development may advance
+only if every shared A2 gate and the code-coverage gate passes. Then, and only
+then, run that matching unconditional control and
+`scripts/a2/analyze_m3_ablation.py`; it passes only if the unconditional model
+retains code coverage but fails primary timing ordering. Fresh confirmation
+seeds are reserved as contract/model pairs `5116/6321` through `5119/6324`.
+
+M3's frozen development run completed at
+`result/a2/m3_v1_development_seed6320/` on contract/model seeds `5115/6320`.
+The contract preflight passed: cue observability accuracy was `1.0`, cue margin
+was approximately `1.2`, maximum cue-amplitude error was `1.07e-7`, and there
+were no construction violations. The model did not pass all gates. Its five
+optimization code occupancies were `[1021, 0, 0, 0, 0]`, so the required
+minimum occupancy of eight failed for four codes; primary timing ordering was
+only `8/16` positive pairs with median tail margin `-0.01143`. This is a
+semantic collapse of the proposed finite-code representation, not a contract,
+calibration, or implementation failure: event-pre isolation, normal skill,
+all three normal controls, and background FPR (`4.55%`) passed; secondary
+coordination ordering was `16/16` with median margin `6.1067`.
+
+M3 is closed without hyperparameter sweeping. Do not run its unconditional
+control, confirmation seeds, or code-count/loss/initialization/threshold
+variants. The retained configuration, runner, and single result directory are
+negative evidence and provenance only; no real-data or B comparison is
+authorized from this route.
+
+## A2-M4: Landmark And Direction Compatibility
+
+M4 was a separately frozen A2 candidate. It tested an explicit structural
+claim rather than learning a density, continuous pair energy, or latent code:
+conditional on the event-pre state, a normal future has support for **where**
+its strongest within-horizon change occurs and **which cross-channel direction**
+that change takes. A candidate is scored by the surprisal of its change landmark
+among nearby normal event-pre states plus its angular mismatch from normal
+directions at that same landmark.
+
+For a normalized candidate future `Y`, M4 computes internal increments
+`d_i = Y[i+1] - Y[i]`, takes `tau = argmax_i ||d_i||`, and normalizes `d_tau`
+to a direction. Its event-pre feature is only the final `P_t` state and the
+last seven internal increments in `P_t`. Neighbors are retrieved only from the
+time-disjoint reference-normal split. No role, cue mode, onset, regime, driver
+identity, generator metadata, learned trajectory decoder, contrastive pair
+embedding, learned codebook, residual score, or post-hoc reliability bin is an
+input. The one global outer calibration is unchanged.
+
+The frozen configuration is `neighbor_count=32`, `state_increment_length=8`,
+`landmark_smoothing=1`, `direction_weight=1`, and `outer_alpha=0.05` in
+`config/a2/landmark_direction_m4_v1.json`. Its sole development run is contract
+and model seeds `5120/6330`, using the v2 contract with a seed override. The
+matching unconditional control is
+`config/a2/landmark_direction_unconditional_m4_v1.json`; it differs only in
+`condition_on_event_pre: true -> false`. If and only if development passes all
+shared A2 gates, run that control and `scripts/a2/analyze_m4_ablation.py`; the
+control must fail primary ordering. Only then may `scripts/a2/run_m4_confirmation.py`
+run the already frozen pairs `5121/6331` through `5124/6334` from
+`config/a2/m4_confirmation_v1.json`; that file also records the distinct
+development contract seed `5120` required to verify the ablation provenance.
+
+M4 closes without a sweep if development fails any gate, the event-pre ablation
+does not establish dependency, or frozen confirmation later has any failed run.
+Do not respond to such a result by changing neighbor count, event-pre length,
+landmark rule, direction weighting, calibration threshold, or seed list.
+
+M4 development completed at `result/a2/m4_v1_development_seed6330/` on
+contract/model seeds `5120/6330`. Every gate passed: primary timing was `14/16`
+with median tail margin `1.5986`; secondary coordination was `15/16` with
+median margin `0.5618`; all normal controls were `16/16` below threshold;
+background FPR was `4.95%`; normal forecast MAE improved `5.96%` over
+persistence; and event-pre isolation was zero. The reference support contained
+all 11 possible internal-change landmarks, with counts from `35` to `87`.
+
+Its matched event-pre ablation completed at
+`result/a2/m4_v1_event_pre_control_seed6330.json`. It uses the identical
+contract hash and every identical model field except
+`condition_on_event_pre: true -> false`. The conditioned development run still
+passes every gate, while the unconditional control has only `5/16` positive
+primary pairs with median tail margin `0`; the frozen ablation decision passes.
+The unconditional control's scheduled normal control also degrades to `10/16`
+below threshold. Thus M4's development signal is not available from candidate
+future landmarks and directions alone.
+
+M4's frozen confirmation completed at
+`result/a2/m4_v1_confirmation_v1/`. All four v2 contracts passed preflight
+(cue observability accuracy `1.0`, margin about `1.2`, amplitude errors below
+the declared `5e-7` tolerance, no violations), but only **1/4** runs passed all
+gates. The failures are not background-calibration failures: global background
+FPRs were `3.03%`, `4.45%`, `7.89%`, and `2.43%`, and all normal-control gates
+passed. They are primary structural-ordering failures:
+
+| Contract/model seed | Complete pass | Primary pairs | Secondary pairs | Failed gates |
+| --- | --- | --- | --- | --- |
+| `5121/6331` | yes | `14/16` | `14/16` | none |
+| `5122/6332` | no | `11/16` | `15/16` | primary ordering |
+| `5123/6333` | no | `12/16` | `11/16` | primary and secondary ordering |
+| `5124/6334` | no | `13/16` | `14/16` | primary ordering |
+
+The same deficiency exists in M4's raw landmark-direction score, before its
+reference tail map: primary raw directions are `14/16`, `12/16`, `12/16`, and
+`13/16` across these runs. M4 therefore has an event-pre-dependent development
+effect but does not establish stable structural compatibility detection. M4 is
+closed. Do not run new M4 seeds or tune neighbor count, state length, landmark
+definition, direction weighting, tail rule, or threshold.
+
+At this boundary, the current A2-v2 detector-development branch is paused:
+M1 full-trajectory density, M2 continuous pair energy, M3 finite transition
+codes, and M4 explicit landmark/direction support have each failed their own
+frozen confirmation criterion. This does not negate the broader Direction A
+motivation or the contract's observable relation (the contract audit remains
+valid). It does mean that a fifth score proposal on this contract is not
+authorized. Further Direction A work requires a separately justified task or
+data contract, stated before selecting another detector family.
 
 ## Model Selection Boundary
 

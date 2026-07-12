@@ -8,8 +8,11 @@ from scripts.a2.generate_transition_contract import DEFAULT_CONFIG, _load_json, 
 from scripts.a2.run_transition_compatibility import _normal_continuation_windows
 from ts_benchmark.baselines.A2TransitionCompatibility import (
     A2ContrastiveCompatibility,
+    A2TransitionCodeCompatibility,
+    A2LandmarkCompatibility,
     A2TransitionCompatibility,
     ContrastiveCompatibilityNet,
+    TransitionCodeNet,
     TrajectoryCompatibilityNet,
 )
 
@@ -193,6 +196,106 @@ class A2TransitionModelTest(unittest.TestCase):
         self.assertIsInstance(first_state, np.ndarray)
         self.assertTrue(np.isfinite(first_state).all())
         np.testing.assert_array_equal(first_state, second_state)
+
+    def test_transition_code_encoder_uses_internal_trajectory_increments(self):
+        net = TransitionCodeNet(
+            dimensions=self.config["dimensions"],
+            horizon_length=self.config["horizon_length"],
+            hidden_size=8,
+            codebook_size=3,
+        )
+        future = torch.randn(2, self.config["horizon_length"], self.config["dimensions"])
+        shifted = future + 7.0
+        with torch.no_grad():
+            np.testing.assert_allclose(
+                net.encode_future_increments(future).numpy(),
+                net.encode_future_increments(shifted).numpy(),
+                atol=1e-6,
+            )
+
+    def test_transition_code_model_scores_global_code_support(self):
+        model = A2TransitionCodeCompatibility(
+            dimensions=self.config["dimensions"],
+            history_length=self.config["history_length"],
+            horizon_length=self.config["horizon_length"],
+            hidden_size=8,
+            learning_rate=3e-3,
+            epochs=5,
+            patience=2,
+            batch_size=8,
+            outer_alpha=0.1,
+            reliability_bin_count=1,
+            codebook_size=3,
+            minimum_code_occupancy=1,
+            device="cpu",
+        ).fit(
+            _bank(self.suite, "optimization"),
+            _bank(self.suite, "validation"),
+            _bank(self.suite, "reference"),
+            _bank(self.suite, "outer_calibration"),
+            seed=6401,
+        )
+        windows = _bank(self.suite, "reference")[:3]
+        altered = windows.copy()
+        altered[:, self.config["history_length"] :] *= -5.0
+        scores = model.score_windows(windows)
+        self.assertIn("transition_code_surprisal", scores)
+        self.assertTrue(np.isfinite(scores["transition_code_surprisal"]).all())
+        self.assertTrue(np.array_equal(scores["reliability_bin"], np.zeros(3, dtype=np.int64)))
+        self.assertEqual(len(model.fit_metadata_["optimization_code_usage"]), 3)
+        self.assertIn("transition_code_coverage", model.additional_gates())
+        np.testing.assert_array_equal(
+            model.event_pre_state(windows), model.event_pre_state(altered)
+        )
+
+    def test_landmark_representation_uses_internal_future_changes(self):
+        model = A2LandmarkCompatibility(
+            dimensions=self.config["dimensions"],
+            history_length=self.config["history_length"],
+            horizon_length=self.config["horizon_length"],
+            neighbor_count=4,
+            state_increment_length=4,
+            device="cpu",
+        )
+        future = np.random.default_rng(6402).normal(
+            size=(2, self.config["horizon_length"], self.config["dimensions"])
+        ).astype(np.float32)
+        landmarks, directions = model._future_landmarks(future)
+        shifted_landmarks, shifted_directions = model._future_landmarks(future + 9.0)
+        np.testing.assert_array_equal(landmarks, shifted_landmarks)
+        np.testing.assert_allclose(directions, shifted_directions, atol=1e-6)
+
+    def test_landmark_model_scores_reference_support_and_preserves_isolation(self):
+        model = A2LandmarkCompatibility(
+            dimensions=self.config["dimensions"],
+            history_length=self.config["history_length"],
+            horizon_length=self.config["horizon_length"],
+            neighbor_count=4,
+            state_increment_length=4,
+            outer_alpha=0.1,
+            reliability_bin_count=1,
+            device="cpu",
+        ).fit(
+            _bank(self.suite, "optimization"),
+            _bank(self.suite, "validation"),
+            _bank(self.suite, "reference"),
+            _bank(self.suite, "outer_calibration"),
+            seed=6403,
+        )
+        windows = _bank(self.suite, "reference")[:3]
+        altered = windows.copy()
+        altered[:, self.config["history_length"] :] += 17.0
+        scores = model.score_windows(windows)
+        self.assertIn("landmark_direction_surprisal", scores)
+        self.assertTrue(np.isfinite(scores["landmark_direction_surprisal"]).all())
+        self.assertTrue(np.array_equal(scores["reliability_bin"], np.zeros(3, dtype=np.int64)))
+        self.assertEqual(
+            len(model.fit_metadata_["reference_landmark_counts"]),
+            self.config["horizon_length"] - 1,
+        )
+        np.testing.assert_array_equal(
+            model.event_pre_state(windows), model.event_pre_state(altered)
+        )
 
 
 if __name__ == "__main__":
