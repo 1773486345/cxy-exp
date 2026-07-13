@@ -4,18 +4,18 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ts_benchmark.baselines.MechanismGraphAD.MechanismGraphAD import (
-    MechanismGraphAD,
-    MechanismGraphADConfig,
-    MechanismGraphADNet,
+from ts_benchmark.baselines.PatternAD.PatternAD import (
+    PatternAD,
+    PatternADConfig,
+    PatternADNet,
 )
 
 
-class MechanismGraphADNetTest(unittest.TestCase):
+class PatternADNetTest(unittest.TestCase):
     def setUp(self):
         torch.set_num_threads(1)
         torch.manual_seed(7)
-        self.config = MechanismGraphADConfig.from_kwargs(
+        self.config = PatternADConfig.from_kwargs(
             {
                 "seq_len": 12,
                 "d_model": 16,
@@ -29,7 +29,7 @@ class MechanismGraphADNetTest(unittest.TestCase):
         )
 
     def test_masked_terminal_is_target_blind(self):
-        model = MechanismGraphADNet(4, self.config).eval()
+        model = PatternADNet(4, self.config).eval()
         value = torch.randn(3, 12, 4)
         mask = torch.zeros_like(value, dtype=torch.bool)
         mask[:, -1, 1] = True
@@ -48,7 +48,7 @@ class MechanismGraphADNetTest(unittest.TestCase):
         )
 
     def test_multiscale_conditional_outputs_are_finite(self):
-        model = MechanismGraphADNet(4, self.config).eval()
+        model = PatternADNet(4, self.config).eval()
         value = torch.randn(2, 12, 4)
         mask = torch.zeros_like(value, dtype=torch.bool)
         mask[:, -1, 0] = True
@@ -62,7 +62,7 @@ class MechanismGraphADNetTest(unittest.TestCase):
         self.assertLessEqual(float(outputs["temporal_reliability"].max()), 1.0)
 
     def test_no_graph_ablation_has_no_relation_messages(self):
-        config = MechanismGraphADConfig.from_kwargs(
+        config = PatternADConfig.from_kwargs(
             {
                 "seq_len": 12,
                 "d_model": 16,
@@ -75,7 +75,7 @@ class MechanismGraphADNetTest(unittest.TestCase):
                 "device": "cpu",
             }
         )
-        model = MechanismGraphADNet(4, config).eval()
+        model = PatternADNet(4, config).eval()
         value = torch.randn(2, 12, 4)
         mask = torch.zeros_like(value, dtype=torch.bool)
         mask[:, -1, 2] = True
@@ -85,8 +85,28 @@ class MechanismGraphADNetTest(unittest.TestCase):
         self.assertEqual(float(outputs["graph_entropy"]), 0.0)
         self.assertEqual(float(outputs["relation_consistency"]), 0.0)
 
+    def test_pattern_context_ablation_removes_context_projection(self):
+        config = PatternADConfig.from_kwargs(
+            {
+                "seq_len": 12,
+                "d_model": 16,
+                "graph_dim": 8,
+                "d_ff": 32,
+                "n_heads": 4,
+                "e_layers": 1,
+                "temporal_kernels": (1, 3, 5),
+                "use_pattern_context": False,
+                "device": "cpu",
+            }
+        )
+        model = PatternADNet(4, config).eval()
+        value = torch.randn(2, 12, 4)
+        mask = torch.zeros_like(value, dtype=torch.bool)
+        context = model.encoder._visible_pattern_context(value, mask)
+        self.assertEqual(float(context.abs().max()), 0.0)
 
-class MechanismGraphADInterfaceTest(unittest.TestCase):
+
+class PatternADInterfaceTest(unittest.TestCase):
     def test_cpu_fit_and_score_return_one_score_per_timestamp(self):
         torch.set_num_threads(1)
         generator = np.random.default_rng(9)
@@ -98,7 +118,7 @@ class MechanismGraphADInterfaceTest(unittest.TestCase):
                 "x2": 0.7 * np.sin(time_index / 6.0) + 0.1 * generator.standard_normal(len(time_index)),
             }
         )
-        detector = MechanismGraphAD(
+        detector = PatternAD(
             device="cpu",
             seq_len=8,
             d_model=8,
