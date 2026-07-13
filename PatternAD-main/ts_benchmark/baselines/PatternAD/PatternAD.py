@@ -10,8 +10,9 @@ cross-variable mechanism an end-to-end part of conditional reconstruction:
 * training uses masked counterfactual targets, so the graph decoder cannot read
   the value it is asked to explain.
 
-The public class implements the benchmark's ``detect_fit``/``detect_score``
-interface directly.
+The public class implements both the benchmark's numeric and multi-input
+interfaces. Auxiliary inputs are validated and recorded, but they are not used
+as model conditions until their provenance and availability have been audited.
 """
 
 from __future__ import annotations
@@ -40,8 +41,6 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "e_layers": 2,
     "dropout": 0.1,
     "temporal_kernels": (1, 5, 11),
-    "context_window": 9,
-    "use_pattern_context": True,
     "relation_mode": "full",
     "graph_topk": 0,
     "graph_target_chunk_size": 16,
@@ -77,8 +76,6 @@ class PatternADConfig:
     e_layers: int = 2
     dropout: float = 0.1
     temporal_kernels: Tuple[int, ...] = (1, 5, 11)
-    context_window: int = 9
-    use_pattern_context: bool = True
     relation_mode: str = "full"
     graph_topk: int = 0
     graph_target_chunk_size: int = 16
@@ -121,9 +118,6 @@ class PatternADConfig:
             raise ValueError("e_layers and n_heads must be positive.")
         if not self.temporal_kernels or any(kernel < 1 or kernel % 2 == 0 for kernel in self.temporal_kernels):
             raise ValueError("temporal_kernels must be nonempty positive odd integers.")
-        if self.context_window < 2:
-            raise ValueError("context_window must be at least 2.")
-        self.use_pattern_context = bool(self.use_pattern_context)
         if self.relation_mode not in {"full", "single_scale", "no_graph"}:
             raise ValueError("relation_mode must be one of: full, single_scale, no_graph.")
         if self.graph_topk < 0 or self.graph_target_chunk_size < 1:
@@ -166,20 +160,16 @@ class PatternTemporalEncoder(nn.Module):
         self.n_features = int(n_features)
         self.config = config
         self.d_model = int(config.d_model)
+        self.kernel_sizes = tuple(int(kernel) for kernel in config.temporal_kernels)
         self.stems = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv1d(1, self.d_model, kernel_size=kernel, padding=kernel // 2),
+                    nn.Conv1d(1, self.d_model, kernel_size=kernel),
                     nn.GELU(),
                     nn.Conv1d(self.d_model, self.d_model, kernel_size=1),
                 )
-                for kernel in config.temporal_kernels
+                for kernel in self.kernel_sizes
             ]
-        )
-        self.context_proj = nn.Sequential(
-            nn.Linear(5, self.d_model),
-            nn.GELU(),
-            nn.Linear(self.d_model, self.d_model),
         )
         self.variable_embedding = nn.Parameter(torch.empty(1, 1, self.n_features, self.d_model))
         self.mask_embedding = nn.Parameter(torch.empty(1, 1, 1, self.d_model))
@@ -198,42 +188,6 @@ class PatternTemporalEncoder(nn.Module):
         nn.init.trunc_normal_(self.variable_embedding, std=0.02)
         nn.init.trunc_normal_(self.mask_embedding, std=0.02)
 
-    @staticmethod
-    def _causal_rolling_mean(values: torch.Tensor, valid: torch.Tensor, window: int) -> torch.Tensor:
-        """Compute a mask-aware rolling mean using only the current and past values."""
-        source = torch.where(valid, values, torch.zeros_like(values)).transpose(1, 2)
-        weights = valid.to(dtype=values.dtype).transpose(1, 2)
-        source = F.pad(source, (window - 1, 0))
-        weights = F.pad(weights, (window - 1, 0))
-        value_sum = F.avg_pool1d(source, kernel_size=window, stride=1) * window
-        count = F.avg_pool1d(weights, kernel_size=window, stride=1) * window
-        return (value_sum / count.clamp_min(1.0)).transpose(1, 2)
-
-    def _visible_pattern_context(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        """Form target-blind level, scale, trend, and high-frequency context."""
-        if not self.config.use_pattern_context:
-            return torch.zeros(
-                (*x.shape, self.d_model), dtype=x.dtype, device=x.device
-            )
-        valid = ~mask.bool()
-        window = min(max(2, int(self.config.context_window)), x.shape[1])
-        local_mean = self._causal_rolling_mean(x, valid, window)
-        local_mean_square = self._causal_rolling_mean(x.square(), valid, window)
-        local_std = (local_mean_square - local_mean.square()).clamp_min(0.0).sqrt()
-
-        deltas = torch.zeros_like(x)
-        delta_valid = torch.zeros_like(valid)
-        if x.shape[1] > 1:
-            deltas[:, 1:, :] = x[:, 1:, :] - x[:, :-1, :]
-            delta_valid[:, 1:, :] = valid[:, 1:, :] & valid[:, :-1, :]
-        local_trend = self._causal_rolling_mean(deltas, delta_valid, window)
-        high_frequency = torch.where(valid, x - local_mean, torch.zeros_like(x))
-        features = torch.stack(
-            (local_mean, local_std, local_trend, high_frequency, mask.to(dtype=x.dtype)),
-            dim=-1,
-        )
-        return self.context_proj(features)
-
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> Tuple[List[torch.Tensor], torch.Tensor]:
         if x.ndim != 3:
             raise ValueError("Expected x with shape [batch, time, variables].")
@@ -244,16 +198,19 @@ class PatternTemporalEncoder(nn.Module):
         flat_x = masked_x.transpose(1, 2).reshape(batch * dimensions, 1, time_steps)
         position = _sinusoidal_position_encoding(time_steps, self.d_model, x.device, x.dtype)
         mask_code = mask.unsqueeze(-1).to(dtype=x.dtype) * self.mask_embedding
-        pattern_context = self._visible_pattern_context(x, mask)
         scale_tokens: List[torch.Tensor] = []
-        for stem in self.stems:
-            token = stem(flat_x).reshape(batch, dimensions, self.d_model, time_steps)
+        for kernel, stem in zip(self.kernel_sizes, self.stems):
+            causal_input = F.pad(flat_x, (kernel - 1, 0))
+            token = stem(causal_input).reshape(batch, dimensions, self.d_model, time_steps)
             token = token.permute(0, 3, 1, 2)
-            token = token + self.variable_embedding + position + mask_code + pattern_context
+            token = token + self.variable_embedding + position + mask_code
             scale_tokens.append(token)
         temporal_input = torch.stack(scale_tokens, dim=0).mean(dim=0)
         flattened = temporal_input.permute(0, 2, 1, 3).reshape(batch * dimensions, time_steps, self.d_model)
-        temporal_state = self.temporal_encoder(flattened)
+        causal_mask = torch.full(
+            (time_steps, time_steps), float("-inf"), device=x.device, dtype=x.dtype
+        ).triu(diagonal=1)
+        temporal_state = self.temporal_encoder(flattened, mask=causal_mask)
         temporal_state, _ = self.history_gru(temporal_state)
         temporal_state = self.output_norm(temporal_state)
         temporal_state = temporal_state.reshape(batch, dimensions, time_steps, self.d_model).permute(0, 2, 1, 3)
@@ -458,6 +415,7 @@ class PatternAD:
         self.feature_names: Optional[List[str]] = None
         self.fit_diagnostics_: Optional[Dict[str, object]] = None
         self._last_score_components: Dict[str, np.ndarray] = {}
+        self._score_calls: List[Dict[str, object]] = []
 
     @staticmethod
     def required_hyper_params() -> Dict[str, str]:
@@ -467,6 +425,25 @@ class PatternAD:
         if train_data.shape[1] < 2:
             raise ValueError("PatternAD requires at least two observed variables.")
         self.config.n_features = int(train_data.shape[1])
+
+    @staticmethod
+    def _describe_auxiliary_input(
+        text: pd.DataFrame, expected_length: int, phase: str
+    ) -> Dict[str, object]:
+        if not isinstance(text, pd.DataFrame):
+            raise TypeError(f"{phase} auxiliary input must be a pandas DataFrame.")
+        if len(text) not in {1, expected_length}:
+            raise ValueError(
+                f"{phase} auxiliary input must contain one static row or exactly "
+                f"{expected_length} aligned rows; got {len(text)}."
+            )
+        return {
+            "phase": phase,
+            "rows": int(len(text)),
+            "columns": [str(column) for column in text.columns],
+            "static": bool(len(text) == 1),
+            "used_for_scoring": False,
+        }
 
     @staticmethod
     def _gaussian_nll(target: torch.Tensor, mean: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
@@ -535,6 +512,7 @@ class PatternAD:
     def detect_fit(self, train_data: pd.DataFrame, train_label: Optional[pd.DataFrame] = None) -> "PatternAD":
         del train_label
         self.detect_hyper_param_tune(train_data)
+        self._score_calls = []
         frame = _fill_missing(train_data)
         self.feature_names = list(frame.columns)
         values = frame.to_numpy(dtype=np.float64, copy=True)
@@ -617,6 +595,29 @@ class PatternAD:
         }
         return self
 
+    def detect_multi_fit(
+        self,
+        train_data: pd.DataFrame,
+        train_text: pd.DataFrame,
+        train_label: Optional[pd.DataFrame] = None,
+    ) -> "PatternAD":
+        """Fit the numeric detector while preserving audited auxiliary metadata.
+
+        Existing text CSVs include static descriptions, placeholders, and
+        generated prompts. Until a modality-specific provenance audit selects a
+        valid condition, treating their content as a learned signal would make a
+        benchmark score scientifically uninterpretable. The method therefore
+        validates alignment and records the input while fitting the same numeric
+        PatternAD model used by the non-multi benchmark path.
+        """
+        auxiliary = self._describe_auxiliary_input(
+            train_text, len(train_data), "fit"
+        )
+        self.detect_fit(train_data, train_label)
+        if self.fit_diagnostics_ is not None:
+            self.fit_diagnostics_["auxiliary_input"] = auxiliary
+        return self
+
     def _window_batches(self, values: np.ndarray, window_batch_size: int) -> Iterable[np.ndarray]:
         dataset = _WindowDataset(values, self.config.seq_len)
         for start in range(0, len(dataset), window_batch_size):
@@ -625,20 +626,30 @@ class PatternAD:
     def _conditional_terminal_nll(self, windows: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.model is None:
             raise RuntimeError("Model is not fitted.")
-        batch, _, dimensions = windows.shape
-        repeated = windows.repeat_interleave(dimensions, dim=0)
-        mask = torch.zeros_like(repeated, dtype=torch.bool)
-        rows = torch.arange(batch * dimensions, device=windows.device)
-        targets = torch.arange(dimensions, device=windows.device).repeat(batch)
-        mask[rows, -1, targets] = True
-        outputs = self.model(repeated, mask)
-        target = repeated[rows, -1, targets]
-        joint = self._gaussian_nll(target, outputs["mean"][rows, -1, targets], outputs["scale"][rows, -1, targets])
-        temporal = self._gaussian_nll(target, outputs["temporal_mean"][rows, -1, targets], outputs["temporal_scale"][rows, -1, targets])
-        graph = self._gaussian_nll(target, outputs["graph_mean"][rows, -1, targets], outputs["graph_scale"][rows, -1, targets])
-        return joint.reshape(batch, dimensions), temporal.reshape(batch, dimensions), graph.reshape(batch, dimensions)
+        # Score one complete time point at once. All terminal variables are
+        # hidden, so every variable is target-blind and the relation state can
+        # only use the multivariate history. This avoids D repeated forwards
+        # per timestamp, which is prohibitive for high-dimensional datasets.
+        mask = torch.zeros_like(windows, dtype=torch.bool)
+        mask[:, -1, :] = True
+        outputs = self.model(windows, mask)
+        target = windows[:, -1, :]
+        joint = self._gaussian_nll(target, outputs["mean"][:, -1, :], outputs["scale"][:, -1, :])
+        temporal = self._gaussian_nll(
+            target,
+            outputs["temporal_mean"][:, -1, :],
+            outputs["temporal_scale"][:, -1, :],
+        )
+        graph = self._gaussian_nll(
+            target,
+            outputs["graph_mean"][:, -1, :],
+            outputs["graph_scale"][:, -1, :],
+        )
+        return joint, temporal, graph
 
-    def detect_score(self, test: pd.DataFrame) -> np.ndarray:
+    def detect_score(
+        self, test: pd.DataFrame, _auxiliary: Optional[Dict[str, object]] = None
+    ) -> np.ndarray:
         if self.model is None or self.feature_names is None:
             raise ValueError("Model not trained. Call detect_fit before detect_score.")
         if list(test.columns) != self.feature_names:
@@ -648,7 +659,7 @@ class PatternAD:
         dimensions = values.shape[1]
         if dimensions != self.config.n_features:
             raise ValueError("Test feature count does not match the fitted model.")
-        window_batch_size = max(1, self.config.score_conditioning_batch_size // dimensions)
+        window_batch_size = max(1, self.config.score_conditioning_batch_size)
         joint_rows: List[np.ndarray] = []
         temporal_rows: List[np.ndarray] = []
         graph_rows: List[np.ndarray] = []
@@ -684,10 +695,26 @@ class PatternAD:
             "graph_nll": graph_scores.astype(np.float64, copy=False),
             "variable_nll": variable_nll.astype(np.float64, copy=False),
         }
+        score_call: Dict[str, object] = {"input_length": int(len(test))}
+        if _auxiliary is not None:
+            score_call["auxiliary_input"] = _auxiliary
+        self._score_calls.append(score_call)
         return self._last_score_components["score"].copy()
 
+    def detect_multi_score(
+        self, test_data: pd.DataFrame, test_text: pd.DataFrame
+    ) -> np.ndarray:
+        auxiliary = self._describe_auxiliary_input(
+            test_text, len(test_data), "score"
+        )
+        return self.detect_score(test_data, _auxiliary=auxiliary)
+
     def get_diagnostics(self) -> Dict[str, object]:
-        return copy.deepcopy(self.fit_diagnostics_ or {"model": "PatternAD", "status": "unfitted"})
+        diagnostics = copy.deepcopy(
+            self.fit_diagnostics_ or {"model": "PatternAD", "status": "unfitted"}
+        )
+        diagnostics["score_calls"] = copy.deepcopy(self._score_calls)
+        return diagnostics
 
     def get_last_score_components(self) -> Dict[str, np.ndarray]:
         return {name: values.copy() for name, values in self._last_score_components.items()}

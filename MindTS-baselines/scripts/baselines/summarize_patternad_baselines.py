@@ -14,9 +14,7 @@ THREE_METRIC_OUT_PATH = RESULT_ROOT / "patternad_baseline_three_metrics.csv"
 
 DATASETS = ["MetroPT3", "HAI21", "SMD"]
 
-MODELS = [
-    "PatternAD",
-    "PatternAD_raw",
+BASELINES = [
     "PCA",
     "IsolationForest",
     "LOF",
@@ -129,34 +127,33 @@ def read_three_metrics(result_dir: Path):
     }
 
 
+def has_complete_metrics(metrics):
+    return all(value != "" for value in metrics.values())
+
+
 def main():
     RESULT_ROOT.mkdir(parents=True, exist_ok=True)
     normalize_legacy_tslib_result_dirs()
     summary_rows = []
     three_metric_rows = []
 
-    for model in MODELS:
-        summary_row = {"model": model}
+    for baseline in BASELINES:
+        summary_row = {"baseline": baseline}
         for dataset in DATASETS:
-            result_dir = result_dir_for(model, dataset)
+            result_dir = result_dir_for(baseline, dataset)
             metrics = read_three_metrics(result_dir)
-            summary_row[dataset] = (
-                f"{metrics['Aff-F']} / {metrics['V-PR']} / {metrics['V-ROC']}"
-                if any(metrics.values())
-                else ""
-            )
-            three_metric_rows.append(
-                {
-                    "model": model,
-                    "dataset": dataset,
-                    **metrics,
-                    "result_dir": str(result_dir),
-                }
-            )
-        summary_rows.append(summary_row)
+            if has_complete_metrics(metrics):
+                summary_row[dataset] = metrics["Aff-F"]
+                three_metric_rows.append(
+                    {"baseline": baseline, "dataset": dataset, **metrics}
+                )
+        if len(summary_row) > 1:
+            summary_rows.append(summary_row)
 
     with SUMMARY_OUT_PATH.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["model"] + DATASETS)
+        writer = csv.DictWriter(
+            f, fieldnames=["baseline"] + DATASETS, lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(summary_rows)
 
@@ -164,13 +161,13 @@ def main():
         writer = csv.DictWriter(
             f,
             fieldnames=[
-                "model",
+                "baseline",
                 "dataset",
                 "Aff-F",
                 "V-PR",
                 "V-ROC",
-                "result_dir",
             ],
+            lineterminator="\n",
         )
         writer.writeheader()
         writer.writerows(three_metric_rows)

@@ -1,0 +1,7 @@
+strategy_args,metric_name,"PatternAD;{""batch_size"": 8, ""d_ff"": 16, ""d_model"": 8, ""device"": ""cpu"", ""e_layers"": 1, ""graph_dim"": 4, ""graph_target_chunk_size"": 4, ""n_heads"": 2, ""num_epochs"": 1, ""patience"": 1, ""relation_mode"": ""full"", ""score_conditioning_batch_size"": 16, ""score_top_k"": 2, ""seq_len"": 8, ""temporal_kernels"": [1, 3]};anomaly_ratio=1"
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",f_score,0.0333181945558379
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.7190263489741083
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",auc_roc,0.631368328541354
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",auc_pr,0.1876199242607457
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.5958298639479782
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.049901616023593

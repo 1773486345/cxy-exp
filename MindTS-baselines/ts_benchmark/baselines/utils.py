@@ -13,8 +13,16 @@ from ts_benchmark.baselines.time_series_library.utils.timefeatures import (
 from ts_benchmark.utils.data_processing import split_before
 from transformers import AutoTokenizer
 
+
 DEEPSEEK_PATH = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-tokenizer = AutoTokenizer.from_pretrained(DEEPSEEK_PATH)
+_tokenizer = None
+
+
+def get_tokenizer():
+    global _tokenizer
+    if _tokenizer is None:
+        _tokenizer = AutoTokenizer.from_pretrained(DEEPSEEK_PATH)
+    return _tokenizer
 
 
 class SlidingWindowDataLoader:
@@ -308,6 +316,7 @@ class MultiSegLoader(object):
         self.data = data
         self.text = text
         self.test_labels = data
+        self.tokenizer = get_tokenizer()
 
     def __len__(self):
         """
@@ -330,9 +339,9 @@ class MultiSegLoader(object):
 
             text_data = (self.text[index:index + self.win_size].iloc[:, 0]).to_list()
             long_text = " ".join(text_data)
-            if tokenizer.pad_token is None:
-                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-            tokens = tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            tokens = self.tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
             input_ids = tokens["input_ids"].squeeze(0)
             attention_mask = tokens["attention_mask"].squeeze(0)
 
@@ -344,9 +353,9 @@ class MultiSegLoader(object):
 
             text_data = (self.text[index:index + self.win_size].iloc[:, 0]).to_list()
             long_text = " ".join(text_data)
-            if tokenizer.pad_token is None:
-                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-            tokens = tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            tokens = self.tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
             input_ids = tokens["input_ids"].squeeze(0)
             attention_mask = tokens["attention_mask"].squeeze(0)
 
@@ -358,9 +367,9 @@ class MultiSegLoader(object):
 
             text_data = (self.text[index:index + self.win_size].iloc[:, 0]).to_list()
             long_text = " ".join(text_data)
-            if tokenizer.pad_token is None:
-                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-            tokens = tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            tokens = self.tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
             input_ids = tokens["input_ids"].squeeze(0)
             attention_mask = tokens["attention_mask"].squeeze(0)
 
@@ -371,9 +380,9 @@ class MultiSegLoader(object):
             test_label = np.float32(self.test_labels[index // self.step * self.win_size:index // self.step * self.win_size + self.win_size])
             text_data = (self.text[index // self.step * self.win_size:index // self.step * self.win_size + self.win_size].iloc[:, 0]).to_list()
             long_text = " ".join(text_data)
-            if tokenizer.pad_token is None:
-                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-            tokens = tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            tokens = self.tokenizer(long_text, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
             input_ids = tokens["input_ids"].squeeze(0)
             attention_mask = tokens["attention_mask"].squeeze(0)
 
