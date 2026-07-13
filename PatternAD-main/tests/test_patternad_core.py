@@ -1,4 +1,6 @@
+import io
 import unittest
+from contextlib import redirect_stdout
 
 import numpy as np
 import pandas as pd
@@ -138,8 +140,22 @@ class PatternADInterfaceTest(unittest.TestCase):
             patience=2,
             validation_fraction=0.2,
         )
-        detector.detect_fit(data)
-        scores = detector.detect_score(data)
+        terminal_output = io.StringIO()
+        with redirect_stdout(terminal_output):
+            with self.assertLogs(
+                "ts_benchmark.baselines.PatternAD.PatternAD", level="INFO"
+            ) as captured_logs:
+                detector.detect_fit(data)
+                scores = detector.detect_score(data)
+        log_output = "\n".join(captured_logs.output)
+        self.assertIn("PatternAD fitting started", log_output)
+        self.assertIn("PatternAD epoch 1/2", log_output)
+        self.assertIn("delta=", log_output)
+        self.assertIn("PatternAD scoring progress", log_output)
+        self.assertIn("PatternAD scoring complete", log_output)
+        self.assertIn("iters:", terminal_output.getvalue())
+        self.assertIn("speed:", terminal_output.getvalue())
+        self.assertIn("left time:", terminal_output.getvalue())
         self.assertEqual(scores.shape, (len(data),))
         self.assertTrue(np.isfinite(scores).all())
         components = detector.get_last_score_components()

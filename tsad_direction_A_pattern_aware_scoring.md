@@ -164,7 +164,7 @@ no_graph      移除全部跨变量消息，保留相同的时间骨干与概率
 
 - 当前代码是与上述动机一致的待验证候选模型，而不是已经被实验结果证明优于原始 `PatternAD` 或既有基线的结论。多尺度条件关系、目标盲解码和条件似然构成需要通过完整对比与消融验证的设计贡献。
 - 已通过 `tests.test_patternad_core` 与 `tests.test_anomaly_protocol` 共 18 项 CPU 契约测试；所有既有 `PatternAD*.sh` 已通过 Shell 语法检查。尚未启动真实数据 GPU 实验。
-- 脚本维持原有目录和单 GPU 前台顺序执行方式。按单任务约 30 GB 显存预算设置默认训练/评分批量：Daphnet、Energy、GECCO、MSDS、SKAB、Weather 为 `128/256`；Genesis、MetroPT3 为 `96/192`；SMD 为 `64/128`；HAI21 为 `48/96`。后一个数值是仅影响推理吞吐的 `score_conditioning_batch_size`。
+- 脚本维持原有目录和单 GPU 前台顺序执行方式。按单任务约 30 GB 显存预算设置默认训练/评分批量：HAI21 为 `256/512`；其余已恢复数据集均为 `512/1024`。后一个数值是仅影响推理吞吐的 `score_conditioning_batch_size`。
 
 ## 评估原则
 

@@ -18,7 +18,9 @@ as model conditions until their provenance and availability have been audited.
 from __future__ import annotations
 
 import copy
+import logging
 import math
+import time
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -30,6 +32,9 @@ import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
+
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_PATTERN_AD_HYPER_PARAMS = {
@@ -59,6 +64,7 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "gradient_clip_norm": 1.0,
     "validation_fraction": 0.15,
     "score_top_k": 3,
+    "log_interval": 10,
     "device": None,
     "seed": None,
 }
@@ -94,6 +100,7 @@ class PatternADConfig:
     gradient_clip_norm: float = 1.0
     validation_fraction: float = 0.15
     score_top_k: int = 3
+    log_interval: int = 10
     device: Optional[str] = None
     seed: Optional[int] = None
     n_features: Optional[int] = None
@@ -132,6 +139,8 @@ class PatternADConfig:
             raise ValueError("min_scale, batch_size, and score_conditioning_batch_size must be positive.")
         if self.num_epochs < 1 or self.patience < 1:
             raise ValueError("num_epochs and patience must be positive.")
+        if self.log_interval < 1:
+            raise ValueError("log_interval must be positive.")
         if self.learning_rate <= 0.0 or self.weight_decay < 0.0:
             raise ValueError("learning_rate must be positive and weight_decay nonnegative.")
         if self.branch_loss_weight < 0.0 or self.relation_consistency_weight < 0.0:
@@ -539,16 +548,32 @@ class PatternAD:
         )
         self.model = PatternADNet(int(self.config.n_features), self.config).to(self.device)
         optimizer = AdamW(self.model.parameters(), lr=self.config.learning_rate, weight_decay=self.config.weight_decay)
+        logger.info(
+            "PatternAD fitting started: device=%s, features=%d, train_windows=%d, "
+            "validation_windows=%d, batch_size=%d, relation_mode=%s",
+            self.device,
+            self.config.n_features,
+            len(train_loader.dataset),
+            len(validation_loader.dataset),
+            self.config.batch_size,
+            self.config.relation_mode,
+        )
         best_state: Optional[Dict[str, torch.Tensor]] = None
         best_validation = float("inf")
         stale_epochs = 0
         history: List[Dict[str, float]] = []
+        previous_train_loss: Optional[float] = None
+        previous_validation_loss: Optional[float] = None
+        train_steps = len(train_loader)
         for epoch in range(1, self.config.num_epochs + 1):
             self.model.train()
             loss_sum = 0.0
             total = 0
             epoch_graph_entropy = 0.0
-            for batch in train_loader:
+            epoch_start = time.perf_counter()
+            interval_start = epoch_start
+            last_reported_iteration = 0
+            for iteration, batch in enumerate(train_loader, start=1):
                 target = batch.to(self.device, non_blocking=self.device.type == "cuda")
                 mask = self._sample_training_mask(target)
                 optimizer.zero_grad(set_to_none=True)
@@ -561,6 +586,26 @@ class PatternAD:
                 loss_sum += float(loss.detach().cpu()) * len(target)
                 epoch_graph_entropy += diagnostics["graph_entropy"] * len(target)
                 total += len(target)
+                if (
+                    iteration % self.config.log_interval == 0
+                    or iteration == train_steps
+                ):
+                    now = time.perf_counter()
+                    interval_iterations = iteration - last_reported_iteration
+                    speed = (now - interval_start) / max(interval_iterations, 1)
+                    remaining_iterations = (
+                        (self.config.num_epochs - epoch) * train_steps
+                        + train_steps
+                        - iteration
+                    )
+                    left_time = speed * remaining_iterations
+                    print(f"\titers: {iteration}, epoch: {epoch}", flush=True)
+                    print(
+                        f"\tspeed: {speed:.4f}s/iter; left time: {left_time:.4f}s",
+                        flush=True,
+                    )
+                    interval_start = now
+                    last_reported_iteration = iteration
             validation_loss = self._validation_loss(validation_loader)
             epoch_record = {
                 "epoch": float(epoch),
@@ -569,14 +614,49 @@ class PatternAD:
                 "graph_entropy": epoch_graph_entropy / max(total, 1),
             }
             history.append(epoch_record)
-            if validation_loss < best_validation - 1e-6:
+            improved = validation_loss < best_validation - 1e-6
+            if improved:
                 best_validation = validation_loss
                 stale_epochs = 0
                 best_state = {name: value.detach().cpu().clone() for name, value in self.model.state_dict().items()}
             else:
                 stale_epochs += 1
-                if stale_epochs >= self.config.patience:
-                    break
+            status = "best" if improved else "no_improvement={}/{}".format(
+                stale_epochs, self.config.patience
+            )
+            train_delta = (
+                "n/a"
+                if previous_train_loss is None
+                else f"{epoch_record['train_loss'] - previous_train_loss:+.6f}"
+            )
+            validation_delta = (
+                "n/a"
+                if previous_validation_loss is None
+                else f"{validation_loss - previous_validation_loss:+.6f}"
+            )
+            logger.info(
+                "PatternAD epoch %d/%d complete: train_loss=%.6f (delta=%s), "
+                "validation_loss=%.6f (delta=%s), graph_entropy=%.6f, "
+                "epoch_time=%.2fs, %s",
+                epoch,
+                self.config.num_epochs,
+                epoch_record["train_loss"],
+                train_delta,
+                validation_loss,
+                validation_delta,
+                epoch_record["graph_entropy"],
+                time.perf_counter() - epoch_start,
+                status,
+            )
+            previous_train_loss = epoch_record["train_loss"]
+            previous_validation_loss = validation_loss
+            if not improved and stale_epochs >= self.config.patience:
+                logger.info(
+                    "PatternAD early stopping at epoch %d; best_validation_loss=%.6f",
+                    epoch,
+                    best_validation,
+                )
+                break
         if best_state is None:
             raise RuntimeError("PatternAD did not produce a valid checkpoint.")
         self.model.load_state_dict(best_state)
@@ -593,6 +673,12 @@ class PatternAD:
             "graph_topk": int(self.config.graph_topk),
             "relation_mode": self.config.relation_mode,
         }
+        logger.info(
+            "PatternAD fitting complete: epochs=%d, best_validation_loss=%.6f, parameters=%d",
+            len(history),
+            best_validation,
+            parameter_count,
+        )
         return self
 
     def detect_multi_fit(
@@ -660,17 +746,38 @@ class PatternAD:
         if dimensions != self.config.n_features:
             raise ValueError("Test feature count does not match the fitted model.")
         window_batch_size = max(1, self.config.score_conditioning_batch_size)
+        total_windows = max(1, len(values) - self.config.seq_len + 1)
+        total_batches = math.ceil(total_windows / window_batch_size)
+        progress_interval = max(1, total_batches // 10)
         joint_rows: List[np.ndarray] = []
         temporal_rows: List[np.ndarray] = []
         graph_rows: List[np.ndarray] = []
+        logger.info(
+            "PatternAD scoring started: points=%d, windows=%d, batches=%d, batch_size=%d",
+            len(values),
+            total_windows,
+            total_batches,
+            window_batch_size,
+        )
         self.model.eval()
         with torch.no_grad():
-            for batch in self._window_batches(values, window_batch_size):
+            for batch_index, batch in enumerate(self._window_batches(values, window_batch_size), start=1):
                 windows = torch.as_tensor(batch, device=self.device)
                 joint, temporal, graph = self._conditional_terminal_nll(windows)
                 joint_rows.append(joint.detach().cpu().numpy())
                 temporal_rows.append(temporal.detach().cpu().numpy())
                 graph_rows.append(graph.detach().cpu().numpy())
+                if (
+                    batch_index == 1
+                    or batch_index == total_batches
+                    or batch_index % progress_interval == 0
+                ):
+                    logger.info(
+                        "PatternAD scoring progress: batch %d/%d (%.0f%%)",
+                        batch_index,
+                        total_batches,
+                        100.0 * batch_index / total_batches,
+                    )
         joint_nll = np.concatenate(joint_rows, axis=0)
         temporal_nll = np.concatenate(temporal_rows, axis=0)
         graph_nll = np.concatenate(graph_rows, axis=0)
@@ -699,6 +806,7 @@ class PatternAD:
         if _auxiliary is not None:
             score_call["auxiliary_input"] = _auxiliary
         self._score_calls.append(score_call)
+        logger.info("PatternAD scoring complete: produced %d point scores", len(scores))
         return self._last_score_components["score"].copy()
 
     def detect_multi_score(

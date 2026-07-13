@@ -25,13 +25,18 @@ files are the matched `relation_mode=no_graph` controls. The benchmark text
 argument is retained and validated, but is not treated as an auxiliary signal
 until its provenance has been audited.
 
+Training progress is printed to the terminal: every ten batches (and the final
+batch of each epoch) it reports `iters`, `epoch`, seconds per iteration, and
+estimated remaining time. Each epoch reports training/validation loss and their
+changes, graph entropy, elapsed time, and early stopping state. Scoring progress
+is printed in roughly 10% increments. No extra log file or background process is
+created.
+
 The runners use the following default `batch_size` / inference
 `score_conditioning_batch_size` pairs for a roughly 30 GB single-GPU budget:
 
-- Daphnet, Energy, GECCO, MSDS, SKAB, Weather: `128 / 256`
-- Genesis, MetroPT3: `96 / 192`
-- SMD: `64 / 128`
-- HAI21: `48 / 96`
+- HAI21: `256 / 512`
+- Daphnet, Energy, GECCO, Genesis, MSDS, MetroPT3, SKAB, SMD, Weather: `512 / 1024`
 
 The current implementation is a research candidate, not a claimed performance
 improvement. Shell syntax checks and 18 CPU contract tests pass; no real-data
