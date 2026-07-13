@@ -7,6 +7,60 @@
 - RMindTS 主模型：`cxy/MindTS-main`
 - Baseline 全线结果：`cxy/MindTS-baselines`
 
+## PatternAD 补充数据集状态（2026-07-13）
+
+本轮新增数据集是 `MetroPT3, HAI21, SMD`，与原先 9 个 RMindTS 数据集
+分开记录。统一结果文件为：
+
+```text
+cxy/MindTS-baselines/result/label/patternad_baseline_three_metrics.csv
+cxy/MindTS-baselines/result/label/patternad_baseline_summary.csv
+```
+
+当前正式口径与脚本如下：
+
+| Dataset | 正式脚本 | 数据规模 | PatternAD 配置 |
+| --- | --- | --- | --- |
+| MetroPT3 | `MetroPT3_script/PatternAD.sh` | 1 series, 15 features | batch 512, 30 epochs, patience 5 |
+| HAI21 | `HAI21_script/PatternAD_full.sh` | 3 parts, 79 features | batch 256, 30 epochs, patience 5 |
+| SMD | `SMD_script/PatternAD_full.sh` | 28 machines, 38 features | batch 512, 40 epochs, patience 7 |
+
+HAI21/SMD 的非-`full` 脚本仅为 `10 / 3` 开发探针；`PatternAD_raw*.sh`
+是 `relation_mode=no_graph` 对照，不能与 full 结果混用。
+
+当前已归档 13/60 个 baseline-dataset 单元：四个 classic baseline 已覆盖
+全部三个数据集，另有 MetroPT3-TranAD。HAI21-OCSVM 的 `Aff-F=nan` 是已执行
+但无效的指标，不应替换为 0。其余 47 个单元尚未运行。
+
+| Model | MetroPT3 Aff-F / V-PR / V-ROC | HAI21 Aff-F / V-PR / V-ROC | SMD Aff-F / V-PR / V-ROC |
+| --- | --- | --- | --- |
+| PCA | 0.8413 / 0.3212 / 0.9171 | 0.8511 / 0.2883 / 0.8086 | 0.8729 / 0.3338 / 0.7744 |
+| IsolationForest | 0.7842 / 0.3331 / 0.9413 | 0.7001 / 0.1214 / 0.7350 | 0.7628 / 0.2205 / 0.7801 |
+| LOF | 0.7586 / 0.0499 / 0.7265 | 0.8029 / 0.1878 / 0.7278 | 0.8030 / 0.2456 / 0.7105 |
+| OCSVM | 0.8921 / 0.5212 / 0.9611 | NaN / 0.3162 / 0.7299 | 0.8782 / 0.3794 / 0.7808 |
+| TranAD | 0.8183 / 0.3254 / 0.9519 | pending | pending |
+
+PatternAD 本体暂时没有可报告结果。HAI21 的单-part 10-epoch 开发探针曾在
+GPU 0 仅剩 228 MiB 时申请额外 316 MiB，发生 CUDA OOM；该空指标产物已清理。
+
+本地统一环境和入口：
+
+```text
+/media/h3c/users/wangyueyang1/.env/envs/patternad_env
+cxy/PatternAD-main/scripts/run_cxy_python.sh
+```
+
+PatternAD 主模型使用全局 `patternad_env`，不能在 `cxy/.env/envs` 创建同名
+副本。baseline 使用独立的 `cxy/.env/envs/baseline_env`，由
+`scripts/baselines/run_baseline_python.sh` 启动；该环境从主模型环境克隆后仅补充
+了 `torch-geometric 2.6.1`。主模型环境本身没有被修改。两个环境均通过包装器
+启动，以便 `conda run` 设置 MKL 动态库路径。
+
+执行顺序：先在 GPU 释放至少约 32 GiB 后运行 MetroPT3 PatternAD full，随后
+运行 HAI21 full 和 SMD full。不要串行直接启动完整 20-model sweep：MetroPT3 的
+AnomalyTransformer 在共享 GPU 上曾显示约 28--32 小时 ETA，应单独在独占 GPU
+中运行。其他未完成 baseline 通过 `MODEL_FILTER` 分组续跑；默认跳过已有结果。
+
 
 ## 数据集
 

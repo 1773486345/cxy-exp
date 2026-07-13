@@ -20,7 +20,7 @@ RMindTS 主模型仍在：
 
 ```bash
 cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines
-export PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/.env/envs/mindts_env/bin/python
+export PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh
 export TRANSFORMERS_OFFLINE=1
 export HF_HUB_OFFLINE=1
 ```
@@ -32,13 +32,14 @@ export HF_HUB_OFFLINE=1
 先复制执行这段检查：
 
 ```bash
-test -x /media/h3c/users/wangyueyang1/cxy/.env/envs/mindts_env/bin/python
+test -x /media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh
 test -x /media/h3c/users/wangyueyang1/cxy/.env/envs/omni_tf1/bin/python
 test -e dataset/anomaly_detect/data/Genesis.csv
 test -e config/unfixed_detect_label_multi_config.json
 test "$(readlink -f /media/h3c/users/wangyueyang1/cxy/TAB/result)" = "/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/result"
 bash -n scripts/baselines/run_all_requested_baselines.sh
 bash -n scripts/baselines/run_daphnet_gecco_tslib_baselines.sh
+$PYTHON_BIN -c 'import torch, torch_geometric, transformers, numpy, pandas, sklearn'
 $PYTHON_BIN - <<'PY'
 from transformers import AutoTokenizer
 AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
@@ -60,14 +61,14 @@ PatternAD 新增数据集 baseline，结果统一写到本目录的 `result/labe
 
 ```bash
 cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines
-PYTHON_BIN="$(command -v python)" \
+PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh \
   bash scripts/baselines/run_patternad_dataset_baselines.sh
 ```
 
 默认跑 `MetroPT3, HAI21, SMD`，其中 HAI21/SMD 使用 PatternAD full 口径。只跑部分数据集：
 
 ```bash
-PYTHON_BIN="$(command -v python)" \
+PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh \
   bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
 ```
 
@@ -75,7 +76,7 @@ PYTHON_BIN="$(command -v python)" \
 
 ```bash
 MODEL_FILTER=PCA,IsolationForest \
-PYTHON_BIN="$(command -v python)" \
+PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh \
   bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
 ```
 
@@ -102,7 +103,7 @@ SKIP_EXISTING=0 bash scripts/baselines/run_all_requested_baselines.sh Weather.cs
 
 ```bash
 tmux new-session -d -s baseline_rerun \
-  "cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines && export PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/.env/envs/mindts_env/bin/python TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 && SKIP_EXISTING=0 bash scripts/baselines/run_all_requested_baselines.sh"
+  "cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines && export PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 && SKIP_EXISTING=0 bash scripts/baselines/run_all_requested_baselines.sh"
 ```
 
 ## 4. 重要：跳过逻辑
@@ -143,7 +144,9 @@ SKIP_EXISTING=0 bash scripts/baselines/run_daphnet_gecco_tslib_baselines.sh Gene
 
 ## 6. GPU 和环境说明
 
-- 主环境：`/media/h3c/users/wangyueyang1/cxy/.env/envs/mindts_env`
+- Baseline 环境包装器：`/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh`
+- Baseline 环境：`/media/h3c/users/wangyueyang1/cxy/.env/envs/baseline_env`
+- PatternAD 主模型环境：`/media/h3c/users/wangyueyang1/.env/envs/patternad_env`
 - 旧 TF 环境：`/media/h3c/users/wangyueyang1/cxy/.env/envs/omni_tf1`
 - TSLib 四模型默认用 `GPU=0`，可这样改：
 

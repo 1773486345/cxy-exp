@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TAB_ROOT="${TAB_ROOT:-${PROJECT_ROOT}/../TAB}"
-PYTHON_BIN="${PYTHON_BIN:-python}"
+PYTHON_BIN="${PYTHON_BIN:-${SCRIPT_DIR}/run_baseline_python.sh}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
 CONTINUE_ON_ERROR="${CONTINUE_ON_ERROR:-1}"
 GPU="${GPU:-0}"
@@ -13,6 +13,11 @@ MODEL_FILTER="${MODEL_FILTER:-}"
 
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
+
+if [ ! -x "${PYTHON_BIN}" ]; then
+  echo "missing baseline Python runner: ${PYTHON_BIN}" >&2
+  exit 2
+fi
 
 LOG_DIR="${PROJECT_ROOT}/result/label/_baseline_logs"
 LOG_FILE="${LOG_DIR}/patternad_dataset_baselines_${RUN_TAG}.log"
@@ -205,6 +210,7 @@ run_tslib_model() {
 echo "[PatternAD baseline sweep] started_at=$(date '+%Y-%m-%d %H:%M:%S %Z')" | tee -a "${LOG_FILE}"
 echo "[PatternAD baseline sweep] project_root=${PROJECT_ROOT}" | tee -a "${LOG_FILE}"
 echo "[PatternAD baseline sweep] tab_root=${TAB_ROOT}" | tee -a "${LOG_FILE}"
+echo "[PatternAD baseline sweep] python_bin=${PYTHON_BIN}" | tee -a "${LOG_FILE}"
 echo "[PatternAD baseline sweep] skip_existing=${SKIP_EXISTING} continue_on_error=${CONTINUE_ON_ERROR} gpu=${GPU}" | tee -a "${LOG_FILE}"
 if [ -n "${MODEL_FILTER}" ]; then
   echo "[PatternAD baseline sweep] model_filter=${MODEL_FILTER}" | tee -a "${LOG_FILE}"

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-PYTHON_BIN="${PYTHON_BIN:-/media/h3c/users/wangyueyang1/cxy/.env/envs/mindts_env/bin/python}"
+PYTHON_BIN="${PYTHON_BIN:-${SCRIPT_DIR}/run_baseline_python.sh}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
 
 DATASETS=("$@")
