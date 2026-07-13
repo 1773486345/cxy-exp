@@ -32,11 +32,23 @@ changes, graph entropy, elapsed time, and early stopping state. Scoring progress
 is printed in roughly 10% increments. No extra log file or background process is
 created.
 
+The model reads the actual feature count from each training series and builds
+its variable embedding and dynamic relation graph for that count. The backbone
+definition is shared across datasets; batch size and training schedule are
+adapted to channel count and available optimization windows.
+
 The runners use the following default `batch_size` / inference
 `score_conditioning_batch_size` pairs for a roughly 30 GB single-GPU budget:
 
 - HAI21: `256 / 512`
-- Daphnet, Energy, GECCO, Genesis, MSDS, MetroPT3, SKAB, SMD, Weather: `512 / 1024`
+- Energy: `128 / 1024`
+- Genesis: `256 / 1024`
+- Daphnet, GECCO, MSDS, MetroPT3, SKAB, SMD, Weather: `512 / 1024`
+
+The full-run `num_epochs / patience` pairs are: HAI21 and MetroPT3 `30 / 5`;
+SMD and MSDS `40 / 7`; Daphnet and GECCO `60 / 8`; SKAB and Weather `80 / 10`;
+Genesis `100 / 12`; Energy `180 / 15`. The HAI21 and SMD non-`full` scripts
+remain short `10 / 3` development probes.
 
 The current implementation is a research candidate, not a claimed performance
 improvement. Shell syntax checks and 18 CPU contract tests pass; no real-data

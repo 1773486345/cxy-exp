@@ -140,6 +140,8 @@ PatternAD-main/ts_benchmark/baselines/PatternAD/
 
 当前实现是目标盲的多尺度动态关系条件检测器：共享时序编码器为每个变量和尺度形成表征，并在每个时间点推断有向跨变量关系状态。对被掩码的目标值，时间分支和关系分支共同给出条件高斯分布；最终分数为条件负对数似然，而不是手工拼接的残差、尾部统计或局部统计加权。
 
+通道数不在脚本中硬编码：`PatternAD` 从每个官方训练序列读取实际变量数，随后按该数目构建变量嵌入和动态关系图。因此 HAI21、SMD、MetroPT3 等不同维度序列使用同一可比较的骨干定义，但具有与各自通道数匹配的参数和关系状态；训练 batch 与 epoch 上限则按有效窗口数单独设置。
+
 现有 `PatternAD` 已实现 `detect_fit` / `detect_score` 与 benchmark 所需的 `detect_multi_fit` / `detect_multi_score`，因此保留 `--text-name-list` 的既有脚本可以运行。当前文本输入做严格对齐校验和诊断记录，但尚未作为条件特征参与评分；这避免将未审计 prompt 或 placeholder 误写成多模态贡献。未来的结构化外生状态、事件记录或其他传感模态只有在能服务上述异常检测动机时才进入模型。
 
 ```text
@@ -164,7 +166,8 @@ no_graph      移除全部跨变量消息，保留相同的时间骨干与概率
 
 - 当前代码是与上述动机一致的待验证候选模型，而不是已经被实验结果证明优于原始 `PatternAD` 或既有基线的结论。多尺度条件关系、目标盲解码和条件似然构成需要通过完整对比与消融验证的设计贡献。
 - 已通过 `tests.test_patternad_core` 与 `tests.test_anomaly_protocol` 共 18 项 CPU 契约测试；所有既有 `PatternAD*.sh` 已通过 Shell 语法检查。尚未启动真实数据 GPU 实验。
-- 脚本维持原有目录和单 GPU 前台顺序执行方式。按单任务约 30 GB 显存预算设置默认训练/评分批量：HAI21 为 `256/512`；其余已恢复数据集均为 `512/1024`。后一个数值是仅影响推理吞吐的 `score_conditioning_batch_size`。
+- 脚本维持原有目录和单 GPU 前台顺序执行方式。按单任务约 30 GB 显存预算设置默认训练/评分批量：HAI21 为 `256/512`；Energy 为 `128/1024`；Genesis 为 `256/1024`；其余已恢复数据集为 `512/1024`。后一个数值是仅影响推理吞吐的 `score_conditioning_batch_size`。
+- 训练上限也按有效优化步数设置，而非统一 30 epoch：HAI21、MetroPT3 为 `30/5`，SMD、MSDS 为 `40/7`，GECCO、Daphnet 为 `60/8`，SKAB、Weather 为 `80/10`，Genesis 为 `100/12`，Energy 为 `180/15`；格式为 `num_epochs/patience`。HAI21、SMD 的非 `full` 脚本仍是 `10/3` 的开发探针，不用于正式报告。
 
 ## 评估原则
 
