@@ -337,6 +337,61 @@ class AnomalyTransformer:
                 break
             adjust_learning_rate(self.optimizer, epoch + 1, self.config.lr)
 
+    def _score_windows(self, input_data: torch.Tensor) -> np.ndarray:
+        """Return one anomaly score for every point in each input window."""
+        temperature = 50
+        criterion = nn.MSELoss(reduce=False)
+
+        with torch.no_grad():
+            input = input_data.float().to(self.device)
+            output, series, prior, _ = self.model(input)
+            loss = torch.mean(criterion(input, output), dim=-1)
+
+            series_loss = 0.0
+            prior_loss = 0.0
+            for u in range(len(prior)):
+                normalized_prior = prior[u] / torch.unsqueeze(
+                    torch.sum(prior[u], dim=-1), dim=-1
+                ).repeat(1, 1, 1, self.win_size)
+                if u == 0:
+                    series_loss = (
+                        my_kl_loss(series[u], normalized_prior.detach()) * temperature
+                    )
+                    prior_loss = (
+                        my_kl_loss(normalized_prior, series[u].detach()) * temperature
+                    )
+                else:
+                    series_loss += (
+                        my_kl_loss(series[u], normalized_prior.detach()) * temperature
+                    )
+                    prior_loss += (
+                        my_kl_loss(normalized_prior, series[u].detach()) * temperature
+                    )
+
+            metric = torch.softmax((-series_loss - prior_loss), dim=-1)
+            return (metric * loss).detach().cpu().numpy()
+
+    @staticmethod
+    def _append_trailing_scores(
+        complete_scores: np.ndarray, trailing_window_scores: np.ndarray, input_length: int
+    ) -> np.ndarray:
+        """Append only the previously unscored suffix from a final overlap window."""
+        complete_scores = np.asarray(complete_scores).reshape(-1)
+        missing = input_length - complete_scores.size
+        if missing < 0:
+            raise ValueError(
+                f"Got {complete_scores.size} scores for input length {input_length}."
+            )
+        if missing == 0:
+            return complete_scores
+
+        trailing_window_scores = np.asarray(trailing_window_scores).reshape(-1)
+        if trailing_window_scores.size < missing:
+            raise ValueError(
+                "The final overlap window does not cover the unscored input suffix."
+            )
+        return np.concatenate([complete_scores, trailing_window_scores[-missing:]])
+
     def detect_score(self, train: pd.DataFrame) -> np.ndarray:
         self.model.load_state_dict(self.early_stopping.check_point)
         self.model.eval()
@@ -355,81 +410,22 @@ class AnomalyTransformer:
             mode="thre",
         )
 
-        temperature = 50
-        criterion = nn.MSELoss(reduce=False)
-
-        test_labels = []
         attens_energy = []
-        for i, (input_data, labels) in enumerate(self.thre_loader):
-            input = input_data.float().to(self.device)
-            output, series, prior, _ = self.model(input)
-
-            loss = torch.mean(criterion(input, output), dim=-1)
-
-            series_loss = 0.0
-            prior_loss = 0.0
-            for u in range(len(prior)):
-                if u == 0:
-                    series_loss = (
-                        my_kl_loss(
-                            series[u],
-                            (
-                                prior[u]
-                                / torch.unsqueeze(
-                                    torch.sum(prior[u], dim=-1), dim=-1
-                                ).repeat(1, 1, 1, self.win_size)
-                            ).detach(),
-                        )
-                        * temperature
-                    )
-                    prior_loss = (
-                        my_kl_loss(
-                            (
-                                prior[u]
-                                / torch.unsqueeze(
-                                    torch.sum(prior[u], dim=-1), dim=-1
-                                ).repeat(1, 1, 1, self.win_size)
-                            ),
-                            series[u].detach(),
-                        )
-                        * temperature
-                    )
-                else:
-                    series_loss += (
-                        my_kl_loss(
-                            series[u],
-                            (
-                                prior[u]
-                                / torch.unsqueeze(
-                                    torch.sum(prior[u], dim=-1), dim=-1
-                                ).repeat(1, 1, 1, self.win_size)
-                            ).detach(),
-                        )
-                        * temperature
-                    )
-                    prior_loss += (
-                        my_kl_loss(
-                            (
-                                prior[u]
-                                / torch.unsqueeze(
-                                    torch.sum(prior[u], dim=-1), dim=-1
-                                ).repeat(1, 1, 1, self.win_size)
-                            ),
-                            series[u].detach(),
-                        )
-                        * temperature
-                    )
-            metric = torch.softmax((-series_loss - prior_loss), dim=-1)
-
-            cri = metric * loss
-            cri = cri.detach().cpu().numpy()
-            attens_energy.append(cri)
-            test_labels.append(labels)
+        for input_data, _ in self.thre_loader:
+            attens_energy.append(self._score_windows(input_data))
 
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
-        test_labels = np.concatenate(test_labels, axis=0).reshape(-1)
-        test_energy = np.array(attens_energy)
-        test_labels = np.array(test_labels)
+        tail_length = len(thre_data) - len(attens_energy)
+        if tail_length:
+            # Score the omitted suffix using one final window that reaches the last point.
+            tail_input = torch.from_numpy(
+                thre_data.iloc[-self.win_size :].to_numpy(dtype=np.float32, copy=True)
+            ).unsqueeze(0)
+            tail_scores = self._score_windows(tail_input)
+            attens_energy = self._append_trailing_scores(
+                attens_energy, tail_scores, len(thre_data)
+            )
+        test_energy = np.asarray(attens_energy)
 
         return test_energy, test_energy
 

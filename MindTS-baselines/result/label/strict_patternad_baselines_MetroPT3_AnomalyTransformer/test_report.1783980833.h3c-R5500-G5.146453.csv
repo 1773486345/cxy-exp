@@ -1,0 +1,4 @@
+strategy_args,metric_name,AnomalyTransformer;{}
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",affiliation_f,0.6738513141550048
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",VUS_ROC,0.4875316437348279
+"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",VUS_PR,0.0389647343619687

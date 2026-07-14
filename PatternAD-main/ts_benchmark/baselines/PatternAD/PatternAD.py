@@ -4,7 +4,7 @@ The detector keeps a standard temporal Transformer backbone, but makes the
 cross-variable mechanism an end-to-end part of conditional reconstruction:
 
 * a shared multi-scale temporal encoder produces a state for every variable;
-* directed relation layers infer a history-conditioned graph at every scale;
+* directed lag-aware relation layers infer a history-conditioned graph at every scale;
 * temporal and graph decoders form one conditional Gaussian through a learned
   reliability gate; and
 * training uses masked counterfactual targets, so the graph decoder cannot read
@@ -46,6 +46,11 @@ DEFAULT_PATTERN_AD_HYPER_PARAMS = {
     "e_layers": 2,
     "dropout": 0.1,
     "temporal_kernels": (1, 5, 11),
+    "global_state_dim": 0,
+    "graph_lags": (0,),
+    "normal_mode_count": 1,
+    "normal_mode_scope": "variable",
+    "mode_transition": False,
     "relation_mode": "full",
     "graph_topk": 0,
     "graph_target_chunk_size": 16,
@@ -82,6 +87,11 @@ class PatternADConfig:
     e_layers: int = 2
     dropout: float = 0.1
     temporal_kernels: Tuple[int, ...] = (1, 5, 11)
+    global_state_dim: int = 0
+    graph_lags: Tuple[int, ...] = (0,)
+    normal_mode_count: int = 1
+    normal_mode_scope: str = "variable"
+    mode_transition: bool = False
     relation_mode: str = "full"
     graph_topk: int = 0
     graph_target_chunk_size: int = 16
@@ -110,7 +120,8 @@ class PatternADConfig:
         values = dict(DEFAULT_PATTERN_AD_HYPER_PARAMS)
         values.update(kwargs)
         kernels = tuple(int(kernel) for kernel in values["temporal_kernels"])
-        config = cls(**{**values, "temporal_kernels": kernels})
+        graph_lags = tuple(int(lag) for lag in values["graph_lags"])
+        config = cls(**{**values, "temporal_kernels": kernels, "graph_lags": graph_lags})
         config.validate()
         return config
 
@@ -125,6 +136,23 @@ class PatternADConfig:
             raise ValueError("e_layers and n_heads must be positive.")
         if not self.temporal_kernels or any(kernel < 1 or kernel % 2 == 0 for kernel in self.temporal_kernels):
             raise ValueError("temporal_kernels must be nonempty positive odd integers.")
+        if self.global_state_dim < 0:
+            raise ValueError("global_state_dim must be nonnegative.")
+        if (
+            not self.graph_lags
+            or self.graph_lags[0] != 0
+            or any(lag < 0 for lag in self.graph_lags)
+            or len(set(self.graph_lags)) != len(self.graph_lags)
+        ):
+            raise ValueError(
+                "graph_lags must be unique nonnegative lags beginning with zero."
+            )
+        if self.normal_mode_count < 1:
+            raise ValueError("normal_mode_count must be positive.")
+        if self.normal_mode_scope not in {"variable", "system"}:
+            raise ValueError("normal_mode_scope must be one of: variable, system.")
+        if not isinstance(self.mode_transition, bool):
+            raise ValueError("mode_transition must be a boolean.")
         if self.relation_mode not in {"full", "single_scale", "no_graph"}:
             raise ValueError("relation_mode must be one of: full, single_scale, no_graph.")
         if self.graph_topk < 0 or self.graph_target_chunk_size < 1:
@@ -226,16 +254,49 @@ class PatternTemporalEncoder(nn.Module):
         return scale_tokens, temporal_state
 
 
-class DynamicPatternGraphLayer(nn.Module):
-    """Infer a directed target-from-source graph without materializing D x D graphs."""
+class GlobalStateEncoder(nn.Module):
+    """Summarize the masked multivariate history into a causal regime token."""
 
-    def __init__(self, d_model: int, graph_dim: int, dropout: float, target_chunk_size: int, top_k: int):
+    def __init__(self, d_model: int, state_dim: int):
+        super().__init__()
+        self.input_norm = nn.LayerNorm(d_model)
+        self.gru = nn.GRU(d_model, state_dim, batch_first=True)
+        self.output_norm = nn.LayerNorm(state_dim)
+
+    def forward(self, temporal_state: torch.Tensor) -> torch.Tensor:
+        # Pooling occurs after masking and causal temporal encoding, so z[t]
+        # cannot depend on a hidden target or on future observations.
+        pooled = temporal_state.mean(dim=2)
+        state, _ = self.gru(self.input_norm(pooled))
+        state = self.output_norm(state)
+        return state.unsqueeze(2).expand(-1, -1, temporal_state.shape[2], -1)
+
+
+class DynamicPatternGraphLayer(nn.Module):
+    """Infer a directed causal graph over source variables and temporal lags."""
+
+    def __init__(
+        self,
+        d_model: int,
+        graph_dim: int,
+        dropout: float,
+        target_chunk_size: int,
+        top_k: int,
+        graph_lags: Sequence[int],
+        state_dim: int = 0,
+    ):
         super().__init__()
         self.query = nn.Linear(d_model, graph_dim, bias=False)
         self.key = nn.Linear(d_model, graph_dim, bias=False)
         self.value = nn.Linear(d_model, d_model, bias=False)
+        self.state_query = (
+            nn.Linear(state_dim, graph_dim, bias=False) if state_dim else None
+        )
+        self.state_key = (
+            nn.Linear(state_dim, graph_dim, bias=False) if state_dim else None
+        )
         self.update = nn.Sequential(
-            nn.Linear(2 * d_model, d_model),
+            nn.Linear(2 * d_model + state_dim, d_model),
             nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(d_model, d_model),
@@ -243,34 +304,85 @@ class DynamicPatternGraphLayer(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.target_chunk_size = int(target_chunk_size)
         self.top_k = int(top_k)
+        self.graph_lags = tuple(int(lag) for lag in graph_lags)
+        self.num_lags = len(self.graph_lags)
+        # The legacy (lag=0) graph remains exactly parameter-compatible.  With
+        # multiple lags, learned codes tell the relation layer how much delay
+        # separates an otherwise similar source state from the target state.
+        if self.graph_lags == (0,):
+            self.lag_key_embedding = None
+            self.lag_value_embedding = None
+        else:
+            self.lag_key_embedding = nn.Parameter(torch.empty(self.num_lags, graph_dim))
+            self.lag_value_embedding = nn.Parameter(torch.empty(self.num_lags, d_model))
+            nn.init.trunc_normal_(self.lag_key_embedding, std=0.02)
+            nn.init.trunc_normal_(self.lag_value_embedding, std=0.02)
         self.scale = float(graph_dim) ** -0.5
 
-    def forward(self, history: torch.Tensor, scale_tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _lagged(self, values: torch.Tensor) -> torch.Tensor:
+        """Stack causal shifts as [batch, time, lag, variables, width]."""
+        _, time_steps, _, _ = values.shape
+        shifted_values: List[torch.Tensor] = []
+        for lag in self.graph_lags:
+            if lag == 0:
+                shifted_values.append(values)
+            elif lag < time_steps:
+                prefix = values.new_zeros((values.shape[0], lag, values.shape[2], values.shape[3]))
+                shifted_values.append(torch.cat((prefix, values[:, :-lag]), dim=1))
+            else:
+                shifted_values.append(torch.zeros_like(values))
+        return torch.stack(shifted_values, dim=2)
+
+    def forward(
+        self,
+        history: torch.Tensor,
+        scale_tokens: torch.Tensor,
+        global_state: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch, time_steps, dimensions, width = history.shape
         if dimensions < 2:
             raise ValueError("PatternAD requires at least two variables.")
         query = self.query(history)
-        key = self.key(history)
-        values = self.value(scale_tokens)
+        source_history = self._lagged(history)
+        key = self.key(source_history)
+        if global_state is not None:
+            if self.state_query is None or self.state_key is None:
+                raise RuntimeError("Graph layer received state without state projections.")
+            query = query + self.state_query(global_state)
+            key = key + self.state_key(self._lagged(global_state))
+        values = self.value(self._lagged(scale_tokens))
+        if self.lag_key_embedding is not None and self.lag_value_embedding is not None:
+            key = key + self.lag_key_embedding.view(1, 1, self.num_lags, 1, -1)
+            values = values + self.lag_value_embedding.view(1, 1, self.num_lags, 1, -1)
         messages: List[torch.Tensor] = []
         entropy_sum = history.new_zeros(())
         entropy_count = 0
         source_index = torch.arange(dimensions, device=history.device)
+        lag_index = torch.as_tensor(self.graph_lags, device=history.device)
+        valid_lags = torch.arange(time_steps, device=history.device)[:, None] >= lag_index[None, :]
+        source_values = values.flatten(start_dim=2, end_dim=3)
         for start in range(0, dimensions, self.target_chunk_size):
             end = min(dimensions, start + self.target_chunk_size)
-            logits = torch.einsum("btqh,btdh->btqd", query[:, :, start:end], key) * self.scale
+            logits = torch.einsum("btqh,btldh->btqld", query[:, :, start:end], key) * self.scale
             target_index = torch.arange(start, end, device=history.device)
             diagonal = target_index[:, None] == source_index[None, :]
-            logits = logits.masked_fill(diagonal.view(1, 1, end - start, dimensions), float("-inf"))
+            logits = logits.masked_fill(
+                diagonal.view(1, 1, end - start, 1, dimensions), float("-inf")
+            )
+            logits = logits.masked_fill(
+                ~valid_lags.view(1, time_steps, 1, self.num_lags, 1), float("-inf")
+            )
+            logits = logits.flatten(start_dim=-2)
             if 0 < self.top_k < dimensions - 1:
                 cutoff = torch.topk(logits, k=self.top_k, dim=-1).values[..., -1:]
                 logits = logits.masked_fill(logits < cutoff, float("-inf"))
             attention = torch.softmax(logits, dim=-1)
-            messages.append(torch.einsum("btqd,btdh->btqh", attention, values))
+            messages.append(torch.einsum("btqn,btnh->btqh", attention, source_values))
             entropy_sum = entropy_sum + (-(attention * attention.clamp_min(1e-8).log()).sum(dim=-1)).sum()
             entropy_count += attention.shape[0] * attention.shape[1] * attention.shape[2]
         message = torch.cat(messages, dim=2)
-        relation = self.norm(scale_tokens + self.update(torch.cat((history, message), dim=-1)))
+        update_input = (history, message) if global_state is None else (history, message, global_state)
+        relation = self.norm(scale_tokens + self.update(torch.cat(update_input, dim=-1)))
         return relation, message, entropy_sum / max(entropy_count, 1)
 
 
@@ -282,6 +394,11 @@ class PatternADNet(nn.Module):
         self.n_features = int(n_features)
         self.config = config
         self.encoder = PatternTemporalEncoder(self.n_features, config)
+        self.global_state_encoder = (
+            GlobalStateEncoder(config.d_model, config.global_state_dim)
+            if config.global_state_dim
+            else None
+        )
         if config.relation_mode == "full":
             self.active_scale_indices = tuple(range(len(config.temporal_kernels)))
         elif config.relation_mode == "single_scale":
@@ -296,41 +413,90 @@ class PatternADNet(nn.Module):
                     config.dropout,
                     config.graph_target_chunk_size,
                     config.graph_topk,
+                    config.graph_lags,
+                    config.global_state_dim,
                 )
                 for _ in self.active_scale_indices
             ]
         )
         self.scale_gate = (
-            nn.Linear(config.d_model, len(self.active_scale_indices))
+            nn.Linear(config.d_model + config.global_state_dim, len(self.active_scale_indices))
             if self.active_scale_indices
             else None
         )
         self.temporal_head = nn.Sequential(
-            nn.Linear(config.d_model, config.d_ff),
+            nn.Linear(config.d_model + config.global_state_dim, config.d_ff),
             nn.GELU(),
             nn.Dropout(config.dropout),
             nn.Linear(config.d_ff, 2),
         )
         self.graph_head = nn.Sequential(
-            nn.Linear(config.d_model, config.d_ff),
+            nn.Linear(config.d_model + config.global_state_dim, config.d_ff),
             nn.GELU(),
             nn.Dropout(config.dropout),
             nn.Linear(config.d_ff, 2),
         )
         self.reliability_gate = nn.Sequential(
-            nn.Linear(2 * config.d_model, config.d_model),
+            nn.Linear(2 * config.d_model + config.global_state_dim, config.d_model),
             nn.GELU(),
             nn.Linear(config.d_model, 1),
         )
+        self.decoder_state_dim = 2 * config.d_model + config.global_state_dim
+        if config.normal_mode_count > 1:
+            self.mode_query = nn.Linear(self.decoder_state_dim, config.d_model, bias=False)
+            self.normal_mode_memory = nn.Parameter(
+                torch.empty(config.normal_mode_count, config.d_model)
+            )
+            if config.mode_transition:
+                transition = torch.full(
+                    (config.normal_mode_count, config.normal_mode_count), -1.0
+                )
+                transition.fill_diagonal_(1.0)
+                self.mode_transition_logits = nn.Parameter(transition)
+            else:
+                self.mode_transition_logits = None
+            self.mode_decoder = nn.Sequential(
+                nn.Linear(self.decoder_state_dim + config.d_model, config.d_ff),
+                nn.GELU(),
+                nn.Dropout(config.dropout),
+                nn.Linear(config.d_ff, 2),
+            )
+            nn.init.trunc_normal_(self.normal_mode_memory, std=0.02)
+        else:
+            self.mode_query = None
+            self.normal_mode_memory = None
+            self.mode_transition_logits = None
+            self.mode_decoder = None
+
+    def _filter_mode_log_weights(self, emission_log_weights: torch.Tensor) -> torch.Tensor:
+        """Causally filter per-variable mode evidence through a learned transition prior."""
+        if self.mode_transition_logits is None:
+            return emission_log_weights
+        transition_log_probs = torch.log_softmax(self.mode_transition_logits, dim=-1)
+        filtered: List[torch.Tensor] = [emission_log_weights[:, 0]]
+        previous = filtered[0]
+        for time_index in range(1, emission_log_weights.shape[1]):
+            predicted = torch.logsumexp(
+                previous.unsqueeze(-1) + transition_log_probs.view(1, 1, *transition_log_probs.shape),
+                dim=-2,
+            )
+            previous = torch.log_softmax(emission_log_weights[:, time_index] + predicted, dim=-1)
+            filtered.append(previous)
+        return torch.stack(filtered, dim=1)
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> Dict[str, torch.Tensor]:
         scale_tokens, temporal_state = self.encoder(x, mask)
+        global_state = (
+            self.global_state_encoder(temporal_state)
+            if self.global_state_encoder is not None
+            else None
+        )
         relation_states: List[torch.Tensor] = []
         messages: List[torch.Tensor] = []
         entropies: List[torch.Tensor] = []
         for layer, scale_index in zip(self.relation_layers, self.active_scale_indices):
             scale_token = scale_tokens[scale_index]
-            relation, message, entropy = layer(temporal_state, scale_token)
+            relation, message, entropy = layer(temporal_state, scale_token, global_state)
             relation_states.append(relation)
             messages.append(message)
             entropies.append(entropy)
@@ -340,7 +506,8 @@ class PatternADNet(nn.Module):
             else:
                 if self.scale_gate is None:
                     raise RuntimeError("Relation scale gate is missing for a multi-scale graph.")
-                weights = torch.softmax(self.scale_gate(temporal_state), dim=-1)
+                scale_input = temporal_state if global_state is None else torch.cat((temporal_state, global_state), dim=-1)
+                weights = torch.softmax(self.scale_gate(scale_input), dim=-1)
                 graph_state = sum(
                     weights[..., index : index + 1] * relation
                     for index, relation in enumerate(relation_states)
@@ -349,19 +516,59 @@ class PatternADNet(nn.Module):
             # The temporal-only ablation retains the decoder and likelihood
             # protocol while removing every cross-variable message.
             graph_state = temporal_state
-        temporal_parameters = self.temporal_head(temporal_state)
-        graph_parameters = self.graph_head(graph_state)
+        temporal_input = temporal_state if global_state is None else torch.cat((temporal_state, global_state), dim=-1)
+        graph_input = graph_state if global_state is None else torch.cat((graph_state, global_state), dim=-1)
+        temporal_parameters = self.temporal_head(temporal_input)
+        graph_parameters = self.graph_head(graph_input)
         temporal_mean, temporal_raw_scale = temporal_parameters.unbind(dim=-1)
         graph_mean, graph_raw_scale = graph_parameters.unbind(dim=-1)
         temporal_scale = F.softplus(temporal_raw_scale) + self.config.min_scale
         graph_scale = F.softplus(graph_raw_scale) + self.config.min_scale
-        temporal_reliability = torch.sigmoid(self.reliability_gate(torch.cat((temporal_state, graph_state), dim=-1)).squeeze(-1))
+        reliability_input = (temporal_state, graph_state) if global_state is None else (temporal_state, graph_state, global_state)
+        decoder_state = torch.cat(reliability_input, dim=-1)
+        temporal_reliability = torch.sigmoid(self.reliability_gate(decoder_state).squeeze(-1))
         mean = temporal_reliability * temporal_mean + (1.0 - temporal_reliability) * graph_mean
         second_moment = (
             temporal_reliability * (temporal_scale.square() + temporal_mean.square())
             + (1.0 - temporal_reliability) * (graph_scale.square() + graph_mean.square())
         )
         scale = (second_moment - mean.square()).clamp_min(self.config.min_scale ** 2).sqrt()
+        mode_log_weights: Optional[torch.Tensor] = None
+        mode_mean: Optional[torch.Tensor] = None
+        mode_scale: Optional[torch.Tensor] = None
+        mode_entropy = temporal_state.new_zeros(())
+        if self.normal_mode_memory is not None:
+            if self.mode_query is None or self.mode_decoder is None:
+                raise RuntimeError("Normal-mode memory is missing its query or decoder.")
+            mode_query_input = decoder_state
+            if self.config.normal_mode_scope == "system":
+                # A shared regime must be inferred from target-blind states of
+                # the whole system, while each variable retains its own decoder.
+                mode_query_input = decoder_state.mean(dim=2, keepdim=True)
+            mode_query = self.mode_query(mode_query_input)
+            mode_logits = torch.einsum("btdh,kh->btdk", mode_query, self.normal_mode_memory)
+            mode_log_weights = self._filter_mode_log_weights(
+                torch.log_softmax(mode_logits, dim=-1)
+            )
+            if self.config.normal_mode_scope == "system":
+                mode_log_weights = mode_log_weights.expand(-1, -1, decoder_state.shape[2], -1)
+            mode_count = self.config.normal_mode_count
+            mode_memory = self.normal_mode_memory.view(1, 1, 1, mode_count, -1)
+            mode_input = torch.cat(
+                (
+                    decoder_state.unsqueeze(-2).expand(-1, -1, -1, mode_count, -1),
+                    mode_memory.expand(*decoder_state.shape[:-1], mode_count, -1),
+                ),
+                dim=-1,
+            )
+            mode_parameters = self.mode_decoder(mode_input)
+            mode_mean, mode_raw_scale = mode_parameters.unbind(dim=-1)
+            mode_scale = F.softplus(mode_raw_scale) + self.config.min_scale
+            mode_weights = mode_log_weights.exp()
+            mean = (mode_weights * mode_mean).sum(dim=-1)
+            second_moment = (mode_weights * (mode_scale.square() + mode_mean.square())).sum(dim=-1)
+            scale = (second_moment - mean.square()).clamp_min(self.config.min_scale ** 2).sqrt()
+            mode_entropy = (-(mode_weights * mode_log_weights).sum(dim=-1)).mean()
         if len(messages) > 1:
             normalized_messages = [F.normalize(message, dim=-1) for message in messages]
             message_center = torch.stack(normalized_messages, dim=0).mean(dim=0)
@@ -378,6 +585,11 @@ class PatternADNet(nn.Module):
             "graph_mean": graph_mean,
             "graph_scale": graph_scale,
             "temporal_reliability": temporal_reliability,
+            "global_state": global_state,
+            "mode_log_weights": mode_log_weights,
+            "mode_mean": mode_mean,
+            "mode_scale": mode_scale,
+            "mode_entropy": mode_entropy,
             "relation_consistency": relation_consistency,
             "graph_entropy": torch.stack(entropies).mean() if entropies else temporal_state.new_zeros(()),
         }
@@ -458,6 +670,20 @@ class PatternAD:
     def _gaussian_nll(target: torch.Tensor, mean: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
         return 0.5 * (((target - mean) / scale).square() + 2.0 * scale.log() + math.log(2.0 * math.pi))
 
+    @classmethod
+    def _joint_nll(cls, target: torch.Tensor, outputs: Mapping[str, object]) -> torch.Tensor:
+        mode_log_weights = outputs.get("mode_log_weights")
+        mode_mean = outputs.get("mode_mean")
+        mode_scale = outputs.get("mode_scale")
+        if mode_log_weights is None or mode_mean is None or mode_scale is None:
+            return cls._gaussian_nll(target, outputs["mean"], outputs["scale"])
+        if not all(isinstance(value, torch.Tensor) for value in (mode_log_weights, mode_mean, mode_scale)):
+            raise TypeError("Normal-mode outputs must be tensors when mode memory is enabled.")
+        component_log_density = -cls._gaussian_nll(
+            target.unsqueeze(-1), mode_mean, mode_scale
+        )
+        return -torch.logsumexp(mode_log_weights + component_log_density, dim=-1)
+
     def _sample_training_mask(self, x: torch.Tensor) -> torch.Tensor:
         batch, time_steps, dimensions = x.shape
         point_mask = torch.rand_like(x) < self.config.point_mask_ratio
@@ -484,8 +710,8 @@ class PatternAD:
         point_mask[:, -1:, :] |= terminal_mask
         return point_mask
 
-    def _loss(self, target: torch.Tensor, mask: torch.Tensor, outputs: Mapping[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, float]]:
-        joint_nll = self._gaussian_nll(target, outputs["mean"], outputs["scale"])[mask].mean()
+    def _loss(self, target: torch.Tensor, mask: torch.Tensor, outputs: Mapping[str, object]) -> Tuple[torch.Tensor, Dict[str, float]]:
+        joint_nll = self._joint_nll(target, outputs)[mask].mean()
         temporal_nll = self._gaussian_nll(target, outputs["temporal_mean"], outputs["temporal_scale"])[mask].mean()
         graph_nll = self._gaussian_nll(target, outputs["graph_mean"], outputs["graph_scale"])[mask].mean()
         loss = (
@@ -499,6 +725,7 @@ class PatternAD:
             "graph_nll": float(graph_nll.detach().cpu()),
             "relation_consistency": float(outputs["relation_consistency"].detach().cpu()),
             "graph_entropy": float(outputs["graph_entropy"].detach().cpu()),
+            "mode_entropy": float(outputs["mode_entropy"].detach().cpu()),
         }
         return loss, diagnostics
 
@@ -670,6 +897,11 @@ class PatternAD:
             "epochs_completed": int(len(history)),
             "history": history,
             "temporal_kernels": list(self.config.temporal_kernels),
+            "global_state_dim": int(self.config.global_state_dim),
+            "graph_lags": list(self.config.graph_lags),
+            "normal_mode_count": int(self.config.normal_mode_count),
+            "normal_mode_scope": self.config.normal_mode_scope,
+            "mode_transition": bool(self.config.mode_transition),
             "graph_topk": int(self.config.graph_topk),
             "relation_mode": self.config.relation_mode,
         }
@@ -720,7 +952,7 @@ class PatternAD:
         mask[:, -1, :] = True
         outputs = self.model(windows, mask)
         target = windows[:, -1, :]
-        joint = self._gaussian_nll(target, outputs["mean"][:, -1, :], outputs["scale"][:, -1, :])
+        joint = self._joint_nll(windows, outputs)[:, -1, :]
         temporal = self._gaussian_nll(
             target,
             outputs["temporal_mean"][:, -1, :],

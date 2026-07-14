@@ -6,13 +6,14 @@
 /media/h3c/users/wangyueyang1/cxy/MindTS-baselines
 ```
 
-RMindTS 主模型仍在：
+当前对齐的主模型在：
 
 ```text
-/media/h3c/users/wangyueyang1/cxy/MindTS-main
+/media/h3c/users/wangyueyang1/cxy/PatternAD-main
 ```
 
-`MindTS-baselines/dataset` 是指向 `../MindTS-main/dataset` 的符号链接，所以 baseline 和 RMindTS 共用同一份数据，不重复存储。
+`MindTS-baselines/dataset` 与 `PatternAD-main/dataset` 使用同一份当前异常检测数据；
+baseline 只修改本目录下的脚本、配置和结果，不修改主模型脚本。
 
 ## 1. 先进入目录
 
@@ -54,56 +55,59 @@ PY
 默认模式：已有结果会跳过，最后刷新汇总。
 
 ```bash
-bash scripts/baselines/run_all_requested_baselines.sh
+bash scripts/baselines/run_train_calibrated_patternad_baselines.sh
 ```
 
-PatternAD 新增数据集 baseline，结果统一写到本目录的 `result/label`：
+当前 PatternAD 数据集 baseline，结果统一写到本目录的 `result/label`：
 
 ```bash
 cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines
-PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh \
-  bash scripts/baselines/run_patternad_dataset_baselines.sh
+bash scripts/baselines/run_train_calibrated_patternad_baselines.sh
 ```
 
-默认跑 `MetroPT3, HAI21, SMD`，其中 HAI21/SMD 使用 PatternAD full 口径。只跑部分数据集：
+该入口严格遵守 `train_calibration` 阈值协议，默认数据集与当前主模型一致：
+`Genesis, Weather, Energy, SKAB, MSDS, Daphnet, GECCO, MetroPT3, PSM, BATADAL`。
+`BATADAL` 会将 `BATADAL_dataset04.csv` 和 `BATADAL_test.csv` 作为两个独立序列，
+在同一模型报告中聚合。它默认跳过 `AnomalyTransformer`、`OmniAnomaly`、
+`InterFusion`：前者需独占 GPU，后两者使用 CPU-only TF1 环境。只跑部分数据集：
 
 ```bash
-PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh \
-  bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
+bash scripts/baselines/run_train_calibrated_patternad_baselines.sh PSM BATADAL
 ```
 
 只跑部分模型可用逗号分隔的 `MODEL_FILTER`，例如：
 
 ```bash
 MODEL_FILTER=PCA,IsolationForest \
-PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh \
-  bash scripts/baselines/run_patternad_dataset_baselines.sh MetroPT3
+  bash scripts/baselines/run_train_calibrated_patternad_baselines.sh PSM
 ```
 
 汇总文件：
 
 ```text
-result/label/patternad_baseline_summary.csv
-result/label/patternad_baseline_three_metrics.csv
+result/label/strict_patternad_baselines_summary.csv
+result/label/strict_patternad_baselines_three_metrics.csv
 ```
 
-强制重跑全部 9 个数据集 x 20 个 baseline：
+`run_all_requested_baselines.sh` 和下方以 `ExathlonSmall/Metro` 为参数的示例是旧的
+RMindTS 数据集入口，仅用于复现历史结果；不要用于当前 PatternAD 的 10 数据集。
+当前全量严格重跑使用：
 
 ```bash
-SKIP_EXISTING=0 bash scripts/baselines/run_all_requested_baselines.sh
+SKIP_EXISTING=0 bash scripts/baselines/run_train_calibrated_patternad_baselines.sh
 ```
 
 只重跑指定数据集：
 
 ```bash
-SKIP_EXISTING=0 bash scripts/baselines/run_all_requested_baselines.sh Weather.csv Energy.csv
+SKIP_EXISTING=0 bash scripts/baselines/run_train_calibrated_patternad_baselines.sh PSM BATADAL
 ```
 
 长实验建议放到 `tmux`：
 
 ```bash
 tmux new-session -d -s baseline_rerun \
-  "cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines && export PYTHON_BIN=/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/scripts/baselines/run_baseline_python.sh TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 && SKIP_EXISTING=0 bash scripts/baselines/run_all_requested_baselines.sh"
+  "cd /media/h3c/users/wangyueyang1/cxy/MindTS-baselines && export TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 && SKIP_EXISTING=0 bash scripts/baselines/run_train_calibrated_patternad_baselines.sh"
 ```
 
 ## 4. 重要：跳过逻辑

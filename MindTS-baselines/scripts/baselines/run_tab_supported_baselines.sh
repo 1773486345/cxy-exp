@@ -6,6 +6,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TAB_ROOT="${TAB_ROOT:-/media/h3c/users/wangyueyang1/cxy/TAB}"
 PYTHON_BIN="${PYTHON_BIN:-${SCRIPT_DIR}/run_baseline_python.sh}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
+BENCHMARK_CONFIG="${BENCHMARK_CONFIG:-unfixed_detect_label_multi_config.json}"
+RESULT_NAMESPACE="${RESULT_NAMESPACE:-baselines}"
 
 DATASETS=("$@")
 if [ "${#DATASETS[@]}" -eq 0 ]; then
@@ -91,7 +93,7 @@ for dataset in "${DATASETS[@]}"; do
     model_params="${MODEL_PARAMS[$i]}"
     adapter="${MODEL_ADAPTERS[$i]}"
     gpu="${MODEL_GPUS[$i]}"
-    save_path="label/baselines_${dataset_tag}_${model_tag}"
+    save_path="label/${RESULT_NAMESPACE}_${dataset_tag}_${model_tag}"
     result_dir="${PROJECT_ROOT}/result/${save_path}"
 
     if [ "${SKIP_EXISTING}" = "1" ] && has_three_metric_report "${result_dir}"; then
@@ -102,7 +104,7 @@ for dataset in "${DATASETS[@]}"; do
     echo "[TAB supported baseline] dataset=${dataset} model=${model_tag} save_path=${save_path}"
     cmd=(
       "${PYTHON_BIN}" -u ./scripts/run_benchmark.py
-      --config-path "unfixed_detect_label_multi_config.json"
+      --config-path "${BENCHMARK_CONFIG}"
       --data-name-list "${dataset}"
       --model-name "${model_name}"
       --model-hyper-params "${model_params}"

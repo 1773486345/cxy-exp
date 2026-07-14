@@ -2,16 +2,19 @@
 import csv
 import io
 import math
+import os
 import tarfile
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESULT_ROOT = PROJECT_ROOT / "result" / "label"
-OUT_PATH = RESULT_ROOT / "_baseline_logs" / "requested_baseline_summary.csv"
-THREE_METRIC_OUT_PATH = (
-    RESULT_ROOT / "_baseline_logs" / "requested_baseline_three_metrics.csv"
+RESULT_NAMESPACE = os.environ.get("RESULT_NAMESPACE", "baselines")
+SUMMARY_STEM = (
+    "requested_baseline" if RESULT_NAMESPACE == "baselines" else RESULT_NAMESPACE
 )
+OUT_PATH = RESULT_ROOT / "_baseline_logs" / f"{SUMMARY_STEM}_summary.csv"
+THREE_METRIC_OUT_PATH = RESULT_ROOT / "_baseline_logs" / f"{SUMMARY_STEM}_three_metrics.csv"
 
 DATASETS = [
     "Genesis",
@@ -122,7 +125,7 @@ def main():
     for baseline in BASELINES:
         row = {"baseline": baseline}
         for dataset in DATASETS:
-            result_dir = RESULT_ROOT / f"baselines_{dataset}_{baseline}"
+            result_dir = RESULT_ROOT / f"{RESULT_NAMESPACE}_{dataset}_{baseline}"
             metrics = read_three_metrics(result_dir)
             row[dataset] = metrics["Aff-F"]
             three_metric_rows.append(
@@ -132,7 +135,10 @@ def main():
 
     for baseline, result_dir_template in TSLIB_RESULT_DIRS.items():
         for dataset in DATASETS:
-            result_dir = RESULT_ROOT / result_dir_template.format(dataset=dataset)
+            if RESULT_NAMESPACE == "baselines":
+                result_dir = RESULT_ROOT / result_dir_template.format(dataset=dataset)
+            else:
+                result_dir = RESULT_ROOT / f"{RESULT_NAMESPACE}_{dataset}_{baseline}"
             three_metric_rows.append(
                 {
                     "baseline": baseline,

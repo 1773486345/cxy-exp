@@ -29,6 +29,7 @@ class PatternADNetTest(unittest.TestCase):
                 "n_heads": 4,
                 "e_layers": 1,
                 "temporal_kernels": (1, 3, 5),
+                "graph_lags": (0, 1, 2, 4),
                 "device": "cpu",
             }
         )
@@ -108,9 +109,122 @@ class PatternADNetTest(unittest.TestCase):
         self.assertEqual(float(outputs["graph_entropy"]), 0.0)
         self.assertEqual(float(outputs["relation_consistency"]), 0.0)
 
+    def test_global_state_is_target_blind_and_causal(self):
+        config = PatternADConfig.from_kwargs(
+            {
+                "seq_len": 12,
+                "d_model": 16,
+                "graph_dim": 8,
+                "d_ff": 32,
+                "n_heads": 4,
+                "e_layers": 1,
+                "temporal_kernels": (1, 3, 5),
+                "global_state_dim": 6,
+                "device": "cpu",
+            }
+        )
+        model = PatternADNet(4, config).eval()
+        value = torch.randn(2, 12, 4)
+        mask = torch.zeros_like(value, dtype=torch.bool)
+        mask[:, -1, 1] = True
+        changed_target = value.clone()
+        changed_target[:, -1, 1] += 100.0
+        changed_future = value.clone()
+        changed_future[:, 8:, :] += 100.0
+        with torch.no_grad():
+            original = model(value, mask)
+            target_counterfactual = model(changed_target, mask)
+            future_counterfactual = model(changed_future, mask)
+        self.assertEqual(original["global_state"].shape, (2, 12, 4, 6))
+        self.assertTrue(
+            torch.allclose(
+                original["mean"][:, -1, 1],
+                target_counterfactual["mean"][:, -1, 1],
+                atol=1e-6,
+                rtol=1e-6,
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                original["global_state"][:, :8, :, :],
+                future_counterfactual["global_state"][:, :8, :, :],
+                atol=1e-6,
+                rtol=1e-6,
+            )
+        )
+
     def test_removed_handcrafted_context_controls_are_rejected(self):
         with self.assertRaises(TypeError):
             PatternADConfig.from_kwargs({"use_pattern_context": False})
+
+    def test_lagged_graph_requires_a_zero_lag_anchor(self):
+        with self.assertRaisesRegex(ValueError, "beginning with zero"):
+            PatternADConfig.from_kwargs({"graph_lags": (1, 2, 4)})
+
+    def test_normal_mode_memory_is_target_blind_and_normalized(self):
+        config = PatternADConfig.from_kwargs(
+            {
+                "seq_len": 12,
+                "d_model": 16,
+                "graph_dim": 8,
+                "d_ff": 32,
+                "n_heads": 4,
+                "e_layers": 1,
+                "temporal_kernels": (1, 3, 5),
+                "normal_mode_count": 3,
+                "normal_mode_scope": "system",
+                "mode_transition": True,
+                "device": "cpu",
+            }
+        )
+        model = PatternADNet(4, config).eval()
+        value = torch.randn(2, 12, 4)
+        mask = torch.zeros_like(value, dtype=torch.bool)
+        mask[:, -1, 2] = True
+        changed = value.clone()
+        changed[:, -1, 2] += 100.0
+        changed_future = value.clone()
+        changed_future[:, 8:, :] += 100.0
+        with torch.no_grad():
+            outputs = model(value, mask)
+            counterfactual = model(changed, mask)
+            future_counterfactual = model(changed_future, mask)
+            joint_nll = PatternAD._joint_nll(value, outputs)
+        self.assertEqual(outputs["mode_log_weights"].shape, (2, 12, 4, 3))
+        self.assertEqual(outputs["mode_mean"].shape, (2, 12, 4, 3))
+        self.assertEqual(outputs["mode_scale"].shape, (2, 12, 4, 3))
+        self.assertTrue(torch.allclose(outputs["mode_log_weights"].exp().sum(dim=-1), torch.ones_like(value)))
+        self.assertTrue(
+            torch.allclose(
+                outputs["mode_log_weights"],
+                outputs["mode_log_weights"][:, :, :1, :].expand_as(outputs["mode_log_weights"]),
+            )
+        )
+        self.assertTrue(torch.isfinite(joint_nll).all())
+        self.assertTrue(
+            torch.allclose(
+                outputs["mode_log_weights"][:, -1, 2],
+                counterfactual["mode_log_weights"][:, -1, 2],
+                atol=1e-6,
+                rtol=1e-6,
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                outputs["mode_log_weights"][:, :8],
+                future_counterfactual["mode_log_weights"][:, :8],
+                atol=1e-6,
+                rtol=1e-6,
+            )
+        )
+
+    def test_normal_mode_count_must_be_positive(self):
+        with self.assertRaisesRegex(ValueError, "normal_mode_count"):
+            PatternADConfig.from_kwargs({"normal_mode_count": 0})
+
+    def test_normal_mode_scope_is_validated(self):
+        with self.assertRaisesRegex(ValueError, "normal_mode_scope"):
+            PatternADConfig.from_kwargs({"normal_mode_scope": "invalid"})
 
 
 class PatternADInterfaceTest(unittest.TestCase):

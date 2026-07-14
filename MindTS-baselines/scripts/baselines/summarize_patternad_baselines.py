@@ -2,6 +2,7 @@
 import csv
 import io
 import math
+import os
 import tarfile
 from pathlib import Path
 
@@ -9,10 +10,25 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESULT_ROOT = PROJECT_ROOT / "result" / "label"
 PATTERNAD_RESULT_ROOT = PROJECT_ROOT.parent / "PatternAD-main" / "result" / "label"
-SUMMARY_OUT_PATH = RESULT_ROOT / "patternad_baseline_summary.csv"
-THREE_METRIC_OUT_PATH = RESULT_ROOT / "patternad_baseline_three_metrics.csv"
+RESULT_NAMESPACE = os.environ.get("RESULT_NAMESPACE", "baselines")
+SUMMARY_STEM = (
+    "patternad_baseline" if RESULT_NAMESPACE == "baselines" else RESULT_NAMESPACE
+)
+SUMMARY_OUT_PATH = RESULT_ROOT / f"{SUMMARY_STEM}_summary.csv"
+THREE_METRIC_OUT_PATH = RESULT_ROOT / f"{SUMMARY_STEM}_three_metrics.csv"
 
-DATASETS = ["MetroPT3", "HAI21", "SMD"]
+DATASETS = [
+    "Genesis",
+    "Weather",
+    "Energy",
+    "SKAB",
+    "MSDS",
+    "Daphnet",
+    "GECCO",
+    "MetroPT3",
+    "PSM",
+    "BATADAL",
+]
 
 BASELINES = [
     "PCA",
@@ -48,12 +64,16 @@ TSLIB_RESULT_DIRS = {
 def result_dir_for(model: str, dataset: str) -> Path:
     if model in {"PatternAD", "PatternAD_raw"}:
         return PATTERNAD_RESULT_ROOT / f"{dataset}_{model}"
+    if RESULT_NAMESPACE != "baselines":
+        return RESULT_ROOT / f"{RESULT_NAMESPACE}_{dataset}_{model}"
     if model in TSLIB_RESULT_DIRS:
         return RESULT_ROOT / TSLIB_RESULT_DIRS[model].format(dataset=dataset)
     return RESULT_ROOT / f"baselines_{dataset}_{model}"
 
 
 def normalize_legacy_tslib_result_dirs():
+    if RESULT_NAMESPACE != "baselines":
+        return
     for model in TSLIB_RESULT_DIRS:
         for dataset in DATASETS:
             legacy_dir = RESULT_ROOT / f"baselines_{dataset}_{model}"

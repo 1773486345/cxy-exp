@@ -7,6 +7,8 @@ PYTHON_BIN="${PYTHON_BIN:-${SCRIPT_DIR}/run_baseline_python.sh}"
 LOG_DIR="${PROJECT_ROOT}/result/label/_baseline_logs"
 LOG_FILE="${LOG_DIR}/omni_anomaly_sweep.log"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
+BENCHMARK_CONFIG="${BENCHMARK_CONFIG:-unfixed_detect_label_multi_config.json}"
+RESULT_NAMESPACE="${RESULT_NAMESPACE:-baselines}"
 OMNI_HYPER_PARAMS="${OMNI_HYPER_PARAMS:-{\"rnn_hidden\":100,\"dense_dim\":100,\"nf_layers\":4,\"max_epoch\":10,\"batch_size\":128,\"test_batch_size\":256,\"valid_step_freq\":50}}"
 
 cd "${PROJECT_ROOT}"
@@ -29,7 +31,7 @@ fi
 
 for dataset in "${DATASETS[@]}"; do
   dataset_tag="${dataset%.csv}"
-  save_path="label/baselines_${dataset_tag}_OmniAnomaly"
+  save_path="label/${RESULT_NAMESPACE}_${dataset_tag}_OmniAnomaly"
   result_dir="${PROJECT_ROOT}/result/${save_path}"
   if [ "${SKIP_EXISTING}" = "1" ] && compgen -G "${result_dir}/test_report.*.csv" > /dev/null; then
     echo "[OmniAnomaly baseline] skip existing dataset=${dataset} save_path=${save_path}" | tee -a "${LOG_FILE}"
@@ -38,7 +40,7 @@ for dataset in "${DATASETS[@]}"; do
 
   echo "[OmniAnomaly baseline] dataset=${dataset} save_path=${save_path} hyper_params=${OMNI_HYPER_PARAMS}" | tee -a "${LOG_FILE}"
   "${PYTHON_BIN}" -u ./scripts/run_benchmark.py \
-    --config-path "unfixed_detect_label_multi_config.json" \
+    --config-path "${BENCHMARK_CONFIG}" \
     --data-name-list "${dataset}" \
     --model-name "self_impl.OmniAnomaly" \
     --model-hyper-params "${OMNI_HYPER_PARAMS}" \

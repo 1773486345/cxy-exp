@@ -127,6 +127,7 @@ class OmniAnomaly:
         np.savez(input_path, train=self.train_values_, test=test_values)
         cmd = [
             str(OMNI_PYTHON),
+            "-u",
             str(RUNNER),
             "--input",
             str(input_path),
@@ -173,12 +174,9 @@ class OmniAnomaly:
             cmd,
             cwd=str(PROJECT_ROOT),
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
             timeout=int(self.config.timeout),
             check=False,
         )
-        print(completed.stdout)
         if completed.returncode != 0:
             raise RuntimeError(f"OmniAnomaly runner failed with code {completed.returncode}")
         scores = np.load(output_path)

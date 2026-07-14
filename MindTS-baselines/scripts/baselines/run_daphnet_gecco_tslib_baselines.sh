@@ -7,6 +7,8 @@ PYTHON_BIN="${PYTHON_BIN:-${SCRIPT_DIR}/run_baseline_python.sh}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
 GPU="${GPU:-0}"
 RUN_TAG="${RUN_TAG:-$(date '+%Y%m%d_%H%M%S')}"
+BENCHMARK_CONFIG="${BENCHMARK_CONFIG:-unfixed_detect_label_multi_config.json}"
+RESULT_NAMESPACE="${RESULT_NAMESPACE:-baselines}"
 
 DATASETS=("$@")
 if [ "${#DATASETS[@]}" -eq 0 ]; then
@@ -82,7 +84,9 @@ for dataset in "${DATASETS[@]}"; do
   for i in "${!MODEL_TAGS[@]}"; do
     model_tag="${MODEL_TAGS[$i]}"
     model_name="${MODEL_NAMES[$i]}"
-    if [ "${model_tag}" = "TimesNet" ]; then
+    if [ "${RESULT_NAMESPACE}" != "baselines" ]; then
+      save_path="label/${RESULT_NAMESPACE}_${dataset_tag}_${model_tag}"
+    elif [ "${model_tag}" = "TimesNet" ]; then
       save_path="label/${dataset_tag}_${model_tag}_baseline_h0"
     else
       save_path="label/${dataset_tag}_${model_tag}_baseline"
@@ -101,7 +105,7 @@ for dataset in "${DATASETS[@]}"; do
 
     echo "[tslib baseline] dataset=${dataset} model=${model_tag} save_path=${save_path}" | tee -a "${log_file}"
     "${PYTHON_BIN}" -u ./scripts/run_benchmark.py \
-      --config-path "unfixed_detect_label_multi_config.json" \
+      --config-path "${BENCHMARK_CONFIG}" \
       --data-name-list "${dataset}" \
       --model-name "${model_name}" \
       --model-hyper-params "${model_params}" \

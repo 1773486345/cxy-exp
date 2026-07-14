@@ -8,8 +8,12 @@ PYTHON_BIN="${PYTHON_BIN:-${SCRIPT_DIR}/run_baseline_python.sh}"
 SKIP_EXISTING="${SKIP_EXISTING:-1}"
 CONTINUE_ON_ERROR="${CONTINUE_ON_ERROR:-1}"
 GPU="${GPU:-0}"
+DRY_RUN="${DRY_RUN:-0}"
 RUN_TAG="${RUN_TAG:-$(date '+%Y%m%d_%H%M%S')}"
 MODEL_FILTER="${MODEL_FILTER:-}"
+BENCHMARK_CONFIG="${BENCHMARK_CONFIG:-unfixed_detect_label_multi_config.json}"
+RESULT_NAMESPACE="${RESULT_NAMESPACE:-baselines}"
+export BENCHMARK_CONFIG RESULT_NAMESPACE
 
 export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
@@ -20,27 +24,33 @@ if [ ! -x "${PYTHON_BIN}" ]; then
 fi
 
 LOG_DIR="${PROJECT_ROOT}/result/label/_baseline_logs"
-LOG_FILE="${LOG_DIR}/patternad_dataset_baselines_${RUN_TAG}.log"
+LOG_FILE="${LOG_DIR}/${RESULT_NAMESPACE}_patternad_dataset_baselines_${RUN_TAG}.log"
 mkdir -p "${LOG_DIR}"
 
 DATASET_TAGS=("$@")
 if [ "${#DATASET_TAGS[@]}" -eq 0 ]; then
-  DATASET_TAGS=("MetroPT3" "HAI21" "SMD")
+  DATASET_TAGS=(
+    "Genesis" "Weather" "Energy" "SKAB" "MSDS" "Daphnet" "GECCO"
+    "MetroPT3" "PSM" "BATADAL"
+  )
 fi
 
 normalize_dataset_tag() {
   case "$1" in
+    Genesis|Genesis.csv|Weather|Weather.csv|Energy|Energy.csv|SKAB|SKAB.csv|MSDS|MSDS.csv|Daphnet|Daphnet.csv|GECCO|GECCO.csv)
+      printf '%s\n' "${1%.csv}"
+      ;;
     MetroPT3|MetroPT3.csv.gz)
       printf 'MetroPT3\n'
       ;;
-    HAI21|HAI21_full|HAI21-full)
-      printf 'HAI21\n'
+    PSM|PSM.csv)
+      printf 'PSM\n'
       ;;
-    SMD|SMD_full|SMD-full)
-      printf 'SMD\n'
+    BATADAL|BATADAL_dataset04.csv|BATADAL_test.csv)
+      printf 'BATADAL\n'
       ;;
     *)
-      echo "unsupported PatternAD dataset: $1; expected MetroPT3, HAI21, or SMD" >&2
+      echo "unsupported current PatternAD dataset: $1" >&2
       return 2
       ;;
   esac
@@ -48,14 +58,17 @@ normalize_dataset_tag() {
 
 dataset_files() {
   case "$1" in
+    Genesis|Weather|Energy|SKAB|MSDS|Daphnet|GECCO)
+      printf '%s.csv\n' "$1"
+      ;;
     MetroPT3)
       printf '%s\n' "MetroPT3.csv.gz"
       ;;
-    HAI21)
-      printf '%s\n' "HAI21_part1.csv.gz HAI21_part2.csv.gz HAI21_part3.csv.gz"
+    PSM)
+      printf '%s\n' "PSM.csv"
       ;;
-    SMD)
-      printf '%s\n' "SMD_machine-1-1.csv.gz SMD_machine-1-2.csv.gz SMD_machine-1-3.csv.gz SMD_machine-1-4.csv.gz SMD_machine-1-5.csv.gz SMD_machine-1-6.csv.gz SMD_machine-1-7.csv.gz SMD_machine-1-8.csv.gz SMD_machine-2-1.csv.gz SMD_machine-2-2.csv.gz SMD_machine-2-3.csv.gz SMD_machine-2-4.csv.gz SMD_machine-2-5.csv.gz SMD_machine-2-6.csv.gz SMD_machine-2-7.csv.gz SMD_machine-2-8.csv.gz SMD_machine-2-9.csv.gz SMD_machine-3-1.csv.gz SMD_machine-3-10.csv.gz SMD_machine-3-11.csv.gz SMD_machine-3-2.csv.gz SMD_machine-3-3.csv.gz SMD_machine-3-4.csv.gz SMD_machine-3-5.csv.gz SMD_machine-3-6.csv.gz SMD_machine-3-7.csv.gz SMD_machine-3-8.csv.gz SMD_machine-3-9.csv.gz"
+    BATADAL)
+      printf '%s\n' "BATADAL_dataset04.csv BATADAL_test.csv"
       ;;
     *)
       return 2
@@ -63,16 +76,44 @@ dataset_files() {
   esac
 }
 
+validate_dataset_files() {
+  local dataset_tag="$1"
+  local data_file
+  local -a files
+  read -r -a files <<< "$(dataset_files "${dataset_tag}")"
+  for data_file in "${files[@]}"; do
+    if [ ! -f "${PROJECT_ROOT}/dataset/anomaly_detect/data/${data_file}" ]; then
+      echo "missing current PatternAD dataset file: ${data_file}" >&2
+      return 2
+    fi
+  done
+}
+
 feature_count() {
   case "$1" in
+    Genesis)
+      printf '18\n'
+      ;;
+    Weather)
+      printf '4\n'
+      ;;
+    Energy|Daphnet|GECCO)
+      printf '9\n'
+      ;;
+    SKAB)
+      printf '8\n'
+      ;;
+    MSDS)
+      printf '10\n'
+      ;;
     MetroPT3)
       printf '15\n'
       ;;
-    HAI21)
-      printf '79\n'
+    PSM)
+      printf '25\n'
       ;;
-    SMD)
-      printf '38\n'
+    BATADAL)
+      printf '43\n'
       ;;
     *)
       return 2
@@ -107,6 +148,10 @@ has_result_artifacts() {
 run_command() {
   local root_dir="$1"
   shift
+  if [ "${DRY_RUN}" = "1" ]; then
+    echo "[PatternAD baseline] dry_run cmd=$*" | tee -a "${LOG_FILE}"
+    return 0
+  fi
   set +e
   (
     cd "${root_dir}"
@@ -132,19 +177,23 @@ run_benchmark_model() {
   local gpu="$7"
   local save_path
   local legacy_save_path=""
-  case "${model_tag}" in
-    DLinear|PatchTST|iTransformer)
-      save_path="label/${dataset_tag}_${model_tag}_baseline"
-      legacy_save_path="label/baselines_${dataset_tag}_${model_tag}"
-      ;;
-    TimesNet)
-      save_path="label/${dataset_tag}_${model_tag}_baseline_h0"
-      legacy_save_path="label/baselines_${dataset_tag}_${model_tag}"
-      ;;
-    *)
-      save_path="label/baselines_${dataset_tag}_${model_tag}"
-      ;;
-  esac
+  if [ "${RESULT_NAMESPACE}" != "baselines" ]; then
+    save_path="label/${RESULT_NAMESPACE}_${dataset_tag}_${model_tag}"
+  else
+    case "${model_tag}" in
+      DLinear|PatchTST|iTransformer)
+        save_path="label/${dataset_tag}_${model_tag}_baseline"
+        legacy_save_path="label/baselines_${dataset_tag}_${model_tag}"
+        ;;
+      TimesNet)
+        save_path="label/${dataset_tag}_${model_tag}_baseline_h0"
+        legacy_save_path="label/baselines_${dataset_tag}_${model_tag}"
+        ;;
+      *)
+        save_path="label/baselines_${dataset_tag}_${model_tag}"
+        ;;
+    esac
+  fi
   local result_dir="${PROJECT_ROOT}/result/${save_path}"
   local files
   read -r -a files <<< "$(dataset_files "${dataset_tag}")"
@@ -173,7 +222,7 @@ run_benchmark_model() {
 
   local cmd=(
     "${PYTHON_BIN}" -u "${benchmark_entry}"
-    --config-path "unfixed_detect_label_multi_config.json"
+    --config-path "${BENCHMARK_CONFIG}"
     --data-name-list "${files[@]}"
     --model-name "${model_name}"
     --model-hyper-params "${model_params}"
@@ -211,13 +260,14 @@ echo "[PatternAD baseline sweep] started_at=$(date '+%Y-%m-%d %H:%M:%S %Z')" | t
 echo "[PatternAD baseline sweep] project_root=${PROJECT_ROOT}" | tee -a "${LOG_FILE}"
 echo "[PatternAD baseline sweep] tab_root=${TAB_ROOT}" | tee -a "${LOG_FILE}"
 echo "[PatternAD baseline sweep] python_bin=${PYTHON_BIN}" | tee -a "${LOG_FILE}"
-echo "[PatternAD baseline sweep] skip_existing=${SKIP_EXISTING} continue_on_error=${CONTINUE_ON_ERROR} gpu=${GPU}" | tee -a "${LOG_FILE}"
+echo "[PatternAD baseline sweep] skip_existing=${SKIP_EXISTING} continue_on_error=${CONTINUE_ON_ERROR} dry_run=${DRY_RUN} gpu=${GPU} namespace=${RESULT_NAMESPACE} config=${BENCHMARK_CONFIG}" | tee -a "${LOG_FILE}"
 if [ -n "${MODEL_FILTER}" ]; then
   echo "[PatternAD baseline sweep] model_filter=${MODEL_FILTER}" | tee -a "${LOG_FILE}"
 fi
 
 for raw_dataset_tag in "${DATASET_TAGS[@]}"; do
   dataset_tag="$(normalize_dataset_tag "${raw_dataset_tag}")"
+  validate_dataset_files "${dataset_tag}"
   read -r -a files <<< "$(dataset_files "${dataset_tag}")"
   echo "[PatternAD baseline sweep] dataset=${dataset_tag} files=${files[*]}" | tee -a "${LOG_FILE}"
 
@@ -227,7 +277,7 @@ for raw_dataset_tag in "${DATASET_TAGS[@]}"; do
   run_benchmark_model "${PROJECT_ROOT}" "${dataset_tag}" "OCSVM" "classic_ad.OCSVM" '{}' "None" "None"
 
   run_benchmark_model "${PROJECT_ROOT}" "${dataset_tag}" "TranAD" "self_impl.TranAD" '{}' "None" "None"
-  run_benchmark_model "${PROJECT_ROOT}" "${dataset_tag}" "AnomalyTransformer" "self_impl.AnomalyTransformer" '{}' "None" "None"
+  run_benchmark_model "${PROJECT_ROOT}" "${dataset_tag}" "AnomalyTransformer" "self_impl.AnomalyTransformer" '{}' "None" "${GPU}"
   run_benchmark_model "${PROJECT_ROOT}" "${dataset_tag}" "USAD" "self_impl.USAD" '{}' "None" "None"
   run_benchmark_model "${PROJECT_ROOT}" "${dataset_tag}" "GDN" "self_impl.GDN" '{}' "None" "None"
   run_benchmark_model "${PROJECT_ROOT}" "${dataset_tag}" "OmniAnomaly" "self_impl.OmniAnomaly" '{"rnn_hidden":100,"dense_dim":100,"nf_layers":4,"max_epoch":10,"batch_size":128,"test_batch_size":256,"valid_step_freq":50}' "None" "None"
@@ -246,5 +296,7 @@ for raw_dataset_tag in "${DATASET_TAGS[@]}"; do
   run_tslib_model "${dataset_tag}" "TimesNet" "time_series_library.TimesNet"
 done
 
-"${PYTHON_BIN}" "${SCRIPT_DIR}/summarize_patternad_baselines.py" | tee -a "${LOG_FILE}"
+if [ "${DRY_RUN}" != "1" ]; then
+  "${PYTHON_BIN}" "${SCRIPT_DIR}/summarize_patternad_baselines.py" | tee -a "${LOG_FILE}"
+fi
 echo "[PatternAD baseline sweep] finished_at=$(date '+%Y-%m-%d %H:%M:%S %Z')" | tee -a "${LOG_FILE}"
