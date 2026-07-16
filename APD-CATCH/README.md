@@ -56,6 +56,17 @@ python scripts/run_apd_catch_paper.py \
   --gpu 0
 ```
 
+v1.1 的鲁棒条件尺度验证使用独立结果目录，并保存逐变量 NLL、条件均值/尺度和
+自适应截止频率，便于审计高分正常点：
+
+```bash
+python scripts/run_apd_catch_paper.py \
+  --datasets Genesis PSM \
+  --variants causal_catch fixed adaptive \
+  --output-dir result/paper_real_v1_1_robust_scale \
+  --save-diagnostics --gpu 0
+```
+
 运行论文全部 12 类真实数据集：
 
 ```bash
@@ -67,7 +78,7 @@ python scripts/run_apd_catch_paper.py \
 
 `all` 会展开为 23 个实际文件：11 个单文件数据集和 ASD 的 12 个子序列，共 69 个训练任务。脚本每完成一个任务就立即写结果；再次执行相同命令会跳过已有结果，因此可以中断后续跑。添加 `--force` 才会覆盖已有结果。
 
-每次训练同时输出 AUC-ROC、AUC-PR、R-AUC、VUS、验证集 1% FPR 校准阈值下的 Aff-F 和点级指标，不需要为 score/label 指标重复训练。默认沿用官方 `train_lens` 以及每个数据集原 CATCH 脚本中的窗口、模型容量、batch size、epoch 和学习率；训练标签不传给模型，只在结果中记录训练段污染率。原版特有但不适用于 APD-CATCH 的重构分数权重不会传入。
+每次训练同时输出 AUC-ROC、AUC-PR、R-AUC、VUS、验证集 1% FPR 校准阈值下的 Aff-F 和点级指标，不需要为 score/label 指标重复训练。默认沿用官方 `train_lens` 以及每个数据集原 CATCH 脚本中的窗口、模型容量、batch size、epoch 和学习率；训练标签不传给模型，只在结果中记录训练段污染率。原版特有但不适用于 APD-CATCH 的重构分数权重不会传入。v1.1 用训练历史窗口 MAD 的低分位数为每个变量建立固定尺度下界，评分时仍只使用当前历史窗口。
 
 ## 4. 结果位置
 
@@ -80,7 +91,7 @@ result/paper_real_v1/
     └── seed_20261.npz               连续分数、标签和校准预测
 ```
 
-论文数字与 APD-CATCH 不是完全同协议：原版 CATCH 重构包含待评分点的完整窗口，APD-CATCH 只用过去预测下一点；论文 Aff-F 的阈值方式也不同。因此 `summary_paper_comparison.csv` 首先用于检查模型是否发生灾难性退化，严格改进结论仍需同环境重跑原版 CATCH。
+论文数字与 APD-CATCH 不是完全同协议：原版 CATCH 重构包含待评分点的完整窗口，APD-CATCH 只用过去预测下一点；论文 Aff-F 的阈值方式也不同。因此 `summary_paper_comparison.csv` 首先用于检查模型是否发生灾难性退化。`../CATCH-master/result/` 已保存同机环境下原版 CATCH 的本地结果与命令档案；但其 `score` 与 `label` 路径分开训练，且 label 路径使用 `anomaly_ratio`，不能与这里的验证集 1% FPR Aff-F 直接横比。严格改进结论仍需要把两者置于完全相同的目标可见性、训练和阈值协议下。
 
 与原版 CATCH 的复现清单已核对：12 个真实数据类别完全一致，即
 `CICIDS`、`CalIt2`、`SWAT`、`Creditcard`、`GECCO`、`Genesis`、`MSL`、`NYC`、

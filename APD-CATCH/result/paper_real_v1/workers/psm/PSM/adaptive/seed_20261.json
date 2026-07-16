@@ -1,0 +1,89 @@
+{
+  "apd_params": {
+    "Mlr": 0.001,
+    "batch_size": 128,
+    "cf_dim": 16,
+    "d_ff": 32,
+    "d_model": 16,
+    "dc_lambda": 0.05,
+    "dropout": 0.3,
+    "e_layers": 1,
+    "head_dim": 32,
+    "lr": 0.005,
+    "n_heads": 4,
+    "num_epochs": 3,
+    "patch_size": 16,
+    "patch_stride": 8,
+    "seed": 20261,
+    "seq_len": 192,
+    "variant": "adaptive"
+  },
+  "dataset_file": "PSM.csv",
+  "fit_summary": {
+    "best_validation_nll": -3.863612606170812,
+    "calibration_threshold": -2.1844441413879316,
+    "epochs": 3,
+    "trainable_parameters": 41896
+  },
+  "metric_errors": {},
+  "metrics": {
+    "affiliation_f": 0.7756774968432569,
+    "affiliation_precision": 0.6830294846318388,
+    "affiliation_recall": 0.897403840837467,
+    "auc_pr": 0.3231572307633847,
+    "auc_roc": 0.5496159481647117,
+    "point_f1": 0.029307811445137204,
+    "point_precision": 0.45952677459526775,
+    "point_recall": 0.015136598572483386,
+    "r_auc_pr": 0.3269269266467349,
+    "r_auc_roc": 0.5532199003794969,
+    "vus_pr": 0.32758100952037217,
+    "vus_roc": 0.5528614032206779
+  },
+  "model_version": "APD-CATCH-v1.0",
+  "original_catch_params": {
+    "Mlr": 0.001,
+    "auxi_lambda": 0.01,
+    "batch_size": 128,
+    "cf_dim": 16,
+    "d_ff": 32,
+    "d_model": 16,
+    "dc_lambda": 0.05,
+    "dropout": 0.3,
+    "e_layers": 1,
+    "head_dim": 32,
+    "inference_patch_size": 96,
+    "lr": 0.005,
+    "n_heads": 4,
+    "num_epochs": 3,
+    "patch_size": 16,
+    "patch_stride": 8,
+    "score_lambda": 0.5,
+    "seq_len": 192
+  },
+  "original_catch_script": "scripts/multivariate_detection/detect_score/PSM_script/CATCH.sh",
+  "paper_catch_reference": {
+    "affiliation_f": 0.859,
+    "auc_roc": 0.652
+  },
+  "paper_dataset": "PSM",
+  "predicted_anomaly_rate": 0.009161542059806729,
+  "protocol": {
+    "input": "past_to_next_point",
+    "threshold": "normal_validation_0.01_fpr",
+    "training": "official_train_split_labels_not_used",
+    "unscored_test_prefix_excluded": 192,
+    "validation": "chronological_holdout_labels_not_used"
+  },
+  "schema_version": 1,
+  "score_file": "PSM/adaptive/seed_20261.npz",
+  "seed": 20261,
+  "test_anomaly_rate": 0.27813209506098185,
+  "test_points_evaluated": 87649,
+  "timing_seconds": {
+    "fit": 7408.101448297501,
+    "inference": 1273.206032037735
+  },
+  "train_anomaly_rate_labels_not_used": 0.0,
+  "variant": "adaptive"
+}

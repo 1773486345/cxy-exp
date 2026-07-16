@@ -36,6 +36,7 @@ class APDCATCHModel(nn.Module):
         self.cutoff_temperature = configs.cutoff_temperature
         self.minimum_scale = configs.minimum_scale
         self.maximum_scale = configs.maximum_scale
+        self.register_buffer("scale_floor", torch.ones(self.n_vars))
 
         spectrum_size = self.seq_len // 2 + 1
         if self.patch_size > spectrum_size:
@@ -117,6 +118,20 @@ class APDCATCHModel(nn.Module):
             return adaptive
         return torch.full_like(adaptive, self.fixed_cutoff)
 
+    def set_scale_floor(self, scale_floor: torch.Tensor) -> None:
+        """Set fixed, training-derived per-variable scale floors."""
+        scale_floor = torch.as_tensor(
+            scale_floor, dtype=self.scale_floor.dtype, device=self.scale_floor.device
+        )
+        if scale_floor.shape != self.scale_floor.shape:
+            raise ValueError(
+                f"scale_floor must have shape {tuple(self.scale_floor.shape)}, "
+                f"got {tuple(scale_floor.shape)}"
+            )
+        if not torch.isfinite(scale_floor).all() or torch.any(scale_floor <= 0):
+            raise ValueError("scale_floor must be finite and strictly positive")
+        self.scale_floor.copy_(scale_floor)
+
     def _decompose(
         self, spectrum: torch.Tensor, cutoff: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -167,8 +182,11 @@ class APDCATCHModel(nn.Module):
             )
 
         location = history.mean(dim=1, keepdim=True).detach()
+        history_median = history.median(dim=1, keepdim=True).values
+        local_mad = (history - history_median).abs().median(dim=1, keepdim=True).values
+        local_scale = 1.4826 * local_mad
         scale = torch.sqrt(
-            history.var(dim=1, keepdim=True, unbiased=False) + 1e-5
+            local_scale.square() + self.scale_floor.view(1, 1, -1).square()
         ).detach()
         normalized = (history - location) / scale
         spectrum = torch.fft.rfft(normalized.permute(0, 2, 1), dim=-1)

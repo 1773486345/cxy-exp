@@ -1,0 +1,89 @@
+{
+  "apd_params": {
+    "Mlr": 0.001,
+    "batch_size": 128,
+    "cf_dim": 16,
+    "d_ff": 32,
+    "d_model": 16,
+    "dc_lambda": 0.05,
+    "dropout": 0.3,
+    "e_layers": 1,
+    "head_dim": 32,
+    "lr": 0.005,
+    "n_heads": 4,
+    "num_epochs": 3,
+    "patch_size": 16,
+    "patch_stride": 8,
+    "seed": 20261,
+    "seq_len": 192,
+    "variant": "causal_catch"
+  },
+  "dataset_file": "PSM.csv",
+  "fit_summary": {
+    "best_validation_nll": -4.005773715980818,
+    "calibration_threshold": -2.3550941276550277,
+    "epochs": 3,
+    "trainable_parameters": 41896
+  },
+  "metric_errors": {},
+  "metrics": {
+    "affiliation_f": 0.783188776741375,
+    "affiliation_precision": 0.6943388858000157,
+    "affiliation_recall": 0.8981144615859225,
+    "auc_pr": 0.3213667806788424,
+    "auc_roc": 0.546610489415727,
+    "point_f1": 0.026718619537990537,
+    "point_precision": 0.4346701164294955,
+    "point_recall": 0.013782919025350726,
+    "r_auc_pr": 0.325174248798235,
+    "r_auc_roc": 0.5498635210180267,
+    "vus_pr": 0.32579926778712415,
+    "vus_roc": 0.549603739683627
+  },
+  "model_version": "APD-CATCH-v1.0",
+  "original_catch_params": {
+    "Mlr": 0.001,
+    "auxi_lambda": 0.01,
+    "batch_size": 128,
+    "cf_dim": 16,
+    "d_ff": 32,
+    "d_model": 16,
+    "dc_lambda": 0.05,
+    "dropout": 0.3,
+    "e_layers": 1,
+    "head_dim": 32,
+    "inference_patch_size": 96,
+    "lr": 0.005,
+    "n_heads": 4,
+    "num_epochs": 3,
+    "patch_size": 16,
+    "patch_stride": 8,
+    "score_lambda": 0.5,
+    "seq_len": 192
+  },
+  "original_catch_script": "scripts/multivariate_detection/detect_score/PSM_script/CATCH.sh",
+  "paper_catch_reference": {
+    "affiliation_f": 0.859,
+    "auc_roc": 0.652
+  },
+  "paper_dataset": "PSM",
+  "predicted_anomaly_rate": 0.008819267761183813,
+  "protocol": {
+    "input": "past_to_next_point",
+    "threshold": "normal_validation_0.01_fpr",
+    "training": "official_train_split_labels_not_used",
+    "unscored_test_prefix_excluded": 192,
+    "validation": "chronological_holdout_labels_not_used"
+  },
+  "schema_version": 1,
+  "score_file": "PSM/causal_catch/seed_20261.npz",
+  "seed": 20261,
+  "test_anomaly_rate": 0.27813209506098185,
+  "test_points_evaluated": 87649,
+  "timing_seconds": {
+    "fit": 7025.693192481995,
+    "inference": 1016.8011565208435
+  },
+  "train_anomaly_rate_labels_not_used": 0.0,
+  "variant": "causal_catch"
+}

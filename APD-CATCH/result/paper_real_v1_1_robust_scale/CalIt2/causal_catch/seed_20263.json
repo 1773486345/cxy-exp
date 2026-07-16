@@ -1,0 +1,90 @@
+{
+  "apd_params": {
+    "Mlr": 1e-05,
+    "batch_size": 128,
+    "cf_dim": 128,
+    "d_ff": 128,
+    "d_model": 128,
+    "dc_lambda": 0.5,
+    "e_layers": 2,
+    "head_dim": 32,
+    "lr": 0.0001,
+    "n_heads": 8,
+    "num_epochs": 10,
+    "patch_size": 16,
+    "patch_stride": 16,
+    "seed": 20263,
+    "seq_len": 192,
+    "temperature": 0.07,
+    "variant": "causal_catch"
+  },
+  "dataset_file": "CalIt2.csv",
+  "diagnostics_saved": true,
+  "fit_summary": {
+    "best_validation_nll": 11329958617738.158,
+    "calibration_threshold": 121645053457203.14,
+    "epochs": 10,
+    "trainable_parameters": 1439752
+  },
+  "metric_errors": {},
+  "metrics": {
+    "affiliation_f": 0.2688709964206841,
+    "affiliation_precision": 0.4506567250299243,
+    "affiliation_recall": 0.1915882180351065,
+    "auc_pr": 0.0760889553530993,
+    "auc_roc": 0.6715709224345185,
+    "point_f1": 0.0,
+    "point_precision": 0.0,
+    "point_recall": 0.0,
+    "r_auc_pr": 0.091046528673374,
+    "r_auc_roc": 0.6434483013453363,
+    "vus_pr": 0.08794364294557032,
+    "vus_roc": 0.6299730418519149
+  },
+  "model_version": "APD-CATCH-v1.1-robust-scale",
+  "original_catch_params": {
+    "Mlr": 1e-05,
+    "auxi_lambda": 0.1,
+    "batch_size": 128,
+    "cf_dim": 128,
+    "d_ff": 128,
+    "d_model": 128,
+    "dc_lambda": 0.5,
+    "e_layers": 2,
+    "head_dim": 32,
+    "inference_patch_size": 16,
+    "lr": 0.0001,
+    "n_heads": 8,
+    "num_epochs": 10,
+    "patch_size": 16,
+    "patch_stride": 16,
+    "score_lambda": 0.5,
+    "seq_len": 192,
+    "temperature": 0.07
+  },
+  "original_catch_script": "scripts/multivariate_detection/detect_score/CalIt2_script/CATCH.sh",
+  "paper_catch_reference": {
+    "affiliation_f": 0.835,
+    "auc_roc": 0.838
+  },
+  "paper_dataset": "CalIt2",
+  "predicted_anomaly_rate": 0.007302405498281787,
+  "protocol": {
+    "input": "past_to_next_point",
+    "threshold": "normal_validation_0.01_fpr",
+    "training": "official_train_split_labels_not_used",
+    "unscored_test_prefix_excluded": 192,
+    "validation": "chronological_holdout_labels_not_used"
+  },
+  "schema_version": 1,
+  "score_file": "CalIt2/causal_catch/seed_20263.npz",
+  "seed": 20263,
+  "test_anomaly_rate": 0.03006872852233677,
+  "test_points_evaluated": 2328,
+  "timing_seconds": {
+    "fit": 73.49956250190735,
+    "inference": 5.714723825454712
+  },
+  "train_anomaly_rate_labels_not_used": 0.05238095238095238,
+  "variant": "causal_catch"
+}

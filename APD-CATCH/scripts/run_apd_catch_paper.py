@@ -349,7 +349,11 @@ def run_task(args, file_name: str, variant: str) -> Path:
     model.detect_fit(train)
     fit_seconds = time.time() - fit_start
     inference_start = time.time()
-    aligned_scores, _ = model.detect_score(test)
+    diagnostics = None
+    if args.save_diagnostics:
+        aligned_scores, diagnostics = model.score_with_diagnostics(test)
+    else:
+        aligned_scores, _ = model.detect_score(test)
     inference_seconds = time.time() - inference_start
 
     evaluation_start = model.config.seq_len
@@ -371,12 +375,15 @@ def run_task(args, file_name: str, variant: str) -> Path:
 
     score_path = json_path.with_suffix(".npz")
     score_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        score_path,
-        labels=evaluation_labels.astype(np.uint8),
-        scores=evaluation_scores.astype(np.float32),
-        predicted_labels=predicted_labels.astype(np.uint8),
-    )
+    score_payload = {
+        "labels": evaluation_labels.astype(np.uint8),
+        "scores": evaluation_scores.astype(np.float32),
+        "predicted_labels": predicted_labels.astype(np.uint8),
+    }
+    if diagnostics is not None:
+        score_payload.update(diagnostics)
+        score_payload["scale_floor"] = model.model.scale_floor.detach().cpu().numpy()
+    np.savez_compressed(score_path, **score_payload)
     if args.save_checkpoint:
         import torch
 
@@ -392,7 +399,7 @@ def run_task(args, file_name: str, variant: str) -> Path:
         )
     payload = {
         "schema_version": 1,
-        "model_version": "APD-CATCH-v1.0",
+        "model_version": "APD-CATCH-v1.1-robust-scale",
         "dataset_file": file_name,
         "paper_dataset": paper_group(file_name),
         "variant": variant,
@@ -417,6 +424,7 @@ def run_task(args, file_name: str, variant: str) -> Path:
         "metric_errors": metric_errors,
         "paper_catch_reference": PAPER_REFERENCES[paper_group(file_name)],
         "score_file": str(score_path.relative_to(output_root)),
+        "diagnostics_saved": diagnostics is not None,
     }
     atomic_json(json_path, payload)
     write_summaries(output_root)
@@ -460,6 +468,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="paper computes AUC-ROC/AUC-PR and label metrics; full adds range/VUS.",
     )
     parser.add_argument("--save-checkpoint", action="store_true")
+    parser.add_argument(
+        "--save-diagnostics",
+        action="store_true",
+        help="Save per-variable NLL, conditional mean/scale, cutoff, and scale floors.",
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
         "--dry-run",

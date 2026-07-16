@@ -69,6 +69,14 @@ class TestAPDCATCHCore(unittest.TestCase):
         for name in ("mean", "scale", "cutoff"):
             torch.testing.assert_close(first[name], second[name], rtol=0, atol=0)
 
+    def test_training_scale_floor_bounds_near_constant_history(self):
+        model = _model("adaptive").eval()
+        floor = torch.tensor([0.5, 1.0, 2.0])
+        model.set_scale_floor(floor)
+        output = model(torch.zeros(2, 32, 3))
+        self.assertTrue(torch.all(output["scale"] >= floor * model.minimum_scale))
+        torch.testing.assert_close(model.scale_floor, floor, rtol=0, atol=0)
+
 
 if __name__ == "__main__":
     unittest.main()

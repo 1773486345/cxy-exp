@@ -38,6 +38,9 @@ DEFAULT_HYPER_PARAMS = {
     "cutoff_regularization": 0.001,
     "minimum_scale": 0.05,
     "maximum_scale": 3.0,
+    "scale_floor_quantile": 0.05,
+    "scale_floor_global_ratio": 0.01,
+    "scale_floor_samples": 2048,
     "dc_lambda": 0.005,
     "lr": 0.001,
     "Mlr": 0.0001,
@@ -67,6 +70,12 @@ class APDCATCHConfig:
             raise ValueError("validation_ratio must be in (0, 0.5)")
         if not 0 < self.calibration_fpr < 0.5:
             raise ValueError("calibration_fpr must be in (0, 0.5)")
+        if not 0 < self.scale_floor_quantile < 0.5:
+            raise ValueError("scale_floor_quantile must be in (0, 0.5)")
+        if not 0 < self.scale_floor_global_ratio <= 1:
+            raise ValueError("scale_floor_global_ratio must be in (0, 1]")
+        if self.scale_floor_samples < 1:
+            raise ValueError("scale_floor_samples must be positive")
 
 
 class NextPointDataset(Dataset):
@@ -125,6 +134,30 @@ class APDCATCH:
     def _build_model(self, n_vars: int) -> None:
         self.config.c_in = n_vars
         self.model = APDCATCHModel(self.config).to(self.device)
+
+    def _training_scale_floor(self, values: np.ndarray) -> np.ndarray:
+        """Derive a target-blind lower scale bound from training histories only."""
+        history_length = self.config.seq_len
+        endpoints = np.linspace(
+            history_length,
+            len(values) - 1,
+            num=min(self.config.scale_floor_samples, len(values) - history_length),
+            dtype=np.int64,
+        )
+        window_scales = []
+        for endpoint in endpoints:
+            history = values[endpoint - history_length : endpoint]
+            median = np.median(history, axis=0)
+            window_scales.append(1.4826 * np.median(np.abs(history - median), axis=0))
+        lower_local_scale = np.quantile(
+            np.asarray(window_scales), self.config.scale_floor_quantile, axis=0
+        )
+        global_median = np.median(values, axis=0)
+        global_scale = 1.4826 * np.median(np.abs(values - global_median), axis=0)
+        floor = np.maximum(
+            lower_local_scale, self.config.scale_floor_global_ratio * global_scale
+        )
+        return np.maximum(floor, np.finfo(np.float32).eps).astype(np.float32)
 
     def _split_train_validation(
         self, train_data: pd.DataFrame
@@ -200,6 +233,7 @@ class APDCATCH:
         self._seed_everything()
         train_values, validation_values = self._split_train_validation(train_data)
         self._build_model(train_values.shape[1])
+        self.model.set_scale_floor(self._training_scale_floor(train_values))
         train_loader = self._loader(train_values, shuffle=True)
         validation_loader = self._loader(validation_values, shuffle=False, seed_offset=1)
 
@@ -314,14 +348,20 @@ class APDCATCH:
 
     @torch.no_grad()
     def _score_values(
-        self, values: np.ndarray, include_prefix: bool
-    ) -> np.ndarray:
+        self, values: np.ndarray, include_prefix: bool, diagnostics: bool = False
+    ):
         if self.model is None:
             raise ValueError("Model not trained. Call detect_fit first.")
         values = np.asarray(values, dtype=np.float32)
         loader = self._loader(values, shuffle=False, seed_offset=2)
         self.model.eval()
         batches = []
+        diagnostic_batches = {
+            "channel_nll": [],
+            "prediction_mean": [],
+            "prediction_scale": [],
+            "cutoff": [],
+        }
         for history, target in loader:
             history = history.to(self.device, non_blocking=True)
             target = target.to(self.device, non_blocking=True)
@@ -330,18 +370,36 @@ class APDCATCH:
                 target, output["mean"], output["scale"]
             )
             batches.append(self._aggregate_score(channel_score).cpu().numpy())
+            if diagnostics:
+                diagnostic_batches["channel_nll"].append(channel_score.cpu().numpy())
+                diagnostic_batches["prediction_mean"].append(output["mean"].cpu().numpy())
+                diagnostic_batches["prediction_scale"].append(output["scale"].cpu().numpy())
+                diagnostic_batches["cutoff"].append(output["cutoff"].cpu().numpy())
         scores = np.concatenate(batches).astype(np.float64, copy=False)
-        if not include_prefix:
+        if include_prefix:
+            aligned = np.zeros(len(values), dtype=np.float64)
+            aligned[self.config.seq_len :] = scores
+            scores = aligned
+        if not diagnostics:
             return scores
-        aligned = np.zeros(len(values), dtype=np.float64)
-        aligned[self.config.seq_len :] = scores
-        return aligned
+        return scores, {
+            name: np.concatenate(parts).astype(np.float32, copy=False)
+            for name, parts in diagnostic_batches.items()
+        }
 
     def detect_score(self, test: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
         scores = self._score_values(
             test.to_numpy(dtype=np.float32, copy=True), include_prefix=True
         )
         return scores, scores
+
+    def score_with_diagnostics(self, test: pd.DataFrame):
+        """Score a test stream once and retain target-blind explanatory outputs."""
+        return self._score_values(
+            test.to_numpy(dtype=np.float32, copy=True),
+            include_prefix=True,
+            diagnostics=True,
+        )
 
     def detect_label(self, test: pd.DataFrame):
         if self.calibration_threshold is None:
