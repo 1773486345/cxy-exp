@@ -10,5 +10,3 @@ __pycache__/
 .vscode/
 .DS_Store
 Thumbs.db
-MindTS-baselines/result/label/_baseline_logs/omni_runs/run_cpg30288/input.npz
-PatternAD-main/dataset/anomaly_detect/data/PSM.csv

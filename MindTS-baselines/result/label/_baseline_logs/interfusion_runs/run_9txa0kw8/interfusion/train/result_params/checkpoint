@@ -1,2 +1,0 @@
-model_checkpoint_path: "/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/result/label/_baseline_logs/interfusion_runs/run_9txa0kw8/interfusion/train/result_params/restored_pretrain_params.dat"
-all_model_checkpoint_paths: "/media/h3c/users/wangyueyang1/cxy/MindTS-baselines/result/label/_baseline_logs/interfusion_runs/run_9txa0kw8/interfusion/train/result_params/restored_pretrain_params.dat"

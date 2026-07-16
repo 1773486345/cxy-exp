@@ -1,2 +1,0 @@
-strategy_args,metric_name,"iTransformer;{""batch_size"": 16, ""c_out"": 9, ""d_ff"": 8, ""d_layers"": 1, ""d_model"": 256, ""dec_in"": 9, ""e_layers"": 1, ""enc_in"": 9, ""horizon"": 0, ""lr"": 0.0001, ""norm"": true, ""num_epochs"": 100, ""patch_len"": 6, ""patience"": 3, ""seq_len"": 24, ""stride"": 6, ""task_name"": ""anomaly_detection""}"
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.7016438719350122

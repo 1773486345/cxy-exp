@@ -1,4 +1,0 @@
-strategy_args,metric_name,OCSVM;{}
-"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",affiliation_f,0.5834578581431852
-"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",VUS_ROC,0.6693101959947941
-"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",VUS_PR,0.4823288540121849

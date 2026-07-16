@@ -1,4 +1,0 @@
-strategy_args,metric_name,OCSVM;{}
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.878231216667538
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.780775564220221
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.3793575353173812

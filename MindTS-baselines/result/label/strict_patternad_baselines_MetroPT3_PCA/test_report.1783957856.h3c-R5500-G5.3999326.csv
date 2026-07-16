@@ -1,4 +1,0 @@
-strategy_args,metric_name,PCA;{}
-"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",affiliation_f,0.73789612779346
-"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",VUS_ROC,0.918628621140798
-"{""anomaly_ratios"": [1.0], ""calibration_fraction"": 0.2, ""evaluation_protocol"": ""train_calibration"", ""seed"": 2021, ""strategy_name"": ""train_calibrated_unfixed_detect_label""}",VUS_PR,0.3220907822197377

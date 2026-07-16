@@ -1,4 +1,0 @@
-strategy_args,metric_name,"TimerModel;{""horizon"": 1, ""is_train"": 1, ""norm"": true, ""num_epochs"": 3, ""sampling_rate"": 1, ""seq_len"": 96}"
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.2979175361998962
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.4457280077729572
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.2862303385300863

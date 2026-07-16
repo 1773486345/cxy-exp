@@ -1,4 +1,0 @@
-strategy_args,metric_name,DAGMM;{}
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.0199450402347719
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.5113783468113677
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.1049541907554974

@@ -1,0 +1,2 @@
+strategy_args,metric_name,"CATCH;{""Mlr"": 0.0005, ""anomaly_ratio"": 3.0, ""auxi_lambda"": 0.3, ""batch_size"": 64, ""cf_dim"": 16, ""d_ff"": 16, ""d_model"": 32, ""dc_lambda"": 0.5, ""dropout"": 0.05, ""e_layers"": 1, ""head_dim"": 32, ""head_dropout"": 0.1, ""lr"": 0.0005, ""n_heads"": 1, ""num_epochs"": 2, ""patch_size"": 16, ""patch_stride"": 16, ""score_lambda"": 0.01, ""seq_len"": 96}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.9225315579794906

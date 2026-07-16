@@ -1,2 +1,0 @@
-strategy_args,metric_name,"OmniAnomaly;{""batch_size"": 128, ""dense_dim"": 100, ""max_epoch"": 10, ""nf_layers"": 4, ""rnn_hidden"": 100, ""test_batch_size"": 256, ""valid_step_freq"": 50}"
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.4506230700403903

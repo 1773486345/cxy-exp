@@ -1,4 +1,0 @@
-strategy_args,metric_name,"DadaModel;{""horizon"": 1, ""is_train"": 1, ""lr"": 0.005, ""norm"": true, ""sampling_rate"": 1, ""seq_len"": 100}"
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.45827759489022324
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_ROC,0.7524530392279674
-"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",VUS_PR,0.0726036020230098
