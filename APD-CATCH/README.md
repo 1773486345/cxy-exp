@@ -1,5 +1,9 @@
 > [!IMPORTANT]
-> **APD-CATCH v1/v2 已冻结。** 不建议继续运行 15-task v2 screen；本 README 中保留的 APD-CATCH 命令仅用于复现既有探索，不得将新结果自动并入新的分解研究主表。当前研究边界见 [`docs/RESEARCH_RESET.md`](./docs/RESEARCH_RESET.md)，旧线清单见 [`docs/legacy/APD_CATCH_LEGACY_STATUS.md`](./docs/legacy/APD_CATCH_LEGACY_STATUS.md)。
+> **APD-CATCH v1/v2 已冻结。** `ts_benchmark/baselines/apd_catch/` 是冻结的 legacy exploratory line。本 README 中现存的 Causal-State-CATCH v2 命令仅用于复现旧探索，不是当前推荐研究流程；不应继续运行 15-task v2 screen，也不得将其结果自动并入新的分解研究主表。
+>
+> 当前活动研究边界由 [`docs/RESEARCH_RESET.md`](./docs/RESEARCH_RESET.md)、[`docs/REPOSITORY_AUDIT.md`](./docs/REPOSITORY_AUDIT.md) 与 [`docs/legacy/APD_CATCH_LEGACY_STATUS.md`](./docs/legacy/APD_CATCH_LEGACY_STATUS.md) 定义。新研究以原版 [`ts_benchmark/baselines/catch/`](./ts_benchmark/baselines/catch/) 的完整窗口重构协议为基座；在新协议通过人工确认前，不存在可运行的新分解模型。
+>
+> 以下内容是 legacy documentation，必须保留以说明和复现旧线。
 
 # Causal-State-CATCH v2.0
 
