@@ -17,7 +17,7 @@ from .models.APDCATCH_model import APDCATCHModel, gaussian_nll
 
 
 DEFAULT_HYPER_PARAMS = {
-    "variant": "adaptive",
+    "variant": "state_scale",
     "seq_len": 192,
     "patch_size": 16,
     "patch_stride": 8,
@@ -31,16 +31,7 @@ DEFAULT_HYPER_PARAMS = {
     "head_dropout": 0.1,
     "regular_lambda": 0.5,
     "temperature": 0.07,
-    "cutoff_min": 0.03,
-    "cutoff_max": 0.75,
-    "fixed_cutoff": 0.20,
-    "cutoff_temperature": 0.03,
-    "cutoff_regularization": 0.001,
-    "minimum_scale": 0.05,
-    "maximum_scale": 3.0,
-    "scale_floor_quantile": 0.05,
-    "scale_floor_global_ratio": 0.01,
-    "scale_floor_samples": 2048,
+    "state_span_ratio": 1.0 / 6.0,
     "dc_lambda": 0.005,
     "lr": 0.001,
     "Mlr": 0.0001,
@@ -53,7 +44,7 @@ DEFAULT_HYPER_PARAMS = {
     "score_aggregation": "mean",
     "mask_update_interval": 10,
     "max_grad_norm": 1.0,
-    "seed": 20261,
+    "seed": 2021,
 }
 
 
@@ -70,12 +61,16 @@ class APDCATCHConfig:
             raise ValueError("validation_ratio must be in (0, 0.5)")
         if not 0 < self.calibration_fpr < 0.5:
             raise ValueError("calibration_fpr must be in (0, 0.5)")
-        if not 0 < self.scale_floor_quantile < 0.5:
-            raise ValueError("scale_floor_quantile must be in (0, 0.5)")
-        if not 0 < self.scale_floor_global_ratio <= 1:
-            raise ValueError("scale_floor_global_ratio must be in (0, 1]")
-        if self.scale_floor_samples < 1:
-            raise ValueError("scale_floor_samples must be positive")
+        if not 0 < self.state_span_ratio <= 1:
+            raise ValueError("state_span_ratio must be in (0, 1]")
+
+    def effective_hyper_params(self) -> dict:
+        values = {name: getattr(self, name) for name in DEFAULT_HYPER_PARAMS}
+        if hasattr(self, "c_in"):
+            values["c_in"] = self.c_in
+        if hasattr(self, "effective_state_span"):
+            values["effective_state_span"] = self.effective_state_span
+        return values
 
 
 class NextPointDataset(Dataset):
@@ -130,34 +125,27 @@ class APDCATCH:
         torch.manual_seed(self.config.seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(self.config.seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
     def _build_model(self, n_vars: int) -> None:
         self.config.c_in = n_vars
         self.model = APDCATCHModel(self.config).to(self.device)
+        self.config.effective_state_span = self.model.state_span
 
-    def _training_scale_floor(self, values: np.ndarray) -> np.ndarray:
-        """Derive a target-blind lower scale bound from training histories only."""
-        history_length = self.config.seq_len
-        endpoints = np.linspace(
-            history_length,
-            len(values) - 1,
-            num=min(self.config.scale_floor_samples, len(values) - history_length),
-            dtype=np.int64,
+    def _training_reference_normalization(
+        self, values: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Create robust, training-only units without local variance collapse."""
+        location = np.median(values, axis=0)
+        mad_scale = 1.4826 * np.median(np.abs(values - location), axis=0)
+        standard_scale = values.std(axis=0)
+        scale = np.where(
+            mad_scale > np.finfo(np.float32).eps,
+            mad_scale,
+            np.where(standard_scale > np.finfo(np.float32).eps, standard_scale, 1.0),
         )
-        window_scales = []
-        for endpoint in endpoints:
-            history = values[endpoint - history_length : endpoint]
-            median = np.median(history, axis=0)
-            window_scales.append(1.4826 * np.median(np.abs(history - median), axis=0))
-        lower_local_scale = np.quantile(
-            np.asarray(window_scales), self.config.scale_floor_quantile, axis=0
-        )
-        global_median = np.median(values, axis=0)
-        global_scale = 1.4826 * np.median(np.abs(values - global_median), axis=0)
-        floor = np.maximum(
-            lower_local_scale, self.config.scale_floor_global_ratio * global_scale
-        )
-        return np.maximum(floor, np.finfo(np.float32).eps).astype(np.float32)
+        return location.astype(np.float32), scale.astype(np.float32)
 
     def _split_train_validation(
         self, train_data: pd.DataFrame
@@ -190,28 +178,15 @@ class APDCATCH:
             drop_last=False,
         )
 
-    def _cutoff_boundary_loss(self, cutoff: torch.Tensor) -> torch.Tensor:
-        position = (cutoff - self.config.cutoff_min) / (
-            self.config.cutoff_max - self.config.cutoff_min
-        )
-        return (
-            torch.relu(0.05 - position).square()
-            + torch.relu(position - 0.95).square()
-        ).mean()
-
     def _batch_loss(
         self, history: torch.Tensor, target: torch.Tensor
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
         output = self.model(history)
         nll = gaussian_nll(target, output["mean"], output["scale"]).mean()
-        cutoff_loss = self._cutoff_boundary_loss(output["cutoff"])
         loss = nll + self.config.dc_lambda * output["channel_loss"]
-        if self.config.variant == "adaptive":
-            loss = loss + self.config.cutoff_regularization * cutoff_loss
         return loss, {
             "nll": float(nll.detach().cpu()),
             "channel_loss": float(output["channel_loss"].detach().cpu()),
-            "cutoff_loss": float(cutoff_loss.detach().cpu()),
         }
 
     @torch.no_grad()
@@ -233,7 +208,8 @@ class APDCATCH:
         self._seed_everything()
         train_values, validation_values = self._split_train_validation(train_data)
         self._build_model(train_values.shape[1])
-        self.model.set_scale_floor(self._training_scale_floor(train_values))
+        location, scale = self._training_reference_normalization(train_values)
+        self.model.set_reference_normalization(location, scale)
         train_loader = self._loader(train_values, shuffle=True)
         validation_loader = self._loader(validation_values, shuffle=False, seed_offset=1)
 
@@ -246,7 +222,8 @@ class APDCATCH:
             f"APD-CATCH variant={self.config.variant} device={self.device} "
             f"train_windows={len(train_loader.dataset)} "
             f"validation_windows={len(validation_loader.dataset)} "
-            f"parameters={trainable_parameters}",
+            f"parameters={trainable_parameters} "
+            f"state_span={self.config.effective_state_span}",
             flush=True,
         )
 
@@ -360,7 +337,8 @@ class APDCATCH:
             "channel_nll": [],
             "prediction_mean": [],
             "prediction_scale": [],
-            "cutoff": [],
+            "state_mean": [],
+            "innovation_scale": [],
         }
         for history, target in loader:
             history = history.to(self.device, non_blocking=True)
@@ -374,7 +352,10 @@ class APDCATCH:
                 diagnostic_batches["channel_nll"].append(channel_score.cpu().numpy())
                 diagnostic_batches["prediction_mean"].append(output["mean"].cpu().numpy())
                 diagnostic_batches["prediction_scale"].append(output["scale"].cpu().numpy())
-                diagnostic_batches["cutoff"].append(output["cutoff"].cpu().numpy())
+                diagnostic_batches["state_mean"].append(output["state_mean"].cpu().numpy())
+                diagnostic_batches["innovation_scale"].append(
+                    output["innovation_scale"].cpu().numpy()
+                )
         scores = np.concatenate(batches).astype(np.float64, copy=False)
         if include_prefix:
             aligned = np.zeros(len(values), dtype=np.float64)
@@ -421,5 +402,5 @@ class APDCATCH:
         second = self.model(history.clone())
         return {
             name: float((first[name] - second[name]).abs().max().cpu())
-            for name in ("mean", "scale", "cutoff", "partition_error")
+            for name in ("mean", "scale", "state_mean", "innovation_scale")
         }

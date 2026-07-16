@@ -1,5 +1,70 @@
 # APD-CATCH 第一版修改与运行记录
 
+## v2.0（2026-07-17，Causal-State-CATCH，待实验）
+
+### 替换 v1 分解的理由
+
+v1 的 adaptive cutoff 只是把同一历史频谱软切为低/高两路，两个自由 head 又可共同
+预测均值和尺度，分量没有不可替代职责。v1.1 的局部 MAD 尺度下界还在 Genesis 的训练期
+恒定变量上退化为 epsilon，数值门控失败。因此 v2 不再调 cutoff 或尺度下界。
+
+### 模型
+
+v2 保留 CATCH 的频率 patch、通道掩码、masked cross-channel Transformer 和通道关系损失；
+不新建独立主干。先从无标签训练子段计算稳健全局位置/尺度（MAD 为零时回退训练标准差，
+仍为零时采用 StandardScaler 的单位尺度约定），并在整个训练与测试流固定。
+
+对历史窗口，`state/state_scale` 用无参数因果 EMA 生成下一点慢状态 `b[t,d]`，CATCH 只
+编码创新历史 `x - b`；`causal_catch` 则直接编码标准化历史。三个版本都输出一个高斯条件
+分布：
+
+```text
+causal_catch: mu = CATCH(history),                  sigma = CATCH(history)
+state:        mu = causal_EMA(history) + CATCH(innovation), sigma = CATCH(innovation)
+state_scale:  state 的 mu，sigma = sqrt(CATCH(innovation)^2 + recent_innovation_scale^2)
+```
+
+所有量只依赖 `x[t-L:t-1]` 和训练子段统计；目标 `x[t,d]` 只进入 NLL。状态 EMA 时间尺度
+固定为 `round(seq_len / 6)`，因此随官方窗口长度同比例变化。`state_scale` 以
+`sqrt(learned_scale^2 + recent_innovation_scale^2)` 合成不确定性，不使用未校准的局部尺度
+下界；训练期恒定变量仍是上下文不足的诊断对象，不能据此声称其首次测试变化可被识别为正常。
+
+### 当前筛选实验
+
+当前矩阵为 CalIt2、GECCO、Genesis、NYC、PSM 五个数据集、三个内部对照和 `seed=2021`，
+共 15 次训练；`2021` 与本地原版 CATCH 归档一致。由
+`scripts/run_causal_state_catch_screen.sh` 断点续跑。PSM 的旧 v1 记录显示每变体约 2 小时训练和
+17--22 分钟推理，故纳入首轮。数据维度不是成本的充分代理：SMAP 虽同为 25 变量，但其官方
+配置为 10 epoch、3 层且测试段约为 PSM 的五倍；Creditcard、CICIDS、MSL、SMD、SMAP 先执行
+`causal_catch` 成本测量，再决定是否展开三个变体。SWAT 使用 `seq_len=2048`、`patch_size=256`、
+`batch_size=32`，当前明确不进入筛选。ASD 的 12 个子序列留在首轮通过后的独立扩展，避免将同一
+数据族在模型选择时重复计数。
+`causal_catch` 是内部目标盲控制。`../CATCH-master/result/` 中已有原版 CATCH 的单种子结果，
+保持原命令、超参数、训练与阈值协议不变；首轮直接在同一数据集、同名指标上比较 v2 与该参考，
+或比较已有 baseline。原 CATCH 的目标可见、score/label 分开训练协议在结果中注明；只有需要
+声明严格协议改进时才重跑完全匹配的对照。
+
+归档中的原版 CATCH 当前覆盖 CalIt2、CICIDS、SWAT 和 12 个 ASD 子序列。为形成 23 文件
+的外部参考覆盖，`scripts/run_missing_original_catch.sh` 仅对缺少报告的 8 个真实文件调用
+上游既有 `CATCH.sh`；它不会修改原版配置、seed 或已有结果。
+
+在 15 个筛选任务前，先在 Genesis、CalIt2、GECCO、PSM 运行三变体并保存诊断，检查状态/创新
+职责是否有数值退化。随后按数据集分别与原 CATCH 或已有 baseline 比较；任一 v2 变体持平或
+提升即可保留。仅对需要进一步确认的结果追加种子 `2022/2023`；v2 尚无真实数据结果。
+
+每次 JSON/检查点同时保存映射自原脚本的 `apd_params` 与完整的 `effective_apd_params`；
+后者记录 v2 默认值、变量数和实际 EMA span。原 CATCH 仅映射双方同名的窗口、容量、batch、
+epoch、学习率等共享项；未映射的 v2 参数不得被表述为“沿用原 CATCH 配置”。
+
+## Design Status (2026-07-17)
+
+APD-CATCH remains the active Direction A engineering base. Keep the CATCH frequency-patch,
+channel-mask, and cross-channel Transformer backbone, with `causal_catch` as the required
+anchor in every comparison. Do not replace the backbone or add parallel model families.
+Future changes must be small, matched-budget prediction-head ablations that give historical
+state features responsibility for conditional location and innovation features responsibility
+for conditional scale.
+
 ## v1.1（2026-07-16，Genesis 单种子负结果）
 
 ### 动机与范围

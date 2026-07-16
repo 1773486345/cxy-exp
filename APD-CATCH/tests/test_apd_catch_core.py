@@ -45,7 +45,7 @@ class TestAPDCATCHCore(unittest.TestCase):
         history = torch.randn(2, 32, 3)
         target = torch.randn(2, 3)
         parameter_counts = []
-        for variant in ("causal_catch", "fixed", "adaptive"):
+        for variant in ("causal_catch", "state", "state_scale"):
             model = _model(variant)
             parameter_counts.append(sum(p.numel() for p in model.parameters()))
             output = model(history)
@@ -59,23 +59,25 @@ class TestAPDCATCHCore(unittest.TestCase):
             )
         self.assertEqual(len(set(parameter_counts)), 1)
 
-    def test_adaptive_partition_and_eval_are_deterministic(self):
+    def test_state_scale_eval_is_deterministic(self):
         torch.manual_seed(11)
-        model = _model("adaptive").eval()
+        model = _model("state_scale").eval()
         history = torch.randn(2, 32, 3)
         first = model(history)
         second = model(history.clone())
-        self.assertLessEqual(float(first["partition_error"]), 1e-7)
-        for name in ("mean", "scale", "cutoff"):
+        for name in ("mean", "scale", "state_mean", "innovation_scale"):
             torch.testing.assert_close(first[name], second[name], rtol=0, atol=0)
 
-    def test_training_scale_floor_bounds_near_constant_history(self):
-        model = _model("adaptive").eval()
-        floor = torch.tensor([0.5, 1.0, 2.0])
-        model.set_scale_floor(floor)
+    def test_reference_normalization_keeps_constant_history_scale_positive(self):
+        model = _model("state_scale").eval()
+        location = torch.tensor([10.0, 20.0, 30.0])
+        scale = torch.tensor([1.0, 2.0, 4.0])
+        model.set_reference_normalization(location, scale)
         output = model(torch.zeros(2, 32, 3))
-        self.assertTrue(torch.all(output["scale"] >= floor * model.minimum_scale))
-        torch.testing.assert_close(model.scale_floor, floor, rtol=0, atol=0)
+        self.assertTrue(torch.all(output["scale"] > 0))
+        self.assertEqual(model.state_span, 5)
+        torch.testing.assert_close(model.reference_location, location, rtol=0, atol=0)
+        torch.testing.assert_close(model.reference_scale, scale, rtol=0, atol=0)
 
 
 if __name__ == "__main__":

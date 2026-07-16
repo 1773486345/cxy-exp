@@ -29,8 +29,8 @@ class PaperRunnerTest(unittest.TestCase):
         self.assertEqual(paper_group("Genesis.csv"), "Genesis")
 
     def test_original_catch_parameters_are_mapped_without_score_leakage(self):
-        params, original = apd_params("PSM.csv", "adaptive", 17)
-        self.assertEqual(params["variant"], "adaptive")
+        params, original = apd_params("PSM.csv", "state_scale", 17)
+        self.assertEqual(params["variant"], "state_scale")
         self.assertEqual(params["seed"], 17)
         self.assertEqual(params["seq_len"], original["seq_len"])
         self.assertEqual(params["d_model"], original["d_model"])
@@ -41,7 +41,7 @@ class PaperRunnerTest(unittest.TestCase):
     def test_all_paper_configs_build_with_equal_variant_budgets(self):
         for file_name in expand_datasets(["all"]):
             parameter_counts = []
-            for variant in ("causal_catch", "fixed", "adaptive"):
+            for variant in ("causal_catch", "state", "state_scale"):
                 params, _ = apd_params(file_name, variant, 17)
                 detector = APDCATCH(**params)
                 detector._build_model(n_vars=3)

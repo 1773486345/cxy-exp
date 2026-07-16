@@ -1,0 +1,88 @@
+{
+  "apd_params": {
+    "Mlr": 0.0001,
+    "batch_size": 4,
+    "cf_dim": 64,
+    "d_ff": 128,
+    "d_model": 128,
+    "e_layers": 3,
+    "head_dim": 64,
+    "lr": 0.0001,
+    "n_heads": 16,
+    "num_epochs": 10,
+    "patch_size": 8,
+    "patch_stride": 8,
+    "seed": 20263,
+    "seq_len": 192,
+    "temperature": 0.07,
+    "variant": "causal_catch"
+  },
+  "dataset_file": "Genesis.csv",
+  "diagnostics_saved": true,
+  "fit_summary": {
+    "best_validation_nll": 3.3480324966520154e+20,
+    "calibration_threshold": 2.80395210552496e+21,
+    "epochs": 10,
+    "trainable_parameters": 2722024
+  },
+  "metric_errors": {},
+  "metrics": {
+    "affiliation_f": 0.8341642500499917,
+    "affiliation_precision": 0.7441432210831525,
+    "affiliation_recall": 0.948962868751342,
+    "auc_pr": 0.22570558823845413,
+    "auc_roc": 0.7100420235978665,
+    "point_f1": 0.15602836879432624,
+    "point_precision": 0.12087912087912088,
+    "point_recall": 0.22,
+    "r_auc_pr": 0.11176434291623599,
+    "r_auc_roc": 0.7977864394995697,
+    "vus_pr": 0.11246868972072822,
+    "vus_roc": 0.778734957659917
+  },
+  "model_version": "APD-CATCH-v1.1-robust-scale",
+  "original_catch_params": {
+    "Mlr": 0.0001,
+    "batch_size": 4,
+    "cf_dim": 64,
+    "d_ff": 128,
+    "d_model": 128,
+    "e_layers": 3,
+    "head_dim": 64,
+    "inference_patch_size": 32,
+    "inference_patch_stride": 1,
+    "lr": 0.0001,
+    "n_heads": 16,
+    "num_epochs": 10,
+    "patch_size": 8,
+    "patch_stride": 8,
+    "score_lambda": 1,
+    "seq_len": 192,
+    "temperature": 0.07
+  },
+  "original_catch_script": "scripts/multivariate_detection/detect_score/Genesis_script/CATCH.sh",
+  "paper_catch_reference": {
+    "affiliation_f": 0.896,
+    "auc_roc": 0.974
+  },
+  "paper_dataset": "Genesis",
+  "predicted_anomaly_rate": 0.007324533161622666,
+  "protocol": {
+    "input": "past_to_next_point",
+    "threshold": "normal_validation_0.01_fpr",
+    "training": "official_train_split_labels_not_used",
+    "unscored_test_prefix_excluded": 192,
+    "validation": "chronological_holdout_labels_not_used"
+  },
+  "schema_version": 1,
+  "score_file": "Genesis/causal_catch/seed_20263.npz",
+  "seed": 20263,
+  "test_anomaly_rate": 0.004024468770122344,
+  "test_points_evaluated": 12424,
+  "timing_seconds": {
+    "fit": 1650.7936367988586,
+    "inference": 372.42021107673645
+  },
+  "train_anomaly_rate_labels_not_used": 0.0,
+  "variant": "causal_catch"
+}

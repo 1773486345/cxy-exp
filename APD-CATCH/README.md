@@ -1,12 +1,14 @@
-# APD-CATCH v1.0
+# Causal-State-CATCH v2.0
 
-本目录以 CATCH 官方仓库提交 `3647c69be5eb56649b072596cf89098e689e20c3` 为工程基座，用于验证方向 A 的异常保持自适应分解。上游 `catch` 包保持不变；新增实现位于 `ts_benchmark/baselines/apd_catch`。当前是可以在 CATCH 论文数据上直接训练、评估和汇总的第一版模型。
+本目录以 CATCH 官方仓库提交 `3647c69be5eb56649b072596cf89098e689e20c3` 为工程基座，用于验证方向 A 的异常保持条件分布。上游 `catch` 包保持不变；新增实现位于 `ts_benchmark/baselines/apd_catch`。v2 使用 CATCH 编码历史创新，而不是另建模型主干。
 
-当前模型把 CATCH 的频率 patch 与通道融合主干改为严格的 `past-to-next-point` 协议：归一化、FFT、分频和通道路由只读取历史窗口，模型输出下一点的高斯条件分布。三个同参数预算版本为：
+当前模型把 CATCH 的频率 patch 与通道融合主干改为严格的 `past-to-next-point` 协议：训练期标准化、因果状态、FFT 和通道路由只读取历史窗口，模型输出下一点的高斯条件分布。三个同参数预算版本为：
 
-- `causal_catch`：目标盲 CATCH 主干，不分频；
-- `fixed`：固定截止频率的双频带分解；
-- `adaptive`：仅由历史状态生成逐变量截止频率。
+- `causal_catch`：目标盲 CATCH 主干，直接编码标准化历史；
+- `state`：无参数因果 EMA 慢状态 + CATCH 创新编码；
+- `state_scale`：`state` + 近期创新强度调制的条件尺度。
+
+`fixed/adaptive` 是已否定的 v1 历史候选，不参与 v2。CATCH 保留其频率 patch、通道掩码和 masked cross-channel Transformer；状态由时间域因果 EMA 解释，CATCH 只解释去状态后的创新结构。
 
 ## 1. 环境与测试
 
@@ -36,62 +38,85 @@ python scripts/run_apd_catch_paper.py --check-data --datasets all
 
 也可以从上游 README 的 OneDrive/BaiduCloud 手动下载，然后把 `dataset` 文件夹放到本目录。
 
-## 3. 运行第一版模型
+## 3. 并行运行 v2 三变体
 
-先在一个论文数据集上运行三个同预算版本：
-
-```bash
-python scripts/run_apd_catch_paper.py \
-  --datasets Genesis \
-  --variants causal_catch fixed adaptive \
-  --gpu 0
-```
-
-运行指定的多个数据集：
+从仓库根目录打开多个终端。首轮必须在同一 `seed=2021` 和同一协议下比较
+`causal_catch`、`state`、`state_scale`；每行只运行一个“数据集 x 变体”，并默认保存诊断。
+把第一个参数替换为该终端使用的 GPU 编号。每个任务写到独立 worker 目录，可安全并行。
 
 ```bash
-python scripts/run_apd_catch_paper.py \
-  --datasets Genesis PSM SWAT \
-  --variants causal_catch fixed adaptive \
-  --gpu 0
+# Genesis
+bash scripts/run_causal_state_catch_variant.sh 0 Genesis causal_catch
+bash scripts/run_causal_state_catch_variant.sh 1 Genesis state
+bash scripts/run_causal_state_catch_variant.sh 2 Genesis state_scale
+
+# CalIt2
+bash scripts/run_causal_state_catch_variant.sh 0 CalIt2 causal_catch
+bash scripts/run_causal_state_catch_variant.sh 1 CalIt2 state
+bash scripts/run_causal_state_catch_variant.sh 2 CalIt2 state_scale
+
+# GECCO
+bash scripts/run_causal_state_catch_variant.sh 0 GECCO causal_catch
+bash scripts/run_causal_state_catch_variant.sh 1 GECCO state
+bash scripts/run_causal_state_catch_variant.sh 2 GECCO state_scale
+
+# NYC
+bash scripts/run_causal_state_catch_variant.sh 0 NYC causal_catch
+bash scripts/run_causal_state_catch_variant.sh 1 NYC state
+bash scripts/run_causal_state_catch_variant.sh 2 NYC state_scale
+
+# PSM
+bash scripts/run_causal_state_catch_variant.sh 0 PSM causal_catch
+bash scripts/run_causal_state_catch_variant.sh 1 PSM state
+bash scripts/run_causal_state_catch_variant.sh 2 PSM state_scale
 ```
 
-v1.1 的鲁棒条件尺度验证使用独立结果目录，并保存逐变量 NLL、条件均值/尺度和
-自适应截止频率，便于审计高分正常点：
+全部 15 个窗口完成后汇总：
 
 ```bash
-python scripts/run_apd_catch_paper.py \
-  --datasets Genesis PSM \
-  --variants causal_catch fixed adaptive \
-  --output-dir result/paper_real_v1_1_robust_scale \
-  --save-diagnostics --gpu 0
+bash scripts/summarize_causal_state_catch.sh result/causal_state_catch_v2_screen
 ```
 
-运行论文全部 12 类真实数据集：
+PSM 的旧 v1 运行表明每变体约需 2 小时训练和 17--22 分钟推理，因此纳入首轮。SMAP 虽与
+PSM 同为 25 变量，但其官方配置为 10 epoch、3 层，测试段约为 PSM 的五倍；数据维度不能
+单独代表成本。Creditcard、CICIDS、MSL、SMD、SMAP 的单锚点成本测量属于首轮 v2 三变体
+比较之后的独立决策；SWAT 使用 `seq_len=2048`、`patch_size=256`、`batch_size=32`，当前明确
+不运行。首轮按数据集独立比较：任一 v2 变体相对原 CATCH 持平/提升，或超过已有 baseline，
+即可保留该结果；多种子只在需要进一步确认时追加。ASD 的 12 个子序列作为第二阶段独立扩展，
+避免首轮将同一数据族重复计数。
+
+原版 CATCH 的本地归档可直接汇总：
 
 ```bash
-python scripts/run_apd_catch_paper.py \
-  --datasets all \
-  --variants causal_catch fixed adaptive \
-  --gpu 0
+python scripts/analysis/summarize_original_catch_results.py \
+  --original-root ../CATCH-master \
+  --output result/causal_state_catch_v2/original_catch_local_reference.csv
 ```
 
-`all` 会展开为 23 个实际文件：11 个单文件数据集和 ASD 的 12 个子序列，共 69 个训练任务。脚本每完成一个任务就立即写结果；再次执行相同命令会跳过已有结果，因此可以中断后续跑。添加 `--force` 才会覆盖已有结果。
+当前归档已覆盖 CalIt2、CICIDS、SWAT 和 ASD 的 15 个实际文件。其余 8 个论文真实文件可由下列命令补齐；该命令逐字调用 `CATCH-master` 中既有的 `CATCH.sh`，不改原始种子、超参数或协议，已有报告会跳过：
 
-每次训练同时输出 AUC-ROC、AUC-PR、R-AUC、VUS、验证集 1% FPR 校准阈值下的 Aff-F 和点级指标，不需要为 score/label 指标重复训练。默认沿用官方 `train_lens` 以及每个数据集原 CATCH 脚本中的窗口、模型容量、batch size、epoch 和学习率；训练标签不传给模型，只在结果中记录训练段污染率。原版特有但不适用于 APD-CATCH 的重构分数权重不会传入。v1.1 用训练历史窗口 MAD 的低分位数为每个变量建立固定尺度下界，评分时仍只使用当前历史窗口。
+```bash
+bash scripts/run_missing_original_catch.sh \
+  ../CATCH-master all "Creditcard GECCO Genesis MSL NYC PSM SMD SMAP"
+```
+
+每次训练同时输出 AUC-ROC、AUC-PR、R-AUC、VUS、验证集 1% FPR 校准阈值下的 Aff-F 和点级指标，不需要为 score/label 指标重复训练。默认沿用官方 `train_lens` 以及每个数据集原 CATCH 脚本中的窗口、模型容量、batch size、epoch 和学习率；训练标签不传给模型，只在结果中记录训练段污染率。原版特有但不适用于 Causal-State-CATCH 的重构分数权重不会传入。
+
+v2 只映射原 CATCH 脚本中与其共享的窗口、容量、batch size、epoch 和学习率；Causal-State-CATCH 的状态比例、创新尺度和优化默认值是独立配置。每个结果 JSON 同时记录映射参数 `apd_params` 与完整有效配置 `effective_apd_params`，用于复现。
 
 ## 4. 结果位置
 
 ```text
-result/paper_real_v1/
+result/causal_state_catch_v2_screen/
 ├── summary_runs.csv                 每个实际数据文件的结果
 ├── summary_paper_comparison.csv     ASD 聚合后与论文 CATCH 数字对照
-└── <dataset>/<variant>/
-    ├── seed_20261.json              参数、协议、耗时和指标
-    └── seed_20261.npz               连续分数、标签和校准预测
+└── workers/
+    └── <dataset>_<variant>/<dataset>/<variant>/
+        ├── seed_<seed>.json         参数、协议、耗时和指标
+        └── seed_<seed>.npz          连续分数、标签和校准预测
 ```
 
-论文数字与 APD-CATCH 不是完全同协议：原版 CATCH 重构包含待评分点的完整窗口，APD-CATCH 只用过去预测下一点；论文 Aff-F 的阈值方式也不同。因此 `summary_paper_comparison.csv` 首先用于检查模型是否发生灾难性退化。`../CATCH-master/result/` 已保存同机环境下原版 CATCH 的本地结果与命令档案；但其 `score` 与 `label` 路径分开训练，且 label 路径使用 `anomaly_ratio`，不能与这里的验证集 1% FPR Aff-F 直接横比。严格改进结论仍需要把两者置于完全相同的目标可见性、训练和阈值协议下。
+首轮直接在同一数据集、同名指标上比较 v2、原 CATCH 和已有 baseline：v2 持平/提升原 CATCH，或超过 baseline，即保留该结果。原版 CATCH 重构包含待评分点的完整窗口，APD-CATCH 只用过去预测下一点；论文 Aff-F 的阈值方式也不同。这些协议差异在结果中注明即可，只有需要声明严格的协议改进时才将两者置于完全相同的可见性、训练和阈值协议下重跑。
 
 与原版 CATCH 的复现清单已核对：12 个真实数据类别完全一致，即
 `CICIDS`、`CalIt2`、`SWAT`、`Creditcard`、`GECCO`、`Genesis`、`MSL`、`NYC`、

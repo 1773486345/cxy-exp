@@ -1,8 +1,7 @@
-"""Target-blind adaptive decomposition on top of CATCH frequency patches."""
+"""Causal state-innovation adaptation of the CATCH frequency-channel backbone."""
 
 from __future__ import annotations
 
-import math
 from typing import Dict, Tuple
 
 import torch
@@ -14,15 +13,21 @@ from ..layers.cross_channel_Transformer import Trans_C
 
 
 class APDCATCHModel(nn.Module):
-    """Predict the next multivariate observation from a strictly past-only window."""
+    """Predict a target-blind conditional distribution for the next observation.
 
-    VALID_VARIANTS = {"causal_catch", "fixed", "adaptive"}
+    CATCH remains the frequency-patch and channel-relation encoder.  The state
+    variants first remove a deterministic causal EMA state, so CATCH explains
+    innovation structure rather than the raw level of the series.
+    """
+
+    VALID_VARIANTS = {"causal_catch", "state", "state_scale"}
 
     def __init__(self, configs):
         super().__init__()
         if configs.variant not in self.VALID_VARIANTS:
             raise ValueError(
-                f"variant must be one of {sorted(self.VALID_VARIANTS)}, got {configs.variant!r}"
+                f"variant must be one of {sorted(self.VALID_VARIANTS)}, "
+                f"got {configs.variant!r}"
             )
 
         self.variant = configs.variant
@@ -30,13 +35,12 @@ class APDCATCHModel(nn.Module):
         self.n_vars = configs.c_in
         self.patch_size = configs.patch_size
         self.patch_stride = configs.patch_stride
-        self.cutoff_min = configs.cutoff_min
-        self.cutoff_max = configs.cutoff_max
-        self.fixed_cutoff = configs.fixed_cutoff
-        self.cutoff_temperature = configs.cutoff_temperature
-        self.minimum_scale = configs.minimum_scale
-        self.maximum_scale = configs.maximum_scale
-        self.register_buffer("scale_floor", torch.ones(self.n_vars))
+        self.state_span = max(
+            2,
+            min(self.seq_len, int(round(self.seq_len * configs.state_span_ratio))),
+        )
+        self.register_buffer("reference_location", torch.zeros(self.n_vars))
+        self.register_buffer("reference_scale", torch.ones(self.n_vars))
 
         spectrum_size = self.seq_len // 2 + 1
         if self.patch_size > spectrum_size:
@@ -49,19 +53,6 @@ class APDCATCHModel(nn.Module):
             (spectrum_size + self.spectrum_padding - self.patch_size)
             // self.patch_stride
             + 1
-        )
-
-        normalized_frequency = torch.fft.rfftfreq(self.seq_len)
-        normalized_frequency = normalized_frequency / normalized_frequency[-1].clamp_min(1e-8)
-        self.register_buffer("normalized_frequency", normalized_frequency)
-
-        router_hidden = max(configs.cf_dim, 16)
-        self.cutoff_router = nn.Sequential(
-            nn.LayerNorm(spectrum_size),
-            nn.Linear(spectrum_size, router_hidden),
-            nn.GELU(),
-            nn.Dropout(configs.dropout),
-            nn.Linear(router_hidden, 1),
         )
 
         self.mask_generator = channel_mask_generator(
@@ -85,14 +76,7 @@ class APDCATCHModel(nn.Module):
         encoded_dim = configs.d_model * 2
         flattened_dim = encoded_dim * self.patch_num
         head_hidden = max(configs.d_ff, encoded_dim)
-        self.low_head = nn.Sequential(
-            nn.LayerNorm(flattened_dim),
-            nn.Linear(flattened_dim, head_hidden),
-            nn.GELU(),
-            nn.Dropout(configs.head_dropout),
-            nn.Linear(head_hidden, 1),
-        )
-        self.high_head = nn.Sequential(
+        self.mean_head = nn.Sequential(
             nn.LayerNorm(flattened_dim),
             nn.Linear(flattened_dim, head_hidden),
             nn.GELU(),
@@ -100,51 +84,53 @@ class APDCATCHModel(nn.Module):
             nn.Linear(head_hidden, 1),
         )
         self.scale_head = nn.Sequential(
-            nn.LayerNorm(encoded_dim * 2 + 1),
-            nn.Linear(encoded_dim * 2 + 1, head_hidden),
+            nn.LayerNorm(encoded_dim),
+            nn.Linear(encoded_dim, head_hidden),
             nn.GELU(),
             nn.Dropout(configs.head_dropout),
             nn.Linear(head_hidden, 1),
         )
 
-    def _cutoff(self, spectrum: torch.Tensor) -> torch.Tensor:
-        magnitude = torch.log1p(spectrum.abs())
-        router_input = magnitude.reshape(-1, magnitude.shape[-1])
-        adaptive = torch.sigmoid(self.cutoff_router(router_input)).reshape(
-            spectrum.shape[0], spectrum.shape[1]
+    def set_reference_normalization(
+        self, location: torch.Tensor, scale: torch.Tensor
+    ) -> None:
+        """Set fixed training-derived normalization statistics."""
+        location = torch.as_tensor(
+            location,
+            dtype=self.reference_location.dtype,
+            device=self.reference_location.device,
         )
-        adaptive = self.cutoff_min + (self.cutoff_max - self.cutoff_min) * adaptive
-        if self.variant == "adaptive":
-            return adaptive
-        return torch.full_like(adaptive, self.fixed_cutoff)
-
-    def set_scale_floor(self, scale_floor: torch.Tensor) -> None:
-        """Set fixed, training-derived per-variable scale floors."""
-        scale_floor = torch.as_tensor(
-            scale_floor, dtype=self.scale_floor.dtype, device=self.scale_floor.device
+        scale = torch.as_tensor(
+            scale,
+            dtype=self.reference_scale.dtype,
+            device=self.reference_scale.device,
         )
-        if scale_floor.shape != self.scale_floor.shape:
+        if location.shape != self.reference_location.shape:
             raise ValueError(
-                f"scale_floor must have shape {tuple(self.scale_floor.shape)}, "
-                f"got {tuple(scale_floor.shape)}"
+                f"location must have shape {tuple(self.reference_location.shape)}, "
+                f"got {tuple(location.shape)}"
             )
-        if not torch.isfinite(scale_floor).all() or torch.any(scale_floor <= 0):
-            raise ValueError("scale_floor must be finite and strictly positive")
-        self.scale_floor.copy_(scale_floor)
+        if scale.shape != self.reference_scale.shape:
+            raise ValueError(
+                f"scale must have shape {tuple(self.reference_scale.shape)}, "
+                f"got {tuple(scale.shape)}"
+            )
+        if not torch.isfinite(location).all():
+            raise ValueError("reference location must be finite")
+        if not torch.isfinite(scale).all() or torch.any(scale <= 0):
+            raise ValueError("reference scale must be finite and strictly positive")
+        self.reference_location.copy_(location)
+        self.reference_scale.copy_(scale)
 
-    def _decompose(
-        self, spectrum: torch.Tensor, cutoff: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if self.variant == "causal_catch":
-            return spectrum, torch.zeros_like(spectrum), spectrum.real.new_zeros(())
-
-        frequency = self.normalized_frequency.view(1, 1, -1)
-        low_mask = torch.sigmoid(
-            (cutoff.unsqueeze(-1) - frequency) / self.cutoff_temperature
-        )
-        high_mask = 1.0 - low_mask
-        partition_error = (low_mask + high_mask - 1.0).abs().max()
-        return spectrum * low_mask, spectrum * high_mask, partition_error
+    def _causal_ema(self, normalized: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Return one-step-behind EMA states and the next-step state prediction."""
+        alpha = 2.0 / (self.state_span + 1.0)
+        running = normalized[:, 0]
+        states = []
+        for observation in normalized.unbind(dim=1):
+            states.append(running)
+            running = (1.0 - alpha) * running + alpha * observation
+        return torch.stack(states, dim=1), running
 
     def _frequency_patches(self, spectrum: torch.Tensor) -> torch.Tensor:
         if self.spectrum_padding:
@@ -157,16 +143,12 @@ class APDCATCHModel(nn.Module):
         patches = torch.cat((real, imag), dim=-1)
         return patches.permute(0, 2, 1, 3).contiguous()
 
-    def _encode_component(
-        self, spectrum: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _encode_catch(self, spectrum: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         patches = self._frequency_patches(spectrum)
         batch_size, patch_num, n_vars, patch_dim = patches.shape
         flattened = patches.reshape(batch_size * patch_num, n_vars, patch_dim)
         channel_mask = self.mask_generator(flattened)
-        encoded, channel_loss = self.frequency_transformer(
-            flattened, channel_mask
-        )
+        encoded, channel_loss = self.frequency_transformer(flattened, channel_mask)
         encoded = encoded.reshape(batch_size, patch_num, n_vars, -1)
         return encoded.permute(0, 2, 1, 3).contiguous(), channel_loss
 
@@ -181,59 +163,52 @@ class APDCATCHModel(nn.Module):
                 f"expected [*, {self.seq_len}, {self.n_vars}], got {history.shape}"
             )
 
-        location = history.mean(dim=1, keepdim=True).detach()
-        history_median = history.median(dim=1, keepdim=True).values
-        local_mad = (history - history_median).abs().median(dim=1, keepdim=True).values
-        local_scale = 1.4826 * local_mad
-        scale = torch.sqrt(
-            local_scale.square() + self.scale_floor.view(1, 1, -1).square()
-        ).detach()
-        normalized = (history - location) / scale
-        spectrum = torch.fft.rfft(normalized.permute(0, 2, 1), dim=-1)
-
-        cutoff = self._cutoff(spectrum)
-        low_spectrum, high_spectrum, partition_error = self._decompose(
-            spectrum, cutoff
-        )
-        low_encoded, low_channel_loss = self._encode_component(low_spectrum)
+        location = self.reference_location.view(1, 1, -1)
+        reference_scale = self.reference_scale.view(1, 1, -1)
+        normalized = (history - location) / reference_scale
+        state_history, next_state = self._causal_ema(normalized)
 
         if self.variant == "causal_catch":
-            high_encoded = torch.zeros_like(low_encoded)
-            channel_loss = low_channel_loss
+            representation = normalized
+            mean_baseline = torch.zeros_like(next_state)
         else:
-            high_encoded, high_channel_loss = self._encode_component(high_spectrum)
-            channel_loss = 0.5 * (low_channel_loss + high_channel_loss)
+            representation = normalized - state_history
+            mean_baseline = next_state
 
-        low_flat = low_encoded.flatten(start_dim=2)
-        high_flat = high_encoded.flatten(start_dim=2)
-        mean_normalized = self.low_head(low_flat).squeeze(-1)
-        mean_normalized = mean_normalized + self.high_head(high_flat).squeeze(-1)
+        spectrum = torch.fft.rfft(representation.permute(0, 2, 1), dim=-1)
+        encoded, channel_loss = self._encode_catch(spectrum)
+        encoded_flat = encoded.flatten(start_dim=2)
+        mean_normalized = mean_baseline + self.mean_head(encoded_flat).squeeze(-1)
+        learned_scale = F.softplus(self.scale_head(encoded.mean(dim=2)).squeeze(-1))
+        learned_scale = learned_scale + torch.finfo(learned_scale.dtype).eps
 
-        pooled = torch.cat(
-            (
-                low_encoded.mean(dim=2),
-                high_encoded.mean(dim=2),
-                cutoff.unsqueeze(-1),
-            ),
-            dim=-1,
+        recent_length = min(self.state_span, self.seq_len)
+        innovation_scale = representation[:, -recent_length:].std(
+            dim=1, unbiased=False
         )
-        scale_normalized = F.softplus(self.scale_head(pooled).squeeze(-1))
-        scale_normalized = scale_normalized.clamp(
-            min=self.minimum_scale,
-            max=self.maximum_scale,
+        if self.variant == "state_scale":
+            # Independent innovation variance can only widen the base CATCH scale.
+            scale_normalized = torch.sqrt(
+                learned_scale.square() + innovation_scale.square()
+            )
+        else:
+            scale_normalized = learned_scale
+
+        prediction_mean = (
+            self.reference_location.view(1, -1)
+            + self.reference_scale.view(1, -1) * mean_normalized
         )
-
-        location = location.squeeze(1)
-        history_scale = scale.squeeze(1)
-        prediction_mean = location + history_scale * mean_normalized
-        prediction_scale = history_scale * scale_normalized
-
+        prediction_scale = self.reference_scale.view(1, -1) * scale_normalized
+        state_mean = (
+            self.reference_location.view(1, -1)
+            + self.reference_scale.view(1, -1) * mean_baseline
+        )
         return {
             "mean": prediction_mean,
             "scale": prediction_scale,
-            "cutoff": cutoff,
+            "state_mean": state_mean,
+            "innovation_scale": innovation_scale,
             "channel_loss": channel_loss,
-            "partition_error": partition_error,
         }
 
 

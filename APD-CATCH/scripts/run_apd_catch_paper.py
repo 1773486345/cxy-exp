@@ -43,7 +43,7 @@ SINGLE_FILE_DATASETS = {
     if name != "ASD"
 }
 ASD_FILES = [f"ASD_dataset_{index}.csv" for index in range(1, 13)]
-VARIANTS = ("causal_catch", "fixed", "adaptive")
+VARIANTS = ("causal_catch", "state", "state_scale")
 
 
 def paper_group(file_name: str) -> str:
@@ -382,7 +382,12 @@ def run_task(args, file_name: str, variant: str) -> Path:
     }
     if diagnostics is not None:
         score_payload.update(diagnostics)
-        score_payload["scale_floor"] = model.model.scale_floor.detach().cpu().numpy()
+        score_payload["reference_location"] = (
+            model.model.reference_location.detach().cpu().numpy()
+        )
+        score_payload["reference_scale"] = (
+            model.model.reference_scale.detach().cpu().numpy()
+        )
     np.savez_compressed(score_path, **score_payload)
     if args.save_checkpoint:
         import torch
@@ -392,6 +397,7 @@ def run_task(args, file_name: str, variant: str) -> Path:
             {
                 "model_state_dict": model.model.state_dict(),
                 "apd_params": params,
+                "effective_apd_params": model.config.effective_hyper_params(),
                 "calibration_threshold": model.calibration_threshold,
                 "fit_summary": dataclasses.asdict(model.fit_summary),
             },
@@ -399,7 +405,7 @@ def run_task(args, file_name: str, variant: str) -> Path:
         )
     payload = {
         "schema_version": 1,
-        "model_version": "APD-CATCH-v1.1-robust-scale",
+        "model_version": "Causal-State-CATCH-v2.0",
         "dataset_file": file_name,
         "paper_dataset": paper_group(file_name),
         "variant": variant,
@@ -412,6 +418,7 @@ def run_task(args, file_name: str, variant: str) -> Path:
             "unscored_test_prefix_excluded": evaluation_start,
         },
         "apd_params": params,
+        "effective_apd_params": model.config.effective_hyper_params(),
         "original_catch_script": str(source_script(file_name).relative_to(REPO_ROOT)),
         "original_catch_params": original,
         "fit_summary": dataclasses.asdict(model.fit_summary),
@@ -448,7 +455,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=["all"],
         help="APD-CATCH variants (default: all).",
     )
-    parser.add_argument("--seed", type=int, default=20261)
+    parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument("--gpu", default="0", help="CUDA device id, or cpu.")
     parser.add_argument(
         "--dataset-root",
@@ -459,7 +466,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=REPO_ROOT / "result" / "paper_real_v1",
+        default=REPO_ROOT / "result" / "causal_state_catch_v2",
     )
     parser.add_argument(
         "--metrics",
@@ -471,7 +478,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--save-diagnostics",
         action="store_true",
-        help="Save per-variable NLL, conditional mean/scale, cutoff, and scale floors.",
+        help="Save per-variable NLL, conditional mean/scale, causal state, and innovation scale.",
     )
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
