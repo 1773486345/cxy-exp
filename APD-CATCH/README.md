@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> **APD-CATCH v1/v2 已冻结。** 不建议继续运行 15-task v2 screen；本 README 中保留的 APD-CATCH 命令仅用于复现既有探索，不得将新结果自动并入新的分解研究主表。当前研究边界见 [`docs/RESEARCH_RESET.md`](./docs/RESEARCH_RESET.md)，旧线清单见 [`docs/legacy/APD_CATCH_LEGACY_STATUS.md`](./docs/legacy/APD_CATCH_LEGACY_STATUS.md)。
+
 # Causal-State-CATCH v2.0
 
 本目录以 CATCH 官方仓库提交 `3647c69be5eb56649b072596cf89098e689e20c3` 为工程基座，用于验证方向 A 的异常保持条件分布。上游 `catch` 包保持不变；新增实现位于 `ts_benchmark/baselines/apd_catch`。v2 使用 CATCH 编码历史创新，而不是另建模型主干。
