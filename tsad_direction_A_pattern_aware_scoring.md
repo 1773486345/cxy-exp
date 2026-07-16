@@ -3,7 +3,7 @@
 记录日期：2026-06-30
 更新日期：2026-07-15
 
-方向定位：
+## 方向定位
 
 ```text
 Anomaly-Preserving Decomposition for Nonstationary Time-Series Anomaly Detection
