@@ -208,6 +208,7 @@ class CATCHDecompositionScorer:
             "checkpoint_source": checkpoint_source,
             "forward_calls": forward_calls,
             "decomposition_reconstruction_max_error": decomposition_error,
+            "score_semantics": "posthoc_linear_decomposition_of_reconstruction_error",
         }
 
     def _checkpoint_state(

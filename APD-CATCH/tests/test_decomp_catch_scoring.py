@@ -142,6 +142,74 @@ class CATCHDecompositionScorerTest(unittest.TestCase):
             torch.testing.assert_close(slow_hat + fast_hat, x_hat)
         self.assertEqual(result["decomposition_reconstruction_max_error"], 0.0)
 
+    def test_linear_error_decomposition_matches_component_scores(self):
+        detector = _detector()
+        scorer = CATCHDecompositionScorer(detector)
+        stats = _stats(scorer)
+        captured = []
+        original_forward = detector.model.forward
+
+        def capture(batch_x):
+            output = original_forward(batch_x)
+            captured.append((batch_x.detach().clone(), output[0].detach().clone()))
+            return output
+
+        with patch.object(detector.model, "forward", side_effect=capture):
+            result = scorer.score_dataframe(_frame(SEQ_LEN), stats, SCORING_SEED)
+
+        self.assertEqual(len(captured), 1)
+        batch_x, x_hat = captured[0]
+        error = batch_x - x_hat
+        slow_x, fast_x = decompose_slow_fast(batch_x, result["window_size"])
+        slow_hat, fast_hat = decompose_slow_fast(x_hat, result["window_size"])
+        expected_slow_error = moving_average(error, result["window_size"])
+        expected_fast_error = error - expected_slow_error
+
+        torch.testing.assert_close(slow_x - slow_hat, expected_slow_error)
+        torch.testing.assert_close(fast_x - fast_hat, expected_fast_error)
+        expected_slow_score = torch.mean(expected_slow_error**2, dim=-1).reshape(-1).numpy()
+        expected_fast_score = torch.mean(expected_fast_error**2, dim=-1).reshape(-1).numpy()
+        np.testing.assert_allclose(
+            result["slow_score"], expected_slow_score, rtol=1e-5, atol=1e-7
+        )
+        np.testing.assert_allclose(
+            result["fast_score"], expected_fast_score, rtol=1e-5, atol=1e-7
+        )
+
+    def test_scorer_restores_cpu_and_cuda_rng_states(self):
+        scorer = CATCHDecompositionScorer(_detector())
+        stats = _stats(scorer)
+        cpu_state_before = torch.random.get_rng_state().clone()
+        cuda_states_before = (
+            [state.clone() for state in torch.cuda.get_rng_state_all()]
+            if torch.cuda.is_available()
+            else None
+        )
+
+        scorer.score_dataframe(_frame(SEQ_LEN), stats, SCORING_SEED)
+
+        torch.testing.assert_close(torch.random.get_rng_state(), cpu_state_before, rtol=0, atol=0)
+        if cuda_states_before is not None:
+            cuda_states_after = torch.cuda.get_rng_state_all()
+            self.assertEqual(len(cuda_states_after), len(cuda_states_before))
+            for before, after in zip(cuda_states_before, cuda_states_after):
+                torch.testing.assert_close(after, before, rtol=0, atol=0)
+
+    def test_scorer_restores_model_mode_and_state_dict(self):
+        for initial_mode in (True, False):
+            with self.subTest(initial_mode=initial_mode):
+                detector = _detector()
+                scorer = CATCHDecompositionScorer(detector)
+                stats = _stats(scorer)
+                detector.model.train(initial_mode)
+                state_before = copy.deepcopy(detector.model.state_dict())
+
+                scorer.score_dataframe(_frame(SEQ_LEN), stats, SCORING_SEED)
+
+                self.assertEqual(detector.model.training, initial_mode)
+                for name, parameter in detector.model.state_dict().items():
+                    torch.testing.assert_close(parameter, state_before[name], rtol=0, atol=0)
+
     def test_original_score_matches_original_formula_and_detect_score(self):
         detector = _detector()
         scorer = CATCHDecompositionScorer(detector)
