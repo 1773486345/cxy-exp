@@ -372,7 +372,9 @@ class MSDCATCH:
             mode="thre",
         )
         self.last_scores = self._fuse_scores(self._raw_scores(test_loader))
-        return self.last_scores["anchored_fusion_score"], self.last_scores["anchored_fusion_score"]
+        # The frozen MSD-CATCH evaluation uses the reconstructed whole-series
+        # score as its only primary anomaly score. Other scores are diagnostics.
+        return self.last_scores["total_score"], self.last_scores["total_score"]
 
     def detect_label(self, test: pd.DataFrame):
         fusion_score, _ = self.detect_score(test)

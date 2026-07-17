@@ -1,0 +1,7 @@
+generated_at_utc=2026-07-17T17:42:43Z
+catch_master_commit=047fbf41130ea2710ca587743e7bdc2192402cee
+manifest=/media/h3c/users/wangyueyang1/cxy/CATCH-master/scripts/official_catch_manifest.tsv
+paper_table_source=/media/h3c/users/wangyueyang1/cxy/CATCH-master/docs/experiment.png
+selection=latest test_report CSV per physical task and protocol
+real_aggregation=ASD is the mean of 12 physical files; all other real groups have one file
+synthetic_aggregation=mean of the two official files per anomaly family

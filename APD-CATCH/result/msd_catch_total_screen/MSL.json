@@ -1,0 +1,57 @@
+{
+  "bonus_rates": {
+    "residual_bonus_nonzero": {
+      "all_rate": 0.0659577642447341,
+      "anomaly_rate": 0.08678856554210662,
+      "normal_rate": 0.06350529842487455
+    },
+    "trend_bonus_nonzero": {
+      "all_rate": 0.07345820504821712,
+      "anomaly_rate": 0.11975276847798094,
+      "normal_rate": 0.06800782256719676
+    }
+  },
+  "data": {
+    "anomaly_rate": 0.1053316876669967,
+    "anomaly_segments": 36,
+    "test_length": 73729,
+    "train_length": 58317,
+    "variables": 55
+  },
+  "dataset": "MSL",
+  "delta_thresholds": {
+    "residual_delta_threshold": 0.15866483896970746,
+    "trend_delta_threshold": 0.8112815678119656
+  },
+  "fit_seconds": 10115.20207953453,
+  "parameters": 422156147,
+  "primary_score": "total_score",
+  "score_seconds": 106.10258197784424,
+  "scores": {
+    "anchored_fusion_score": {
+      "auc_pr": 0.17587318478766156,
+      "auc_roc": 0.6608422225589292
+    },
+    "fixed_fusion_score": {
+      "auc_pr": 0.1720249811412409,
+      "auc_roc": 0.649852976170172
+    },
+    "fusion_score": {
+      "auc_pr": 0.1720249811412409,
+      "auc_roc": 0.649852976170172
+    },
+    "residual_score": {
+      "auc_pr": 0.16325106883102286,
+      "auc_roc": 0.6503725092234708
+    },
+    "total_score": {
+      "auc_pr": 0.1740271791487243,
+      "auc_roc": 0.6608765912436516
+    },
+    "trend_score": {
+      "auc_pr": 0.1671467470833913,
+      "auc_roc": 0.6343397452201731
+    }
+  },
+  "seed": 2021
+}

@@ -51,68 +51,21 @@ sh ./scripts/multivariate_detection/detect_label/MSL_script/CATCH.sh
 sh ./scripts/multivariate_detection/detect_score/MSL_script/CATCH.sh
 ```
 
-
-
-## Official Reproduction Matrix And Traceable Results
-
-The paper-level count of 18 is **not** 18 real datasets. It is 12 real-data
-benchmark groups plus six synthetic anomaly families:
-
-- Real groups: `CICIDS`, `CalIt2`, `SWAT`, `Creditcard`, `GECCO`, `Genesis`,
-  `MSL`, `NYC`, `PSM`, `SMD`, `SMAP`, and `ASD`.
-- Synthetic families: `con`, `glo`, `sea`, `sha`, `sub_mix`, and `tre`.
-
-`ASD` consists of 12 physical files. The other 11 real groups each have one
-file, so the official scripts reference 23 real files. Each synthetic family
-has two supplied files, so they contribute 12 more. The repository therefore
-contains 35 official physical-task entries per protocol and 70 official
-protocol-task combinations: 23 real files plus 12 synthetic files, each under
-`score` and `label`. The upstream Results paragraph's "10 real-world" wording
-describes the displayed results rather than an executable matrix; it is not
-used to invent or omit scripts.
-
-The checked source of truth is
-[`scripts/official_catch_manifest.tsv`](./scripts/official_catch_manifest.tsv).
-It records every physical file, its paper-level group, type, and official
-script directory in execution order. All 35 referenced data files and all 70
-`CATCH.sh` scripts are present in this checkout. There are no missing entries
-in this matrix. No configuration is created for a dataset that lacks an
-official script or data file.
-
-Only the `--save-path` argument in the official `CATCH.sh` files has been
-changed. It now defaults to a protocol/task/unique-run location such as
-`result/score/CATCH/Genesis/run-.../`; all model arguments, data names,
-configuration files, strategy, seed, timeout, and hyperparameters remain the
-official values. The two wrapper scripts are the supported entry points:
+Each official dataset remains an independent original `CATCH.sh` command. For
+example, use the matching dataset directory for the two distinct protocols:
 
 ```shell
-# Non-training preflight: parse one task, check its data, and print its result path.
-bash scripts/run_official_catch.sh Genesis score
-
-# Run exactly one task. --run is required before training can start.
-bash scripts/run_official_catch.sh Genesis score --run
-
-# Non-training preflight in manifest order. Default: all 70 combinations.
-bash scripts/run_official_catch_matrix.sh
-
-# Sequentially run one protocol or the complete 70-task matrix.
-bash scripts/run_official_catch_matrix.sh score --run
-bash scripts/run_official_catch_matrix.sh all --run
+sh ./scripts/multivariate_detection/detect_score/SMAP_script/CATCH.sh
+sh ./scripts/multivariate_detection/detect_label/SMAP_script/CATCH.sh
 ```
 
-Every `--run` invocation creates a new timestamp/PID/random subdirectory.
-That directory keeps the framework-generated CSV (and its original auxiliary
-record), `command.sh`, `official_CATCH.sh` and its SHA-256, `metadata.txt`
-(commit, data path and hashes, config, and save path), `environment.txt`, and
-`console.log`. Re-running a task therefore cannot replace an older run.
+Only `--save-path` was adjusted for traceability. Direct execution now writes
+each run to a unique directory under `result/score/CATCH/<dataset>/run-.../`
+or `result/label/CATCH/<dataset>/run-.../`; model arguments, data splits,
+hyperparameters, seeds, and evaluation protocols are unchanged. No wrapper or
+matrix script is required.
 
-`score` and `label` are separate original CATCH protocols. `score` uses the
-continuous-score strategy and score metrics; `label` uses the original
-`unfixed_detect_label` strategy and each script's unmodified `anomaly_ratio`
-threshold protocol. Neither result is directly comparable to APD-CATCH's
-past-to-next-point evaluation using a validation-set 1% FPR threshold and
-Aff-F. Use this traceable original-CATCH matrix for any same-protocol baseline
-comparison.
+
 
 ## Results
 

@@ -1,0 +1,75 @@
+{
+  "bonus_rates": {
+    "residual_bonus_nonzero": {
+      "all_rate": 0.051630434782608696,
+      "anomaly_rate": 0.1414141414141414,
+      "normal_rate": 0.04957146166319203
+    },
+    "trend_bonus_nonzero": {
+      "all_rate": 0.04030797101449275,
+      "anomaly_rate": 0.050505050505050504,
+      "normal_rate": 0.040074125550150566
+    }
+  },
+  "config": {
+    "Mlr": 1e-05,
+    "batch_size": 128,
+    "cf_dim": 64,
+    "d_ff": 256,
+    "d_model": 256,
+    "e_layers": 3,
+    "head_dim": 64,
+    "inference_patch_size": 32,
+    "inference_patch_stride": 1,
+    "lr": 0.0001,
+    "n_heads": 2,
+    "num_epochs": 2,
+    "patch_size": 16,
+    "patch_stride": 8,
+    "seq_len": 192,
+    "temperature": 0.07
+  },
+  "data": {
+    "anomaly_rate": 0.022418478260869564,
+    "anomaly_segments": 1,
+    "test_length": 4416,
+    "train_length": 13104,
+    "variables": 3
+  },
+  "dataset": "NYC",
+  "delta_thresholds": {
+    "residual_delta_threshold": 0.594732582569122,
+    "trend_delta_threshold": 1.6433753073215482
+  },
+  "fit_seconds": 435.19829416275024,
+  "parameters": 1676813939,
+  "primary_score": "total_score",
+  "score_seconds": 5.995367050170898,
+  "scores": {
+    "anchored_fusion_score": {
+      "auc_pr": 0.06304994720270976,
+      "auc_roc": 0.8043043359235159
+    },
+    "fixed_fusion_score": {
+      "auc_pr": 0.07210217211657542,
+      "auc_roc": 0.8348319891057904
+    },
+    "fusion_score": {
+      "auc_pr": 0.07210217211657542,
+      "auc_roc": 0.8348319891057904
+    },
+    "residual_score": {
+      "auc_pr": 0.07620388803180306,
+      "auc_roc": 0.8379416120903266
+    },
+    "total_score": {
+      "auc_pr": 0.0625620541968663,
+      "auc_roc": 0.8080574098642201
+    },
+    "trend_score": {
+      "auc_pr": 0.062279028306535596,
+      "auc_roc": 0.7982137801456772
+    }
+  },
+  "seed": 2021
+}

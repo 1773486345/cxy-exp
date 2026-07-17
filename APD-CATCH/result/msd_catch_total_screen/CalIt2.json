@@ -1,0 +1,57 @@
+{
+  "bonus_rates": {
+    "residual_bonus_nonzero": {
+      "all_rate": 0.06547619047619048,
+      "anomaly_rate": 0.14864864864864866,
+      "normal_rate": 0.06295993458708095
+    },
+    "trend_bonus_nonzero": {
+      "all_rate": 0.07896825396825397,
+      "anomaly_rate": 0.08108108108108109,
+      "normal_rate": 0.07890433360588717
+    }
+  },
+  "data": {
+    "anomaly_rate": 0.029365079365079365,
+    "anomaly_segments": 13,
+    "test_length": 2520,
+    "train_length": 2520,
+    "variables": 2
+  },
+  "dataset": "CalIt2",
+  "delta_thresholds": {
+    "residual_delta_threshold": 0.6081620007753372,
+    "trend_delta_threshold": 1.7465067505836482
+  },
+  "fit_seconds": 72.28495717048645,
+  "parameters": 117479603,
+  "primary_score": "total_score",
+  "score_seconds": 1.275956630706787,
+  "scores": {
+    "anchored_fusion_score": {
+      "auc_pr": 0.12167415824091488,
+      "auc_roc": 0.8468155399880666
+    },
+    "fixed_fusion_score": {
+      "auc_pr": 0.1153787134685803,
+      "auc_roc": 0.8416388588097501
+    },
+    "fusion_score": {
+      "auc_pr": 0.1153787134685803,
+      "auc_roc": 0.8416388588097501
+    },
+    "residual_score": {
+      "auc_pr": 0.11193351000137808,
+      "auc_roc": 0.8404068418377493
+    },
+    "total_score": {
+      "auc_pr": 0.12475790809431422,
+      "auc_roc": 0.8487381494331616
+    },
+    "trend_score": {
+      "auc_pr": 0.05700055197248664,
+      "auc_roc": 0.6758303683896488
+    }
+  },
+  "seed": 2021
+}
