@@ -26,6 +26,8 @@
 
 不得重新训练、微调、替换 checkpoint，或为了分解结果修改任一原版 CATCH 超参数。
 
+这里的“一次训练”指一个正式实验运行可严格按原版协议训练 CATCH 一次；`original_score`、`time_score`、`slow_score`、`fast_score` 与 `fusion_score` 必须共享这一次训练产生的同一个 checkpoint。不得为 slow、fast 或 fusion 分别训练或微调模型。已有合格 checkpoint 可以直接复用；没有 checkpoint 时，后续正式实验只能训练原版 CATCH 一次。本阶段不运行真实数据训练。
+
 ## 第一版固定分解
 
 第一版只允许逐窗口、逐通道的固定移动平均：
@@ -68,6 +70,15 @@ W = argmin_{w in {1, 3, 5, ..., <= L}} (abs(w - P), w)
 
 `original_score` 是原版 CATCH 连续评分接口直接返回的分数，保持其既有时域误差、频域误差及 `score_lambda` 语义，不重算或替代。
 
+原版连续分数的组成还必须作为归因诊断保留：
+
+```python
+time_score = mean((x - x_hat) ** 2, channel_dim)
+original_score = time_score + score_lambda * frequency_score
+```
+
+一次评分必须保存 `original_score`、`time_score`、`slow_score`、`fast_score` 与 `fusion_score`；建议同时保存 `frequency_score`。`original_score` 仍是主要原版基线，`time_score` 只用于诊断，不得用它替换原版结果或删除原版 frequency score。
+
 对每个已对齐的时间位置，分量分数定义为：
 
 ```python
@@ -88,6 +99,8 @@ fusion_score = 0.5 * slow_z + 0.5 * fast_z
 1. 若原版运行已保留其既有的无标签 validation 段，则以最终选定的原版 checkpoint 在该 validation 段上产生 `slow_score` 与 `fast_score`，分别记录均值为 location、标准差为 scale。
 2. 若现有原版协议没有独立 validation 段，则以其训练段重构分数的均值和标准差替代；不创建新切分。
 3. `epsilon` 固定为 `1e-8`，只用于数值稳定性；不得按数据集、测试分数或标签调节。
+
+用于估计这些统计量的 validation 或 train 段必须采用与测试连续评分相同的非重叠窗口协议：从原版 loader 的底层数据读取对应段，以与 `mode="thre"` 等价的窗口化方式重新构造只用于评分的 loader。不得使用 shuffled 或 step=1 的 train/validation loader 产生的重复窗口分数，也不创建新数据切分。每次参考评分必须记录原始数据段长度、实际评分长度、丢弃的尾部长度、评分窗口大小、窗口步长与时间索引对齐规则。
 
 不得使用测试分数总体统计量、测试标签、异常比例或最终指标来确定 location、scale、窗口或融合权重。测试标签只可用于最终指标计算。
 
