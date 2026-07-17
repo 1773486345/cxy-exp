@@ -187,6 +187,16 @@ def _gate_decision(branch: pd.DataFrame, bootstrap: Optional[Dict[str, Any]]) ->
     }
     if not required_columns.issubset(branch.columns):
         return _not_evaluable_gate(["branch response matrix is missing required columns"])
+    numeric_columns = (
+        "anomaly_points",
+        "slow_fast_anomaly_spearman",
+        "slow_auc_pr",
+        "fast_auc_pr",
+        "original_top_k_out_component_top_k_in",
+    )
+    numeric_values = branch.loc[:, numeric_columns].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    if not np.isfinite(numeric_values).all():
+        return _not_evaluable_gate(["branch response matrix has non-finite or non-numeric Gate inputs"])
     units = list(zip(branch["seed"], branch["anomaly_type"]))
     if len(units) != 18 or set(units) != required_units or len(set(units)) != len(units):
         return _not_evaluable_gate(["expected exactly 18 unique pre-registered seed-category units"])
@@ -197,8 +207,17 @@ def _gate_decision(branch: pd.DataFrame, bootstrap: Optional[Dict[str, Any]]) ->
         or bootstrap.get("seed") != BOOTSTRAP_SEED
         or bootstrap.get("resamples") != BOOTSTRAP_SAMPLES
         or "one_sided_95_lower_bound" not in bootstrap
+        or "mean_delta" not in bootstrap
     ):
         return _not_evaluable_gate(["bootstrap metadata is incomplete or inconsistent"])
+    try:
+        bootstrap_values = np.asarray(
+            [bootstrap["mean_delta"], bootstrap["one_sided_95_lower_bound"]], dtype=float
+        )
+    except (TypeError, ValueError):
+        return _not_evaluable_gate(["bootstrap statistics are not numeric"])
+    if not np.isfinite(bootstrap_values).all():
+        return _not_evaluable_gate(["bootstrap statistics are non-finite"])
 
     evaluable = branch[branch["anomaly_points"] >= 10]
     if len(evaluable) != 18:

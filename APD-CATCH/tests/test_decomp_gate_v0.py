@@ -133,10 +133,52 @@ class DecompGateV0DataTest(unittest.TestCase):
             "unit_count": 18,
             "seed": BOOTSTRAP_SEED,
             "resamples": BOOTSTRAP_SAMPLES,
+            "mean_delta": -0.02,
             "one_sided_95_lower_bound": -0.02,
         }
         complete = _gate_decision(branch, bootstrap)
         self.assertIn(complete["decision"], {"GATE_PASSED", "GATE_FAILED"})
+
+    def test_gate_rejects_nan_inf_and_uncalculable_spearman(self):
+        bootstrap = {
+            "unit_count": 18,
+            "seed": BOOTSTRAP_SEED,
+            "resamples": BOOTSTRAP_SAMPLES,
+            "mean_delta": 0.0,
+            "one_sided_95_lower_bound": 0.0,
+        }
+        for field, value in (
+            ("slow_fast_anomaly_spearman", np.nan),
+            ("slow_auc_pr", np.inf),
+            ("fast_auc_pr", -np.inf),
+        ):
+            branch = pd.DataFrame(self._complete_branch_rows())
+            branch.loc[0, field] = value
+            self.assertEqual(_gate_decision(branch, bootstrap)["decision"], "GATE_NOT_EVALUABLE")
+        nonfinite_bootstrap = dict(bootstrap, one_sided_95_lower_bound=np.nan)
+        self.assertEqual(
+            _gate_decision(pd.DataFrame(self._complete_branch_rows()), nonfinite_bootstrap)["decision"],
+            "GATE_NOT_EVALUABLE",
+        )
+
+    def test_complete_finite_units_cover_gate_passed_and_failed(self):
+        branch = pd.DataFrame(self._complete_branch_rows())
+        branch.loc[0, "slow_auc_pr"] = 0.9
+        branch.loc[0, "fast_auc_pr"] = 0.7
+        branch.loc[1, "slow_auc_pr"] = 0.7
+        branch.loc[1, "fast_auc_pr"] = 0.9
+        bootstrap = {
+            "unit_count": 18,
+            "seed": BOOTSTRAP_SEED,
+            "resamples": BOOTSTRAP_SAMPLES,
+            "mean_delta": 0.0,
+            "one_sided_95_lower_bound": 0.0,
+        }
+        self.assertEqual(_gate_decision(branch, bootstrap)["decision"], "GATE_PASSED")
+        self.assertEqual(
+            _gate_decision(branch, dict(bootstrap, one_sided_95_lower_bound=-0.02))["decision"],
+            "GATE_FAILED",
+        )
 
     def test_finalizer_rejects_incomplete_shards_without_bootstrap(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -94,6 +94,9 @@ def _validate_shard(shard: Path, expected_seed: int) -> Tuple[List[str], pd.Data
         reasons.append("shard metrics has missing or duplicate anomaly types")
     if set(metrics.get("score", pd.Series(dtype=str))) != expected_scores:
         reasons.append("shard metrics has missing continuous-score metrics")
+    auc_values = pd.to_numeric(metrics.get("auc_pr", pd.Series(dtype=float)), errors="coerce").to_numpy(dtype=float)
+    if len(auc_values) != len(metrics) or not np.isfinite(auc_values).all():
+        reasons.append("shard metrics contains non-finite or non-numeric AUC-PR values")
     expected_metric_units = {(anomaly_type, score) for anomaly_type in ANOMALY_TYPES for score in SCORE_NAMES}
     metric_units = list(zip(metrics.get("anomaly_type", pd.Series(dtype=str)), metrics.get("score", pd.Series(dtype=str))))
     if set(metric_units) != expected_metric_units or len(set(metric_units)) != len(metric_units):
