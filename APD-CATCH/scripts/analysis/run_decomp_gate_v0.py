@@ -5,13 +5,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import platform
 import random
-import subprocess
 import sys
-import time
-from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -36,9 +31,6 @@ from scripts.analysis.decomp_gate_v0_data import (
     precompute_anomaly_events,
     split_training_validation,
 )
-from ts_benchmark.baselines.catch.CATCH import CATCH
-from ts_benchmark.baselines.catch.CATCH import DEFAULT_TRANSFORMER_BASED_HYPER_PARAMS
-from ts_benchmark.baselines.decomp_catch.scoring import CATCHDecompositionScorer
 
 
 CATCH_CONFIG = {
@@ -102,129 +94,12 @@ def set_training_seed(seed: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--output-root",
-        type=Path,
-        default=REPO_ROOT / "result" / "decomposition_study_v0",
+    parser.parse_args()
+    raise SystemExit(
+        "The serial Gate v0 runner is retired. Run one immutable seed shard with "
+        "scripts/analysis/run_decomp_gate_v0_seed.py, then use "
+        "scripts/analysis/finalize_decomp_gate_v0.py."
     )
-    parser.add_argument("--run-id", default=None)
-    parser.add_argument("--device", choices=("cpu",), default="cpu")
-    args = parser.parse_args()
-
-    run_id = args.run_id or _default_run_id()
-    run_directory = create_run_directory(args.output_root, run_id)
-    for directory in (run_directory / "checkpoints", run_directory / "scores"):
-        directory.mkdir()
-
-    # These inputs are frozen before any model training or scoring begins.
-    baselines = {seed: generate_test_baseline(seed) for seed in TRAIN_SEEDS}
-    events_by_seed = {seed: precompute_anomaly_events(seed) for seed in TRAIN_SEEDS}
-    manifest = _initial_manifest(
-        run_id,
-        args.device,
-        normal_test_baseline_hashes={str(seed): baseline.baseline_hash for seed, baseline in baselines.items()},
-        anomaly_events={str(seed): events for seed, events in events_by_seed.items()},
-    )
-    _write_json(run_directory / "manifest.json", manifest)
-    _write_json(
-        run_directory / "config.json",
-        {
-            "catch_overrides": CATCH_CONFIG,
-            "catch_original_defaults": DEFAULT_TRANSFORMER_BASED_HYPER_PARAMS,
-            "generator": fixed_generator_parameters(),
-            "moving_average_window": 15,
-            "bootstrap": {"seed": BOOTSTRAP_SEED, "samples": BOOTSTRAP_SAMPLES},
-        },
-    )
-    log_path = run_directory / "run.log"
-    metrics_rows: List[Dict[str, Any]] = []
-    branch_rows: List[Dict[str, Any]] = []
-    checkpoint_records: List[Dict[str, Any]] = []
-    normalization_records: Dict[str, Dict[str, Any]] = {}
-
-    try:
-        with log_path.open("w", encoding="utf-8") as log_file:
-            for seed in TRAIN_SEEDS:
-                _log(log_file, f"seed={seed}: generating fixed normal data")
-                set_training_seed(seed)
-                train_series = generate_training_series(seed)
-                train_core, validation = split_training_validation(train_series)
-                baseline = baselines[seed]
-                events = events_by_seed[seed]
-                train_std = train_series.frame.to_numpy().std(axis=0)
-
-                _log(log_file, f"seed={seed}: one original CATCH training run")
-                detector = CATCH(**CATCH_CONFIG)
-                detector.device = torch.device(args.device)
-                with redirect_stdout(log_file), redirect_stderr(log_file):
-                    detector.detect_fit(train_series.frame, baseline.frame)
-
-                checkpoint = detector.early_stopping.check_point
-                checkpoint_path = run_directory / "checkpoints" / f"seed_{seed}" / "checkpoint.pt"
-                checkpoint_path.parent.mkdir()
-                torch.save(checkpoint, checkpoint_path)
-                checkpoint_hash = _sha256_file(checkpoint_path)
-                checkpoint_records.append(
-                    {
-                        "seed": seed,
-                        "path": str(checkpoint_path.relative_to(run_directory)),
-                        "sha256": checkpoint_hash,
-                        "parameter_count": int(sum(parameter.numel() for parameter in detector.model.parameters())),
-                    }
-                )
-
-                scorer = CATCHDecompositionScorer(detector)
-                normalization_stats = scorer.fit_normalization_stats(
-                    validation, source_name="validation", scoring_seed=SCORING_SEED
-                )
-                _write_json(run_directory / f"normalization_stats_seed_{seed}.json", normalization_stats)
-                normalization_records[str(seed)] = normalization_stats
-
-                for anomaly_type in ANOMALY_TYPES:
-                    test_frame, labels = inject_anomaly(
-                        baseline, train_std, anomaly_type, events, seed
-                    )
-                    result = scorer.score_dataframe(
-                        test_frame,
-                        normalization_stats=normalization_stats,
-                        scoring_seed=SCORING_SEED,
-                    )
-                    aligned_labels = labels[: result["scored_length"]]
-                    if len(aligned_labels) != len(result["time_index"]):
-                        raise RuntimeError("labels and scorer time index are not aligned")
-                    _save_scores(
-                        run_directory / "scores" / f"seed_{seed}_{anomaly_type}.npz",
-                        result,
-                        aligned_labels,
-                    )
-                    rows, branch = _evaluate_scores(
-                        seed, anomaly_type, aligned_labels, result, normalization_stats
-                    )
-                    metrics_rows.extend(rows)
-                    branch_rows.append(branch)
-
-        metrics = pd.DataFrame(metrics_rows)
-        branch_matrix = pd.DataFrame(branch_rows)
-        metrics.to_csv(run_directory / "metrics_by_seed_type.csv", index=False)
-        branch_matrix.to_csv(run_directory / "branch_response_matrix.csv", index=False)
-        bootstrap = _bootstrap_from_metrics(metrics)
-        _write_json(run_directory / "bootstrap.json", bootstrap)
-        gate = _gate_decision(branch_matrix, bootstrap)
-        _write_json(run_directory / "gate_decision.json", gate)
-        _write_json(run_directory / "checkpoint.sha256", {"checkpoints": checkpoint_records})
-        _write_json(run_directory / "normalization_stats.json", {"by_seed": normalization_records})
-        manifest["status"] = "completed"
-        manifest["checkpoints"] = checkpoint_records
-        manifest["gate_decision"] = gate["decision"]
-        _write_json(run_directory / "manifest.json", manifest)
-        _write_run_report(run_directory, metrics, branch_matrix, bootstrap, gate)
-        print(f"run_id: {run_id}")
-        print(f"result_dir: {run_directory}")
-        print(f"gate_decision: {gate['decision']}")
-    except Exception:
-        manifest["status"] = "failed"
-        _write_json(run_directory / "manifest.json", manifest)
-        raise
 
 
 def _evaluate_scores(
@@ -290,17 +165,44 @@ def _bootstrap_from_metrics(metrics: pd.DataFrame) -> Dict[str, Any]:
     return bootstrap_fusion_delta(deltas, seed=BOOTSTRAP_SEED)
 
 
-def _gate_decision(branch: pd.DataFrame, bootstrap: Dict[str, Any]) -> Dict[str, Any]:
-    evaluable = branch[branch["anomaly_points"] >= 10]
-    if evaluable.empty:
-        statuses = {
+def _not_evaluable_gate(reasons: Sequence[str]) -> Dict[str, Any]:
+    return {
+        "decision": "GATE_NOT_EVALUABLE",
+        "conditions": {
             "condition_1_component_ranking_divergence": "NOT_EVALUABLE",
             "condition_2_different_branch_response": "NOT_EVALUABLE",
             "condition_3_component_discovers_original_low_rank": "NOT_EVALUABLE",
             "condition_4_equal_fusion_noninferior": "NOT_EVALUABLE",
             "condition_5_failure_scope_applied": "NOT_EVALUABLE",
-        }
-        return {"decision": "GATE_FAILED", "conditions": statuses, "bootstrap": bootstrap}
+        },
+        "not_evaluable_reasons": list(reasons),
+    }
+
+
+def _gate_decision(branch: pd.DataFrame, bootstrap: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    required_units = {(seed, anomaly_type) for seed in TRAIN_SEEDS for anomaly_type in ANOMALY_TYPES}
+    required_columns = {
+        "seed", "anomaly_type", "anomaly_points", "slow_fast_anomaly_spearman",
+        "slow_auc_pr", "fast_auc_pr", "original_top_k_out_component_top_k_in",
+    }
+    if not required_columns.issubset(branch.columns):
+        return _not_evaluable_gate(["branch response matrix is missing required columns"])
+    units = list(zip(branch["seed"], branch["anomaly_type"]))
+    if len(units) != 18 or set(units) != required_units or len(set(units)) != len(units):
+        return _not_evaluable_gate(["expected exactly 18 unique pre-registered seed-category units"])
+    if bootstrap is None:
+        return _not_evaluable_gate(["bootstrap was not executed for a complete unit set"])
+    if (
+        bootstrap.get("unit_count") != 18
+        or bootstrap.get("seed") != BOOTSTRAP_SEED
+        or bootstrap.get("resamples") != BOOTSTRAP_SAMPLES
+        or "one_sided_95_lower_bound" not in bootstrap
+    ):
+        return _not_evaluable_gate(["bootstrap metadata is incomplete or inconsistent"])
+
+    evaluable = branch[branch["anomaly_points"] >= 10]
+    if len(evaluable) != 18:
+        return _not_evaluable_gate(["one or more pre-registered units has fewer than 10 anomaly points"])
 
     condition_1 = "FAIL" if bool((evaluable["slow_fast_anomaly_spearman"] >= 0.98).all()) else "PASS"
     slow_wins = bool(((evaluable["slow_auc_pr"] - evaluable["fast_auc_pr"]) >= 0.01).any())
@@ -323,69 +225,6 @@ def _gate_decision(branch: pd.DataFrame, bootstrap: Dict[str, Any]) -> Dict[str,
     }
 
 
-def _initial_manifest(
-    run_id: str,
-    device: str,
-    normal_test_baseline_hashes: Dict[str, str],
-    anomaly_events: Dict[str, Dict[str, object]],
-) -> Dict[str, Any]:
-    return {
-        "experiment": "decomp_score_gate_v0",
-        "run_id": run_id,
-        "status": "running",
-        "git_commit": _git_output("rev-parse", "HEAD"),
-        "dirty_working_tree": _git_output("status", "--porcelain=v1"),
-        "train_seeds": list(TRAIN_SEEDS),
-        "scoring_seed": SCORING_SEED,
-        "catch_config": CATCH_CONFIG,
-        "moving_average_window": 15,
-        "device": device,
-        "versions": {
-            "python": platform.python_version(),
-            "numpy": np.__version__,
-            "pytorch": torch.__version__,
-            "cuda_runtime": torch.version.cuda,
-            "cuda_available": torch.cuda.is_available(),
-        },
-        "generator_parameters": fixed_generator_parameters(),
-        "normal_test_baseline_hashes": normal_test_baseline_hashes,
-        "anomaly_events": anomaly_events,
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-def _save_scores(path: Path, result: Dict[str, Any], labels: np.ndarray) -> None:
-    np.savez_compressed(
-        path,
-        labels=labels,
-        time_index=result["time_index"],
-        **{name: result[name] for name in SCORE_NAMES},
-    )
-
-
-def _write_run_report(
-    run_directory: Path,
-    metrics: pd.DataFrame,
-    branch: pd.DataFrame,
-    bootstrap: Dict[str, Any],
-    gate: Dict[str, Any],
-) -> None:
-    lines = [
-        "# Decomposition Score Gate v0 Run Report",
-        "",
-        f"Run: `{run_directory.name}`",
-        f"Decision: `{gate['decision']}`",
-        "",
-        "## Conditions",
-        "",
-    ]
-    lines.extend(f"- `{name}`: `{status}`" for name, status in gate["conditions"].items())
-    lines.extend(["", "## Bootstrap", "", "```json", json.dumps(bootstrap, indent=2), "```", "", "## Metrics", "", "```csv"])
-    lines.append(metrics.to_csv(index=False).rstrip())
-    lines.extend(["```", "", "## Branch Response Matrix", "", "```csv", branch.to_csv(index=False).rstrip(), "```", ""])
-    (run_directory / "gate_report.md").write_text("\n".join(lines), encoding="utf-8")
-
-
 def _spearman(left: np.ndarray, right: np.ndarray) -> Optional[float]:
     if len(left) < 2 or np.all(left == left[0]) or np.all(right == right[0]):
         return None
@@ -399,42 +238,6 @@ def _top_k_mask(scores: np.ndarray, k: int) -> np.ndarray:
     indices = np.argpartition(-scores, k - 1)[:k]
     mask[indices] = True
     return mask
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for block in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _git_output(*args: str) -> str:
-    completed = subprocess.run(
-        ["git", *args], cwd=REPO_ROOT.parent, check=True, capture_output=True, text=True
-    )
-    return completed.stdout.strip()
-
-
-def _write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, default=_json_default) + "\n", encoding="utf-8")
-
-
-def _json_default(value: Any) -> Any:
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Path):
-        return str(value)
-    raise TypeError(f"cannot encode {type(value)!r}")
-
-
-def _log(handle: Any, message: str) -> None:
-    handle.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
-    handle.flush()
-
-
-def _default_run_id() -> str:
-    return "decomp_gate_v0_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 if __name__ == "__main__":

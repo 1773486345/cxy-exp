@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from scripts.analysis.decomp_gate_v0_data import (
     ANOMALY_TYPES,
@@ -21,9 +23,14 @@ from scripts.analysis.decomp_gate_v0_data import (
     split_training_validation,
 )
 from scripts.analysis.run_decomp_gate_v0 import (
+    BOOTSTRAP_SAMPLES,
+    BOOTSTRAP_SEED,
+    _gate_decision,
     bootstrap_fusion_delta,
     create_run_directory,
 )
+from scripts.analysis.finalize_decomp_gate_v0 import finalize
+from scripts.analysis.decomp_gate_v0_runtime import atomic_write_json
 
 
 class DecompGateV0DataTest(unittest.TestCase):
@@ -109,6 +116,59 @@ class DecompGateV0DataTest(unittest.TestCase):
         self.assertEqual(parameters["anomaly_specs"]["level_shift"]["multiplier"], 2.5)
         self.assertEqual(parameters["anomaly_specs"]["spike"]["count"], 12)
         self.assertEqual(parameters["anomaly_specs"]["periodic_phase"]["phase_shift"], np.pi / 2)
+
+    def test_gate_empty_or_incomplete_is_not_evaluable(self):
+        empty = _gate_decision(pd.DataFrame(), None)
+        self.assertEqual(empty["decision"], "GATE_NOT_EVALUABLE")
+        self.assertTrue(all(value == "NOT_EVALUABLE" for value in empty["conditions"].values()))
+        rows = self._complete_branch_rows()[:-1]
+        incomplete = _gate_decision(pd.DataFrame(rows), None)
+        self.assertEqual(incomplete["decision"], "GATE_NOT_EVALUABLE")
+
+    def test_complete_units_require_complete_bootstrap_before_gate_status(self):
+        branch = pd.DataFrame(self._complete_branch_rows())
+        not_bootstrapped = _gate_decision(branch, None)
+        self.assertEqual(not_bootstrapped["decision"], "GATE_NOT_EVALUABLE")
+        bootstrap = {
+            "unit_count": 18,
+            "seed": BOOTSTRAP_SEED,
+            "resamples": BOOTSTRAP_SAMPLES,
+            "one_sided_95_lower_bound": -0.02,
+        }
+        complete = _gate_decision(branch, bootstrap)
+        self.assertIn(complete["decision"], {"GATE_PASSED", "GATE_FAILED"})
+
+    def test_finalizer_rejects_incomplete_shards_without_bootstrap(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            study = root / "study"
+            (study / "shards").mkdir(parents=True)
+            atomic_write_json(study / "study_manifest.json", {"study_id": "study"})
+            result = finalize(
+                "study",
+                {20260717: "a", 20260718: "b", 20260719: "c"},
+                root,
+            )
+            self.assertEqual(result["decision"], "GATE_NOT_EVALUABLE")
+            self.assertFalse((study / "bootstrap.json").exists())
+            with (study / "gate_decision.json").open() as handle:
+                self.assertEqual(json.load(handle)["decision"], "GATE_NOT_EVALUABLE")
+
+    @staticmethod
+    def _complete_branch_rows():
+        return [
+            {
+                "seed": seed,
+                "anomaly_type": anomaly_type,
+                "anomaly_points": 12,
+                "slow_fast_anomaly_spearman": 0.0,
+                "slow_auc_pr": 0.8,
+                "fast_auc_pr": 0.8,
+                "original_top_k_out_component_top_k_in": 1,
+            }
+            for seed in TRAIN_SEEDS
+            for anomaly_type in ANOMALY_TYPES
+        ]
 
 
 if __name__ == "__main__":
