@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import torch
 
 from ts_benchmark.baselines.msd_catch.MSDCATCH import MSDCATCH
@@ -64,15 +65,27 @@ def test_msd_catch_decomposition_forward_backward_and_scores():
         name: (0.0, 1.0)
         for name in ("total_score", "trend_score", "residual_score")
     }
+    detector.reference_delta_thresholds = {
+        "trend_delta_threshold": 0.0,
+        "residual_delta_threshold": 0.0,
+    }
     scores = detector._fuse_scores(
         {
             name: values.detach().cpu().numpy().reshape(-1)
             for name, values in detector._score_batch(x).items()
         }
     )
-    assert set(scores) == {"total_score", "trend_score", "residual_score", "fusion_score"}
+    assert set(scores) == {
+        "total_score",
+        "trend_score",
+        "residual_score",
+        "fixed_fusion_score",
+        "anchored_fusion_score",
+        "fusion_score",
+    }
     assert len({len(values) for values in scores.values()}) == 1
     assert all(torch.isfinite(torch.as_tensor(values)).all() for values in scores.values())
+    assert np.all(scores["anchored_fusion_score"] >= scores["total_score"])
 
 
 def test_original_catch_directory_is_unmodified():

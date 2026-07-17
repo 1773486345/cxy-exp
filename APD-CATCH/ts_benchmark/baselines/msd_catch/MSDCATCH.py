@@ -61,6 +61,8 @@ class MSDCATCH:
         self.model = None
         self.last_scores: Dict[str, np.ndarray] = {}
         self.reference_score_stats: Dict[str, Tuple[float, float]] = {}
+        self.reference_delta_thresholds: Dict[str, float] = {}
+        self.last_bonus_masks: Dict[str, np.ndarray] = {}
         self.trainable_parameters = 0
         self.training_seconds = 0.0
 
@@ -251,7 +253,9 @@ class MSDCATCH:
 
         self.training_seconds = time.time() - start
         self.model.load_state_dict(self.early_stopping.check_point)
-        self.reference_score_stats = self._fit_score_statistics(self.reference_data_loader)
+        reference_raw_scores = self._raw_scores(self.reference_data_loader)
+        self.reference_score_stats = self._fit_score_statistics(reference_raw_scores)
+        self.reference_delta_thresholds = self._fit_delta_thresholds(reference_raw_scores)
 
     @torch.no_grad()
     def _score_batch(self, input_batch: torch.Tensor) -> Dict[str, torch.Tensor]:
@@ -285,8 +289,9 @@ class MSDCATCH:
             for name, values in chunks.items()
         }
 
-    def _fit_score_statistics(self, data_loader) -> Dict[str, Tuple[float, float]]:
-        raw_scores = self._raw_scores(data_loader)
+    def _fit_score_statistics(
+        self, raw_scores: Dict[str, np.ndarray]
+    ) -> Dict[str, Tuple[float, float]]:
         statistics = {}
         for name, values in raw_scores.items():
             if not len(values):
@@ -296,17 +301,60 @@ class MSDCATCH:
             statistics[name] = (mean, std)
         return statistics
 
-    def _fuse_scores(self, raw_scores: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def _normalized_scores(self, raw_scores: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
         if not self.reference_score_stats:
             raise ValueError("score normalization statistics are unavailable; call detect_fit first")
-        normalized = []
+        normalized = {}
         for name in ("total_score", "trend_score", "residual_score"):
             mean, std = self.reference_score_stats[name]
-            normalized.append((raw_scores[name] - mean) / std)
-        fused = np.mean(np.stack(normalized, axis=0), axis=0)
-        result = {**raw_scores, "fusion_score": fused}
+            normalized[name] = (raw_scores[name] - mean) / std
+        return normalized
+
+    def _fit_delta_thresholds(self, raw_scores: Dict[str, np.ndarray]) -> Dict[str, float]:
+        normalized = self._normalized_scores(raw_scores)
+        return {
+            "trend_delta_threshold": float(
+                np.quantile(normalized["trend_score"] - normalized["total_score"], 0.95)
+            ),
+            "residual_delta_threshold": float(
+                np.quantile(
+                    normalized["residual_score"] - normalized["total_score"], 0.95
+                )
+            ),
+        }
+
+    def _fuse_scores(self, raw_scores: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        normalized = self._normalized_scores(raw_scores)
+        if not self.reference_delta_thresholds:
+            raise ValueError("branch delta thresholds are unavailable; call detect_fit first")
+        total_z = normalized["total_score"]
+        trend_z = normalized["trend_score"]
+        residual_z = normalized["residual_score"]
+        fixed_fusion = (total_z + trend_z + residual_z) / 3.0
+        trend_bonus = np.maximum(
+            trend_z - total_z - self.reference_delta_thresholds["trend_delta_threshold"],
+            0.0,
+        )
+        residual_bonus = np.maximum(
+            residual_z
+            - total_z
+            - self.reference_delta_thresholds["residual_delta_threshold"],
+            0.0,
+        )
+        anchored_fusion = total_z + 0.25 * trend_bonus + 0.25 * residual_bonus
+        self.last_bonus_masks = {
+            "trend_bonus_nonzero": trend_bonus > 0.0,
+            "residual_bonus_nonzero": residual_bonus > 0.0,
+        }
+        result = {
+            **raw_scores,
+            "fixed_fusion_score": fixed_fusion,
+            "anchored_fusion_score": anchored_fusion,
+            # Compatibility alias for callers of the initial fixed-fusion adapter.
+            "fusion_score": fixed_fusion,
+        }
         lengths = {len(values) for values in result.values()}
-        if len(lengths) != 1 or not np.isfinite(fused).all():
+        if len(lengths) != 1 or not np.isfinite(anchored_fusion).all():
             raise FloatingPointError("MSD-CATCH score vectors are inconsistent or non-finite")
         return result
 
@@ -324,13 +372,11 @@ class MSDCATCH:
             mode="thre",
         )
         self.last_scores = self._fuse_scores(self._raw_scores(test_loader))
-        # The benchmark score protocol consumes one score vector. Fusion is the
-        # predefined primary result; the other vectors remain available here.
-        return self.last_scores["fusion_score"], self.last_scores["fusion_score"]
+        return self.last_scores["anchored_fusion_score"], self.last_scores["anchored_fusion_score"]
 
     def detect_label(self, test: pd.DataFrame):
         fusion_score, _ = self.detect_score(test)
-        reference_fusion = self._fuse_scores(self._raw_scores(self.reference_data_loader))["fusion_score"]
+        reference_fusion = self._fuse_scores(self._raw_scores(self.reference_data_loader))["anchored_fusion_score"]
         ratios = self.config.anomaly_ratio
         if not isinstance(ratios, list):
             ratios = [ratios]

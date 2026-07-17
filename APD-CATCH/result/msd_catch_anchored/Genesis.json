@@ -1,0 +1,48 @@
+{
+  "bonus_rates": {
+    "residual_bonus_nonzero": {
+      "all_rate": 0.021163601775523146,
+      "anomaly_rate": 0.0,
+      "normal_rate": 0.021247811554989653
+    },
+    "trend_bonus_nonzero": {
+      "all_rate": 0.03527266962587191,
+      "anomaly_rate": 0.0,
+      "normal_rate": 0.03541301925831609
+    }
+  },
+  "dataset": "Genesis",
+  "delta_thresholds": {
+    "residual_delta_threshold": 0.33914452493190755,
+    "trend_delta_threshold": 0.683198583126067
+  },
+  "fit_seconds": 4843.785409927368,
+  "parameters": 460606419,
+  "score_seconds": 16.38681983947754,
+  "scores": {
+    "anchored_fusion_score": {
+      "auc_pr": 0.31074389268379027,
+      "auc_roc": 0.9862629317205157
+    },
+    "fixed_fusion_score": {
+      "auc_pr": 0.24610066401795627,
+      "auc_roc": 0.9711952888747414
+    },
+    "fusion_score": {
+      "auc_pr": 0.24610066401795627,
+      "auc_roc": 0.9711952888747414
+    },
+    "residual_score": {
+      "auc_pr": 0.09084598831988004,
+      "auc_roc": 0.9150135285691549
+    },
+    "total_score": {
+      "auc_pr": 0.31076939487939076,
+      "auc_roc": 0.9862788476842272
+    },
+    "trend_score": {
+      "auc_pr": 0.09844616586826561,
+      "auc_roc": 0.9692599076874105
+    }
+  }
+}

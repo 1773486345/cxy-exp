@@ -6,6 +6,7 @@ output_temp/
 __pycache__/
 *.pyc
 .env
+*.pt
 *.pem
 .vscode/
 .DS_Store

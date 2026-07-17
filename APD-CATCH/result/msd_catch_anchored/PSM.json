@@ -1,0 +1,48 @@
+{
+  "bonus_rates": {
+    "residual_bonus_nonzero": {
+      "all_rate": 0.054678339272093895,
+      "anomaly_rate": 0.10659940117304459,
+      "normal_rate": 0.03473053892215569
+    },
+    "trend_bonus_nonzero": {
+      "all_rate": 0.04970344144533874,
+      "anomaly_rate": 0.05692957630942127,
+      "normal_rate": 0.04692719823510873
+    }
+  },
+  "dataset": "PSM",
+  "delta_thresholds": {
+    "residual_delta_threshold": 0.15984896570444102,
+    "trend_delta_threshold": 0.7312085658311842
+  },
+  "fit_seconds": 3033.1106634140015,
+  "parameters": 7551763,
+  "score_seconds": 14.200955152511597,
+  "scores": {
+    "anchored_fusion_score": {
+      "auc_pr": 0.43138587623636937,
+      "auc_roc": 0.6492259159350924
+    },
+    "fixed_fusion_score": {
+      "auc_pr": 0.43308431908289635,
+      "auc_roc": 0.6516681705915235
+    },
+    "fusion_score": {
+      "auc_pr": 0.43308431908289635,
+      "auc_roc": 0.6516681705915235
+    },
+    "residual_score": {
+      "auc_pr": 0.42316720574314715,
+      "auc_roc": 0.639642577318083
+    },
+    "total_score": {
+      "auc_pr": 0.43044059429158626,
+      "auc_roc": 0.6472615932027586
+    },
+    "trend_score": {
+      "auc_pr": 0.3770075992729904,
+      "auc_roc": 0.5995831018049127
+    }
+  }
+}
