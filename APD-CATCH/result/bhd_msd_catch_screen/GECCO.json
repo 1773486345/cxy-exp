@@ -1,0 +1,105 @@
+{
+  "config": {
+    "Mlr": 1e-05,
+    "anomaly_ratio": 2,
+    "auxi_lambda": 0.3,
+    "batch_size": 128,
+    "cf_dim": 32,
+    "d_ff": 128,
+    "d_model": 128,
+    "dc_lambda": 0.1,
+    "dropout": 0.2,
+    "e_layers": 1,
+    "head_dim": 32,
+    "head_dropout": 0.1,
+    "lr": 1e-05,
+    "n_heads": 16,
+    "num_epochs": 3,
+    "patch_size": 16,
+    "patch_stride": 8,
+    "score_lambda": 0.05,
+    "seq_len": 192,
+    "temperature": 0.07
+  },
+  "data": {
+    "anomaly_rate": 0.010539842046750696,
+    "anomaly_segments": 22,
+    "test_length": 69261,
+    "train_length": 69260,
+    "variables": 9
+  },
+  "dataset": "GECCO",
+  "fit_seconds": 2888.5730307102203,
+  "module_parameters": {
+    "low_rank_exchange": 66688,
+    "other": 0,
+    "raw_adapter": 653,
+    "raw_gate": 193,
+    "residual_adapter": 16672,
+    "residual_block_decoder": 85795,
+    "scale_gate": 115,
+    "shared_encoder": 85376,
+    "total": 357959,
+    "trend_adapter": 16672,
+    "trend_block_decoder": 85795
+  },
+  "parameters": 357959,
+  "peak_gpu_memory_bytes": 1481192448,
+  "primary_score": "total_score",
+  "raw_gate": {
+    "anomaly_mean": 0.06638763099908829,
+    "mean": 0.06332278996706009,
+    "normal_mean": 0.0632900670170784,
+    "per_variable_mean": [
+      0.0625889003276825,
+      0.06504864990711212,
+      0.06295733153820038,
+      0.06296565383672714,
+      0.06408604234457016,
+      0.06329946219921112,
+      0.06302301585674286,
+      0.06299144774675369,
+      0.06294717639684677
+    ],
+    "std": 0.003324712859466672
+  },
+  "scale_entropy": {
+    "mean": 0.9803345203399658,
+    "per_variable_mean": [
+      0.9455434679985046,
+      0.9949514865875244,
+      0.9961249232292175,
+      0.9929184317588806,
+      0.9593307971954346,
+      0.9824383854866028,
+      0.9706632494926453,
+      0.9858722686767578,
+      0.996327817440033
+    ]
+  },
+  "score_seconds": 25.486645936965942,
+  "scored_length_before_padding": 69120,
+  "scores": {
+    "decomp_score": {
+      "auc_pr": 0.472538265920676,
+      "auc_roc": 0.9634237920125338
+    },
+    "raw_correction_score": {
+      "auc_pr": 0.31468649986720504,
+      "auc_roc": 0.6315963198736378
+    },
+    "residual_score": {
+      "auc_pr": 0.2911038264122791,
+      "auc_roc": 0.9571034046585857
+    },
+    "total_score": {
+      "auc_pr": 0.47224694582122906,
+      "auc_roc": 0.9634893257985637
+    },
+    "trend_score": {
+      "auc_pr": 0.40968061157891184,
+      "auc_roc": 0.9664698887394825
+    }
+  },
+  "seed": 2021
+}
