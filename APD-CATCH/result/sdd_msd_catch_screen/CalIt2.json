@@ -1,0 +1,89 @@
+{
+  "config": {
+    "Mlr": 1e-05,
+    "auxi_lambda": 0.1,
+    "batch_size": 128,
+    "cf_dim": 128,
+    "d_ff": 128,
+    "d_model": 128,
+    "dc_lambda": 0.5,
+    "e_layers": 2,
+    "head_dim": 32,
+    "inference_patch_size": 16,
+    "lr": 0.0001,
+    "n_heads": 8,
+    "num_epochs": 10,
+    "patch_size": 16,
+    "patch_stride": 16,
+    "score_lambda": 0.5,
+    "seq_len": 192,
+    "temperature": 0.07
+  },
+  "data": {
+    "anomaly_rate": 0.029365079365079365,
+    "anomaly_segments": 13,
+    "test_length": 2520,
+    "train_length": 2520,
+    "variables": 2
+  },
+  "dataset": "CalIt2",
+  "fit_seconds": 248.6965389251709,
+  "module_parameters": {
+    "low_rank_exchange": 66688,
+    "other": 0,
+    "raw_adapter": 170,
+    "raw_gate": 193,
+    "residual_adapter": 16672,
+    "residual_decoder": 2964544,
+    "scale_gate": 115,
+    "shared_encoder": 368320,
+    "total": 6397918,
+    "trend_adapter": 16672,
+    "trend_decoder": 2964544
+  },
+  "parameters": 6397918,
+  "peak_gpu_memory_bytes": 390453248,
+  "primary_score": "total_score",
+  "raw_gate": {
+    "anomaly_mean": 0.0633125975728035,
+    "mean": 0.06320222467184067,
+    "normal_mean": 0.06319885700941086,
+    "per_variable_mean": [
+      0.06316988170146942,
+      0.0632343590259552
+    ],
+    "std": 0.001311900676228106
+  },
+  "scale_entropy": {
+    "mean": 0.9910922646522522,
+    "per_variable_mean": [
+      0.9913775324821472,
+      0.990815281867981
+    ]
+  },
+  "score_seconds": 9.397696018218994,
+  "scored_length_before_padding": 2496,
+  "scores": {
+    "decomp_score": {
+      "auc_pr": 0.0972439749451979,
+      "auc_roc": 0.8222055866168703
+    },
+    "raw_correction_score": {
+      "auc_pr": 0.01877407955031133,
+      "auc_roc": 0.250928156283839
+    },
+    "residual_score": {
+      "auc_pr": 0.09633423198290142,
+      "auc_roc": 0.8166062628450201
+    },
+    "total_score": {
+      "auc_pr": 0.097294422803482,
+      "auc_roc": 0.8222856953437494
+    },
+    "trend_score": {
+      "auc_pr": 0.05485583256509437,
+      "auc_roc": 0.6673719917791873
+    }
+  },
+  "seed": 2021
+}
