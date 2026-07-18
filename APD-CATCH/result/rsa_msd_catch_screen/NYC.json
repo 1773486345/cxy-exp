@@ -1,0 +1,87 @@
+{
+  "config": {
+    "Mlr": 1e-05,
+    "batch_size": 128,
+    "cf_dim": 64,
+    "d_ff": 256,
+    "d_model": 256,
+    "e_layers": 3,
+    "head_dim": 64,
+    "inference_patch_size": 32,
+    "inference_patch_stride": 1,
+    "lr": 0.0001,
+    "n_heads": 2,
+    "num_epochs": 2,
+    "patch_size": 16,
+    "patch_stride": 8,
+    "seq_len": 192,
+    "temperature": 0.07
+  },
+  "data": {
+    "anomaly_rate": 0.022418478260869564,
+    "anomaly_segments": 1,
+    "test_length": 4416,
+    "train_length": 13104,
+    "variables": 3
+  },
+  "dataset": "NYC",
+  "fit_seconds": 419.99856758117676,
+  "module_parameters": {
+    "decomposition_scale_gate": 115,
+    "low_rank_exchange": 133248,
+    "other": 0,
+    "raw_adapter": 239,
+    "raw_gate_network": 193,
+    "residual_adapter": 33312,
+    "shared_catch_backbone": 837619936,
+    "total": 837820355,
+    "trend_adapter": 33312
+  },
+  "parameters": 837820355,
+  "peak_gpu_memory_bytes": 20163266560,
+  "primary_score": "total_score",
+  "raw_gate": {
+    "anomaly_mean": 0.06552372872829437,
+    "mean": 0.0656857118010521,
+    "normal_mean": 0.06568942964076996,
+    "per_variable_mean": [
+      0.06856685131788254,
+      0.066233329474926,
+      0.062258582562208176
+    ],
+    "std": 0.0027459573466330767
+  },
+  "scale_entropy": {
+    "mean": 0.9920416474342346,
+    "per_variable_mean": [
+      0.9918681979179382,
+      0.9919732213020325,
+      0.9922551512718201
+    ]
+  },
+  "score_seconds": 6.8018083572387695,
+  "scored_length_before_padding": 4416,
+  "scores": {
+    "decomp_score": {
+      "auc_pr": 0.06683386856821186,
+      "auc_roc": 0.7797362085061877
+    },
+    "raw_correction_score": {
+      "auc_pr": 0.021073828647450363,
+      "auc_roc": 0.4978812914879628
+    },
+    "residual_score": {
+      "auc_pr": 0.06022230268418394,
+      "auc_roc": 0.7394187415035226
+    },
+    "total_score": {
+      "auc_pr": 0.06703646431421281,
+      "auc_roc": 0.7807189336028808
+    },
+    "trend_score": {
+      "auc_pr": 0.02082752606730391,
+      "auc_roc": 0.5049498927191769
+    }
+  },
+  "seed": 2021
+}
