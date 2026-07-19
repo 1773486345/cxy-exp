@@ -16,6 +16,7 @@ from ts_benchmark.baselines.sdd_msd_catch.models.SDDMSDCATCH_model import (
 from ts_benchmark.baselines.bhd_msd_catch.BHDMSDCATCH import BHDMSDCATCH
 from ts_benchmark.baselines.bhd_msd_catch.models.BHDMSDCATCH_model import (
     BHDMSDCATCHModel,
+    BHDNonFiniteTensorError,
     BlockwiseDecoder,
     StableDynamicalContrastiveLoss,
 )
@@ -167,3 +168,29 @@ def test_bhd_contrastive_loss_handles_zero_norm_tokens():
     loss.backward()
     assert torch.isfinite(loss)
     assert torch.isfinite(scores.grad).all()
+
+
+def test_bhd_contrastive_loss_reports_first_nonfinite_tensor():
+    loss_module = StableDynamicalContrastiveLoss(temperature=0.1, k=0.3)
+    loss_module.set_diagnostic_context(
+        {"branch": "residual", "layer": 0, "epoch": 2, "global_step": 11, "batch_index": 3}
+    )
+    scores = torch.zeros(2, 1, 3, 3)
+    scores[0, 0, 0, 0] = float("nan")
+    norm_matrix = torch.ones_like(scores)
+    mask = torch.eye(3).expand(2, -1, -1)
+    try:
+        loss_module(scores, mask, norm_matrix)
+    except BHDNonFiniteTensorError as error:
+        assert error.diagnostic["branch"] == "residual"
+        assert error.diagnostic["tensor_name"] == "scores"
+        assert error.diagnostic["context"]["global_step"] == 11
+    else:
+        raise AssertionError("expected a BHDNonFiniteTensorError")
+
+
+def test_bhd_model_preserves_contrastive_layer_context():
+    model = BHDMSDCATCHModel(BHDMSDCATCH(**_tiny_config()).config)
+    model.set_diagnostic_context({"epoch": 3, "global_step": 17, "batch_index": 5})
+    assert [loss._diagnostic_context["layer"] for loss in model._contrastive_losses] == [0]
+    assert all(loss._diagnostic_context["global_step"] == 17 for loss in model._contrastive_losses)
