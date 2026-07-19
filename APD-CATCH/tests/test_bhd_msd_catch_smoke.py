@@ -17,6 +17,7 @@ from ts_benchmark.baselines.bhd_msd_catch.BHDMSDCATCH import BHDMSDCATCH
 from ts_benchmark.baselines.bhd_msd_catch.models.BHDMSDCATCH_model import (
     BHDMSDCATCHModel,
     BlockwiseDecoder,
+    StableDynamicalContrastiveLoss,
 )
 
 
@@ -155,3 +156,14 @@ def test_bhd_does_not_modify_existing_baselines():
         check=False,
     )
     assert result.returncode == 0
+
+
+def test_bhd_contrastive_loss_handles_zero_norm_tokens():
+    loss_module = StableDynamicalContrastiveLoss(temperature=0.1, k=0.3)
+    scores = torch.zeros(2, 1, 3, 3, requires_grad=True)
+    norm_matrix = torch.zeros_like(scores)
+    mask = torch.eye(3).expand(2, -1, -1)
+    loss = loss_module(scores, mask, norm_matrix)
+    loss.backward()
+    assert torch.isfinite(loss)
+    assert torch.isfinite(scores.grad).all()

@@ -24,6 +24,31 @@ from ts_benchmark.baselines.sdd_msd_catch.models.SDDMSDCATCH_model import (
 )
 
 
+class StableDynamicalContrastiveLoss(nn.Module):
+    """BHD-local contrastive loss that remains defined for zero-norm tokens."""
+
+    def __init__(self, temperature: float, k: float) -> None:
+        super().__init__()
+        self.temperature = temperature
+        self.k = k
+
+    def forward(
+        self, scores: torch.Tensor, attn_mask: torch.Tensor, norm_matrix: torch.Tensor
+    ) -> torch.Tensor:
+        denominator = norm_matrix.clamp_min(torch.finfo(norm_matrix.dtype).eps)
+        cosine = (scores / denominator).mean(1)
+        pos_scores = torch.exp(cosine / self.temperature) * attn_mask
+        all_scores = torch.exp(cosine / self.temperature)
+        clustering_loss = -torch.log(pos_scores.sum(dim=-1) / all_scores.sum(dim=-1))
+        batch_size = scores.shape[0]
+        n_vars = scores.shape[-1]
+        eye = torch.eye(n_vars, device=attn_mask.device).unsqueeze(0).repeat(batch_size, 1, 1)
+        regular_loss = torch.norm(
+            eye.reshape(batch_size, -1) - attn_mask.reshape(batch_size, -1), p=1, dim=-1
+        ) / (n_vars * (n_vars - 1))
+        return (clustering_loss.mean(1) + self.k * regular_loss).mean()
+
+
 class BlockwiseDecoder(nn.Module):
     """Branch-local patch decoder with overlap-add frequency reconstruction."""
 
@@ -118,6 +143,13 @@ class BHDMSDCATCHModel(nn.Module):
         self.adapter_rank = min(32, max(8, self.feature_dim // 8))
         self.scale_gate = ScaleGate(getattr(configs, "scale_gate_hidden", 16))
         self.shared_encoder = SharedCATCHEncoder(configs)
+        for layer in self.shared_encoder.frequency_transformer.transformer.layers:
+            attention = layer[0].fn
+            original_loss = attention.dynamicalContranstiveLoss
+            attention.dynamicalContranstiveLoss = StableDynamicalContrastiveLoss(
+                temperature=original_loss.temperature,
+                k=original_loss.k,
+            )
         self.low_rank_exchange = LowRankFeatureExchange(self.feature_dim, self.adapter_rank)
         self.trend_adapter = LowRankAdapter(self.feature_dim, self.adapter_rank)
         self.residual_adapter = LowRankAdapter(self.feature_dim, self.adapter_rank)
