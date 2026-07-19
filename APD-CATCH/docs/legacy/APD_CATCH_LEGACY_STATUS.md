@@ -1,6 +1,8 @@
 # APD-CATCH 旧探索线状态
 
-> 状态：**冻结（legacy exploratory line）**。本文件记录 APD-CATCH v1/v2 的范围、结论和保全位置；它们不是后续分解研究的活动主线。
+> 状态：**冻结（legacy exploratory line）**。本文件记录 APD-CATCH v1/v2 的范围、结论和保全位置；它们不属于当前 MSD-CATCH / BHD-MSD-CATCH 主线，代码和结果仅供历史追溯。
+>
+> 当前入口：[APD-CATCH/README.md](../../README.md) 与 [方向 A 研究主文档](../../../tsad_direction_A_pattern_aware_scoring.md)。
 
 ## 保全规则
 
@@ -15,7 +17,7 @@
 
 **已完成的工作。**
 
-- 核心测试、论文数据展开、参数映射和 dry-run 已记录在 `CODE_MODIFICATION_LOG.md`；v1.0 当时记录为 8 项单元测试通过。
+- 核心测试、论文数据展开、参数映射和 dry-run 已记录在 [历史修改日志](./APD_CATCH_MODIFICATION_LOG.md)；v1.0 当时记录为 8 项单元测试通过。
 - 三个种子的合成机制门控已完成：`causal_catch=0.5165`、`fixed=0.5125`、`adaptive=0.5191` 的平均 AP。
 - 单种子真实数据产物保存在 `result/paper_real_v1/workers/genesis/` 与 `result/paper_real_v1/workers/psm/`，每个数据集都有 `causal_catch`、`fixed`、`adaptive` 的 `seed_20261.json` 与 `seed_20261.npz`。
 
@@ -35,7 +37,7 @@
 
 **范围。** v2.0 的三个候选为 `causal_catch`、`state`、`state_scale`。`state` 与 `state_scale` 使用无参数的因果 EMA state，并由 CATCH 编码创新（innovation）；`state_scale` 额外使用 recent innovation scale。三个版本仍属于 past-to-next-point 条件预测与 Gaussian NLL 的探索，而不是原版 CATCH 重构。
 
-**当前结果状态。** `CODE_MODIFICATION_LOG.md` 明确记录 v2 尚无真实数据结果；本次结果目录盘点也未发现 `result/causal_state_catch_v2*` 目录或 v2 的 JSON/NPZ 产物。原计划的 15-task screen 仅保留为旧探索复现实验，不应继续运行。
+**当前结果状态。** [历史修改日志](./APD_CATCH_MODIFICATION_LOG.md) 明确记录 v2 尚无真实数据结果；本次结果目录盘点也未发现 `result/causal_state_catch_v2*` 目录或 v2 的 JSON/NPZ 产物。原计划的 15-task screen 仅保留为旧探索复现实验，不应继续运行。
 
 ## 位置清单
 

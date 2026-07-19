@@ -12,3 +12,18 @@ __pycache__/
 .DS_Store
 Thumbs.db
 APD-CATCH/dataset/
+
+# Tool and package caches
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Python coverage
+.coverage
+htmlcov/
+
+# macOS archive metadata
+**/__MACOSX/
+**/._*
