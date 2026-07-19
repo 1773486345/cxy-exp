@@ -100,6 +100,9 @@ class StableDynamicalContrastiveLoss(nn.Module):
             eye.reshape(batch_size, -1) - attn_mask.reshape(batch_size, -1), p=1, dim=-1
         ) / (n_vars * (n_vars - 1))
         dcloss = (clustering_loss.mean(1) + self.k * regular_loss).mean()
+        if not self._diagnostic_context.get("debug_nonfinite", False):
+            return dcloss
+
         if torch.isfinite(dcloss).all():
             return dcloss
 

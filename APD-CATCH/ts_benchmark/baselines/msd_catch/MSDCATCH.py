@@ -373,13 +373,13 @@ class MSDCATCH:
         return self.last_scores["total_score"], self.last_scores["total_score"]
 
     def detect_label(self, test: pd.DataFrame):
-        fusion_score, _ = self.detect_score(test)
-        reference_fusion = self._fuse_scores(self._raw_scores(self.reference_data_loader))["anchored_fusion_score"]
+        test_total_score, _ = self.detect_score(test)
+        reference_total_score = self._raw_scores(self.reference_data_loader)["total_score"]
         ratios = self.config.anomaly_ratio
         if not isinstance(ratios, list):
             ratios = [ratios]
         predictions = {
-            ratio: (fusion_score > np.percentile(reference_fusion, 100 - ratio)).astype(int)
+            ratio: (test_total_score > np.percentile(reference_total_score, 100 - ratio)).astype(int)
             for ratio in ratios
         }
-        return predictions, fusion_score
+        return predictions, test_total_score

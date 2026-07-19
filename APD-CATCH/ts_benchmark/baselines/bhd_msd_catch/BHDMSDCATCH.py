@@ -44,7 +44,7 @@ class BHDMSDCATCH(SDDMSDCATCH):
         self.auxi_loss = frequency_loss(self.config)
         self._debug_nonfinite = os.environ.get("BHD_MSD_CATCH_DEBUG_NONFINITE") == "1"
         self._runtime_context: Dict[str, Any] = {}
-        self._last_loss_snapshot: Dict[str, Dict[str, float]] = {}
+        self._last_loss_snapshot: Dict[str, Dict[str, float | None]] = {}
 
     def _loss_with_components(
         self,
@@ -67,6 +67,7 @@ class BHDMSDCATCH(SDDMSDCATCH):
     def _raise_first_nonfinite_loss(
         self, outputs: Dict[str, torch.Tensor], components: Dict[str, Dict[str, torch.Tensor]]
     ) -> None:
+        self._last_loss_snapshot = self._component_snapshot(components)
         ordered_tensors = (
             ("trend_dcloss", "trend", outputs["trend_dcloss"]),
             ("residual_dcloss", "residual", outputs["residual_dcloss"]),
@@ -98,7 +99,19 @@ class BHDMSDCATCH(SDDMSDCATCH):
                     }
                 )
 
-    def _loss(self, input_batch: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, float]]:
+    @staticmethod
+    def _component_snapshot(
+        components: Dict[str, Dict[str, torch.Tensor]]
+    ) -> Dict[str, Dict[str, float | None]]:
+        return {
+            branch: {
+                name: float(value.detach().cpu()) if torch.isfinite(value).all() else None
+                for name, value in branch_components.items()
+            }
+            for branch, branch_components in components.items()
+        }
+
+    def _loss(self, input_batch: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         outputs = self.model(input_batch)
         combined_complex = outputs["trend_complex"] + outputs["residual_complex"]
         combined_dcloss = 0.5 * (outputs["trend_dcloss"] + outputs["residual_dcloss"])
@@ -124,23 +137,14 @@ class BHDMSDCATCH(SDDMSDCATCH):
             "residual": residual_components,
             "total": {"loss": loss},
         }
-        self._last_loss_snapshot = {
-            branch: {
-                name: float(value.detach().cpu()) if torch.isfinite(value).all() else None
-                for name, value in branch_components.items()
-            }
-            for branch, branch_components in components.items()
-        }
-        if any(
-            not torch.isfinite(value).all()
-            for branch_components in components.values()
-            for value in branch_components.values()
-        ):
+        if self._debug_nonfinite:
+            self._last_loss_snapshot = self._component_snapshot(components)
+        if not torch.isfinite(loss).all():
             self._raise_first_nonfinite_loss(outputs, components)
         return loss, {
-            "final": float(final_loss.detach().cpu()),
-            "trend": float(trend_loss.detach().cpu()),
-            "residual": float(residual_loss.detach().cpu()),
+            "final": final_loss,
+            "trend": trend_loss,
+            "residual": residual_loss,
         }
 
     @staticmethod
@@ -152,21 +156,23 @@ class BHDMSDCATCH(SDDMSDCATCH):
         return result.stdout.strip() if result.returncode == 0 else None
 
     def _save_nonfinite_diagnostic(self, diagnostic: Dict[str, Any]) -> None:
-        is_swat = (
-            self.config.seq_len == 2048
-            and self.config.patch_size == 256
-            and self.config.patch_stride == 64
-        )
-        if not is_swat:
+        dataset_name = getattr(self.config, "dataset_name", None)
+        if not dataset_name:
             return
-        output_dir = Path("result/score/by_dataset/SWAT/BHDMSDCATCH")
+        dataset_name = Path(str(dataset_name)).stem
+        configured_output_dir = getattr(self.config, "diagnostic_output_dir", None)
+        output_dir = (
+            Path(configured_output_dir)
+            if configured_output_dir
+            else Path("result") / "score" / "by_dataset" / dataset_name / "BHDMSDCATCH"
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / "nonfinite_diagnostic.json"
         if path.exists():
             path = output_dir / f"nonfinite_diagnostic.{time.time_ns()}.json"
         payload = {
             "git_commit": self._git_commit(),
-            "dataset": "SWAT",
+            "dataset": dataset_name,
             "epoch": diagnostic.get("context", {}).get("epoch"),
             "global_step": diagnostic.get("context", {}).get("global_step"),
             "batch_index": diagnostic.get("context", {}).get("batch_index"),
@@ -230,6 +236,52 @@ class BHDMSDCATCH(SDDMSDCATCH):
                     }
         return None
 
+    def _run_debug_after_backward(self) -> None:
+        if not self._debug_nonfinite:
+            return
+        gradient = self._gradient_diagnostic()
+        if gradient and gradient["first_nonfinite_parameter"] is not None:
+            self._raise_with_snapshot(
+                {
+                    "branch": "backward",
+                    "tensor_name": "gradient",
+                    "tensor_stats": gradient["tensor_stats"],
+                    "gradient": gradient,
+                    "losses": self._last_loss_snapshot,
+                    "context": dict(self._runtime_context),
+                }
+            )
+
+    def _run_debug_after_optimizer_step(
+        self, optimizer: torch.optim.Optimizer, branch: str
+    ) -> None:
+        if not self._debug_nonfinite:
+            return
+        optimizer_diagnostic = self._optimizer_diagnostic(optimizer)
+        if optimizer_diagnostic is not None:
+            self._raise_with_snapshot(
+                {
+                    "branch": branch,
+                    "tensor_name": "optimizer_state",
+                    "tensor_stats": optimizer_diagnostic["tensor_stats"],
+                    "optimizer": optimizer_diagnostic,
+                    "losses": self._last_loss_snapshot,
+                    "context": dict(self._runtime_context),
+                }
+            )
+
+    @torch.no_grad()
+    def detect_validate(self, valid_data_loader) -> float:
+        self.model.eval()
+        loss_sum = None
+        batches = 0
+        for input_batch, _ in valid_data_loader:
+            loss, _ = self._loss(input_batch.float().to(self.device))
+            loss_sum = loss.detach() if loss_sum is None else loss_sum + loss.detach()
+            batches += 1
+        self.model.train()
+        return float((loss_sum / batches).cpu()) if batches else float("inf")
+
     def detect_fit(self, train_data: pd.DataFrame, train_label=None) -> None:
         del train_label
         self.detect_hyper_param_tune(train_data)
@@ -247,6 +299,9 @@ class BHDMSDCATCH(SDDMSDCATCH):
         )
         self.valid_data_loader = anomaly_detection_data_provider(
             valid_data, self.config.batch_size, self.config.seq_len, 1, "val"
+        )
+        self.reference_data_loader = anomaly_detection_data_provider(
+            train_data_value, self.config.batch_size, self.config.seq_len, 1, "thre"
         )
         self.trainable_parameters = sum(
             parameter.numel() for parameter in self.model.parameters() if parameter.requires_grad
@@ -290,7 +345,7 @@ class BHDMSDCATCH(SDDMSDCATCH):
         for epoch in range(self.config.num_epochs):
             self.model.train()
             epoch_start = time.time()
-            losses = []
+            loss_sum = None
             for step, (input_batch, _) in enumerate(self.train_data_loader, start=1):
                 self.optimizer.zero_grad()
                 input_batch = input_batch.float().to(self.device)
@@ -298,81 +353,39 @@ class BHDMSDCATCH(SDDMSDCATCH):
                     "epoch": epoch + 1,
                     "global_step": epoch * train_steps + step,
                     "batch_index": step,
+                    "debug_nonfinite": self._debug_nonfinite,
                 }
                 self.model.set_diagnostic_context(self._runtime_context)
                 try:
                     loss, diagnostics = self._loss(input_batch)
                 except BHDNonFiniteTensorError as error:
                     self._raise_with_snapshot(error.diagnostic)
-                if not torch.isfinite(loss):
-                    self._raise_with_snapshot(
-                        {
-                            "branch": "total",
-                            "tensor_name": "total_loss",
-                            "tensor_stats": tensor_diagnostic_stats(loss),
-                            "losses": self._last_loss_snapshot,
-                            "context": dict(self._runtime_context),
-                        }
-                    )
                 loss.backward()
-                if self._debug_nonfinite:
-                    gradient = self._gradient_diagnostic()
-                    if gradient and gradient["first_nonfinite_parameter"] is not None:
-                        self._raise_with_snapshot(
-                            {
-                                "branch": "backward",
-                                "tensor_name": "gradient",
-                                "tensor_stats": gradient["tensor_stats"],
-                                "gradient": gradient,
-                                "losses": self._last_loss_snapshot,
-                                "context": dict(self._runtime_context),
-                            }
-                        )
+                self._run_debug_after_backward()
                 self.optimizer.step()
-                if self._debug_nonfinite:
-                    optimizer = self._optimizer_diagnostic(self.optimizer)
-                    if optimizer is not None:
-                        self._raise_with_snapshot(
-                            {
-                                "branch": "optimizer",
-                                "tensor_name": "optimizer_state",
-                                "tensor_stats": optimizer["tensor_stats"],
-                                "optimizer": optimizer,
-                                "losses": self._last_loss_snapshot,
-                                "context": dict(self._runtime_context),
-                            }
-                        )
+                self._run_debug_after_optimizer_step(self.optimizer, "optimizer")
                 if step % mask_update_interval == 0 or step == train_steps:
                     self.optimizerM.step()
                     self.optimizerM.zero_grad()
-                    if self._debug_nonfinite:
-                        optimizer = self._optimizer_diagnostic(self.optimizerM)
-                        if optimizer is not None:
-                            self._raise_with_snapshot(
-                                {
-                                    "branch": "mask_optimizer",
-                                    "tensor_name": "optimizer_state",
-                                    "tensor_stats": optimizer["tensor_stats"],
-                                    "optimizer": optimizer,
-                                    "losses": self._last_loss_snapshot,
-                                    "context": dict(self._runtime_context),
-                                }
-                            )
-                losses.append(float(loss.detach().cpu()))
+                    self._run_debug_after_optimizer_step(self.optimizerM, "mask_optimizer")
+                loss_sum = loss.detach() if loss_sum is None else loss_sum + loss.detach()
                 if step % 100 == 0:
                     print(
                         "\titers: {} epoch: {} | final: {:.7f} trend: {:.7f} residual: {:.7f}".format(
                             step,
                             epoch + 1,
-                            diagnostics["final"],
-                            diagnostics["trend"],
-                            diagnostics["residual"],
+                            float(diagnostics["final"].detach().cpu()),
+                            float(diagnostics["trend"].detach().cpu()),
+                            float(diagnostics["residual"].detach().cpu()),
                         )
                     )
             valid_loss = self.detect_validate(self.valid_data_loader)
             print(
                 "Epoch: {} cost time: {:.2f}s | Train Loss: {:.7f} Vali Loss: {:.7f}".format(
-                    epoch + 1, time.time() - epoch_start, float(np.mean(losses)), valid_loss
+                    epoch + 1,
+                    time.time() - epoch_start,
+                    float((loss_sum / train_steps).detach().cpu()),
+                    valid_loss,
                 )
             )
             self.early_stopping(valid_loss, self.model)
@@ -387,7 +400,7 @@ class BHDMSDCATCH(SDDMSDCATCH):
 
     @torch.no_grad()
     def _score_batch(
-        self, input_batch: torch.Tensor
+        self, input_batch: torch.Tensor, collect_diagnostics: bool = False
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         outputs = self.model(input_batch)
         criterion = frequency_criterion(self.config)
@@ -397,15 +410,20 @@ class BHDMSDCATCH(SDDMSDCATCH):
             frequency = criterion(target, prediction).mean(dim=-1)
             return temporal + self.config.score_lambda * frequency
 
-        scores = {
-            "total_score": catch_score(input_batch, outputs["x_hat"]),
-            "decomp_score": catch_score(input_batch, outputs["decomp_hat"]),
-            "trend_score": catch_score(outputs["trend"], outputs["trend_hat"]),
-            "residual_score": catch_score(outputs["residual"], outputs["residual_hat"]),
-            "raw_correction_score": (outputs["raw_gate"] * outputs["raw_correction"])
-            .square()
-            .mean(dim=-1),
-        }
+        scores = {"total_score": catch_score(input_batch, outputs["x_hat"])}
+        if not collect_diagnostics:
+            return scores, {}
+
+        scores.update(
+            {
+                "decomp_score": catch_score(input_batch, outputs["decomp_hat"]),
+                "trend_score": catch_score(outputs["trend"], outputs["trend_hat"]),
+                "residual_score": catch_score(outputs["residual"], outputs["residual_hat"]),
+                "raw_correction_score": (outputs["raw_gate"] * outputs["raw_correction"])
+                .square()
+                .mean(dim=-1),
+            }
+        )
         time_steps = input_batch.shape[1]
         diagnostics = {
             "trend_hat": outputs["trend_hat"],
@@ -419,28 +437,34 @@ class BHDMSDCATCH(SDDMSDCATCH):
         return scores, diagnostics
 
     @torch.no_grad()
-    def _collect_scores(self, data_loader) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+    def _collect_scores(
+        self, data_loader, collect_diagnostics: bool = False
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
         self.model.eval()
-        score_names = (
-            "total_score",
-            "decomp_score",
-            "trend_score",
-            "residual_score",
-            "raw_correction_score",
-        )
-        diagnostic_names = (
-            "trend_hat",
-            "residual_hat",
-            "decomp_hat",
-            "raw_correction",
-            "raw_gate",
-            "scale_entropy",
-            "scale_weights",
-        )
+        score_names = ("total_score",)
+        diagnostic_names = ()
+        if collect_diagnostics:
+            score_names = score_names + (
+                "decomp_score",
+                "trend_score",
+                "residual_score",
+                "raw_correction_score",
+            )
+            diagnostic_names = (
+                "trend_hat",
+                "residual_hat",
+                "decomp_hat",
+                "raw_correction",
+                "raw_gate",
+                "scale_entropy",
+                "scale_weights",
+            )
         score_chunks = {name: [] for name in score_names}
         diagnostic_chunks = {name: [] for name in diagnostic_names}
         for input_batch, _ in data_loader:
-            scores, diagnostics = self._score_batch(input_batch.float().to(self.device))
+            scores, diagnostics = self._score_batch(
+                input_batch.float().to(self.device), collect_diagnostics=collect_diagnostics
+            )
             for name, values in scores.items():
                 if not torch.isfinite(values).all():
                     raise FloatingPointError(f"{name} contains NaN or Inf")
@@ -469,7 +493,7 @@ class BHDMSDCATCH(SDDMSDCATCH):
             raise FloatingPointError("BHD-MSD-CATCH score diagnostics are inconsistent or non-finite")
         return scores, diagnostics
 
-    def detect_score(self, test: pd.DataFrame):
+    def detect_score(self, test: pd.DataFrame, collect_diagnostics: bool = False):
         if self.model is None:
             raise ValueError("Model not trained. Call detect_fit() first.")
         test = np.ascontiguousarray(
@@ -482,8 +506,22 @@ class BHDMSDCATCH(SDDMSDCATCH):
             step=1,
             mode="thre",
         )
-        self.last_scores, self.last_diagnostics = self._collect_scores(test_loader)
+        self.last_scores, self.last_diagnostics = self._collect_scores(
+            test_loader, collect_diagnostics=collect_diagnostics
+        )
         return self.last_scores["total_score"], self.last_scores["total_score"]
+
+    def detect_label(self, test: pd.DataFrame):
+        test_total_score, _ = self.detect_score(test)
+        reference_total_score = self._collect_scores(self.reference_data_loader)[0]["total_score"]
+        ratios = self.config.anomaly_ratio
+        if not isinstance(ratios, list):
+            ratios = [ratios]
+        predictions = {
+            ratio: (test_total_score > np.percentile(reference_total_score, 100 - ratio)).astype(int)
+            for ratio in ratios
+        }
+        return predictions, test_total_score
 
 
 def run_bhd_msd_catch_screen(
@@ -507,10 +545,12 @@ def run_bhd_msd_catch_screen(
 
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
-    detector = BHDMSDCATCH(**params)
+    screen_params = dict(params)
+    screen_params.setdefault("dataset_name", dataset_name)
+    detector = BHDMSDCATCH(**screen_params)
     detector.detect_fit(train)
     score_start = time.time()
-    total_score, _ = detector.detect_score(test)
+    total_score, _ = detector.detect_score(test, collect_diagnostics=True)
     score_seconds = time.time() - score_start
     scores = detector.last_scores
     diagnostics = detector.last_diagnostics
@@ -563,7 +603,7 @@ def run_bhd_msd_catch_screen(
             "mean": float(diagnostics["scale_entropy"].mean()),
             "per_variable_mean": diagnostics["scale_entropy"].mean(axis=0).tolist(),
         },
-        "config": params,
+        "config": screen_params,
     }
     torch.save(
         {

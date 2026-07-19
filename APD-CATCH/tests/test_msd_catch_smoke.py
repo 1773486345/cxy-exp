@@ -101,6 +101,28 @@ def test_original_catch_directory_is_unmodified():
     assert result.returncode == 0
 
 
+def test_msd_detect_label_uses_total_score_for_reference_and_test():
+    detector = MSDCATCH(**_tiny_config())
+    detector.config.anomaly_ratio = [50]
+    detector.reference_data_loader = object()
+    test_total_score = np.array([0.24, 0.26], dtype=np.float32)
+    reference_total_score = np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float32)
+    detector.detect_score = lambda _: (test_total_score, test_total_score)
+    detector._raw_scores = lambda _: {
+        "total_score": reference_total_score,
+        "trend_score": np.array([9.0, 8.0, 7.0, 6.0], dtype=np.float32),
+        "residual_score": np.array([5.0, 4.0, 3.0, 2.0], dtype=np.float32),
+    }
+    detector._fuse_scores = lambda _: (_ for _ in ()).throw(
+        AssertionError("detect_label must not use fusion scores")
+    )
+
+    predictions, returned_score = detector.detect_label(pd.DataFrame(np.zeros((2, 3))))
+
+    np.testing.assert_array_equal(predictions[50], np.array([0, 1]))
+    np.testing.assert_array_equal(returned_score, test_total_score)
+
+
 def test_msd_numpy_scaled_loaders_match_dataframe_loaders():
     config = _tiny_config()
     train = pd.DataFrame(
