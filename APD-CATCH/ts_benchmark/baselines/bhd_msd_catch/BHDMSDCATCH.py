@@ -131,7 +131,12 @@ class BHDMSDCATCH(SDDMSDCATCH):
             }
             for branch, branch_components in components.items()
         }
-        self._raise_first_nonfinite_loss(outputs, components)
+        if any(
+            not torch.isfinite(value).all()
+            for branch_components in components.values()
+            for value in branch_components.values()
+        ):
+            self._raise_first_nonfinite_loss(outputs, components)
         return loss, {
             "final": float(final_loss.detach().cpu()),
             "trend": float(trend_loss.detach().cpu()),
@@ -231,15 +236,11 @@ class BHDMSDCATCH(SDDMSDCATCH):
         self.model = BHDMSDCATCHModel(self.config).to(self.device)
         train_data_value, valid_data = train_val_split(train_data, 0.8, None)
         self.scaler.fit(train_data_value.values)
-        train_data_value = pd.DataFrame(
-            self.scaler.transform(train_data_value.values),
-            columns=train_data_value.columns,
-            index=train_data_value.index,
+        train_data_value = np.ascontiguousarray(
+            self.scaler.transform(train_data_value.values), dtype=np.float32
         )
-        valid_data = pd.DataFrame(
-            self.scaler.transform(valid_data.values),
-            columns=valid_data.columns,
-            index=valid_data.index,
+        valid_data = np.ascontiguousarray(
+            self.scaler.transform(valid_data.values), dtype=np.float32
         )
         self.train_data_loader = anomaly_detection_data_provider(
             train_data_value, self.config.batch_size, self.config.seq_len, 1, "train"

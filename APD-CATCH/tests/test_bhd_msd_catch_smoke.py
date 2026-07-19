@@ -2,7 +2,10 @@ import hashlib
 import subprocess
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import torch
+from sklearn.preprocessing import StandardScaler
 
 from ts_benchmark.baselines.catch.models.CATCH_model import Flatten_Head
 from ts_benchmark.baselines.rsa_msd_catch.models.RSAMSDCATCH_model import (
@@ -20,6 +23,7 @@ from ts_benchmark.baselines.bhd_msd_catch.models.BHDMSDCATCH_model import (
     BlockwiseDecoder,
     StableDynamicalContrastiveLoss,
 )
+from ts_benchmark.baselines.utils import anomaly_detection_data_provider
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -194,3 +198,48 @@ def test_bhd_model_preserves_contrastive_layer_context():
     model.set_diagnostic_context({"epoch": 3, "global_step": 17, "batch_index": 5})
     assert [loss._diagnostic_context["layer"] for loss in model._contrastive_losses] == [0]
     assert all(loss._diagnostic_context["global_step"] == 17 for loss in model._contrastive_losses)
+
+
+def test_bhd_numpy_scaled_loader_matches_dataframe_loader():
+    config = _tiny_config()
+    raw = pd.DataFrame(
+        np.arange(96 * config["c_in"], dtype=np.float64).reshape(96, config["c_in"]),
+        columns=[f"feature_{index}" for index in range(config["c_in"])],
+    )
+    scaler = StandardScaler().fit(raw.values)
+    legacy_data = pd.DataFrame(
+        scaler.transform(raw.values), columns=raw.columns, index=raw.index
+    )
+    optimized_data = np.ascontiguousarray(scaler.transform(raw.values), dtype=np.float32)
+    legacy_loader = anomaly_detection_data_provider(
+        legacy_data, config["batch_size"], config["seq_len"], 1, "train"
+    )
+    optimized_loader = anomaly_detection_data_provider(
+        optimized_data, config["batch_size"], config["seq_len"], 1, "train"
+    )
+
+    assert optimized_data.dtype == np.float32
+    assert optimized_data.flags.c_contiguous
+    assert len(legacy_loader.dataset) == len(optimized_loader.dataset)
+    for index in (0, len(legacy_loader.dataset) // 2, len(legacy_loader.dataset) - 1):
+        legacy_window, _ = legacy_loader.dataset[index]
+        optimized_window, _ = optimized_loader.dataset[index]
+        assert legacy_window.dtype == optimized_window.dtype == np.float32
+        np.testing.assert_array_equal(legacy_window, optimized_window)
+
+    torch.manual_seed(41)
+    legacy_batch, _ = next(iter(legacy_loader))
+    torch.manual_seed(41)
+    optimized_batch, _ = next(iter(optimized_loader))
+    assert legacy_batch.dtype == optimized_batch.dtype == torch.float32
+    assert legacy_batch.shape == optimized_batch.shape
+    torch.testing.assert_close(legacy_batch, optimized_batch, rtol=0, atol=0)
+
+    torch.manual_seed(43)
+    detector = BHDMSDCATCH(**config)
+    detector.model = BHDMSDCATCHModel(detector.config).eval()
+    torch.manual_seed(47)
+    legacy_loss, _ = detector._loss(legacy_batch)
+    torch.manual_seed(47)
+    optimized_loss, _ = detector._loss(optimized_batch)
+    torch.testing.assert_close(legacy_loss, optimized_loss, rtol=0, atol=0)
