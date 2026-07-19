@@ -469,6 +469,22 @@ class BHDMSDCATCH(SDDMSDCATCH):
             raise FloatingPointError("BHD-MSD-CATCH score diagnostics are inconsistent or non-finite")
         return scores, diagnostics
 
+    def detect_score(self, test: pd.DataFrame):
+        if self.model is None:
+            raise ValueError("Model not trained. Call detect_fit() first.")
+        test = np.ascontiguousarray(
+            self.scaler.transform(test.values), dtype=np.float32
+        )
+        test_loader = anomaly_detection_data_provider(
+            test,
+            batch_size=self.config.batch_size,
+            win_size=self.config.seq_len,
+            step=1,
+            mode="thre",
+        )
+        self.last_scores, self.last_diagnostics = self._collect_scores(test_loader)
+        return self.last_scores["total_score"], self.last_scores["total_score"]
+
 
 def run_bhd_msd_catch_screen(
     dataset_name: str, params: Dict, output_dir: str | Path, seed: int = 2021

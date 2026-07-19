@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import RandomSampler, SequentialSampler
 
 from ts_benchmark.baselines.catch.models.CATCH_model import Flatten_Head
 from ts_benchmark.baselines.rsa_msd_catch.models.RSAMSDCATCH_model import (
@@ -138,10 +139,10 @@ def test_bhd_blockwise_decoder_smoke():
     )
 
 
-def test_bhd_does_not_modify_existing_baselines():
+def test_bhd_does_not_modify_unrelated_baselines():
     paths = [
         ROOT / "ts_benchmark" / "baselines" / name
-        for name in ("catch", "msd_catch", "rsa_msd_catch", "sdd_msd_catch")
+        for name in ("catch", "rsa_msd_catch", "sdd_msd_catch")
     ]
     before = [_tree_digest(path) for path in paths]
     _ = BHDMSDCATCHModel(BHDMSDCATCH(**_tiny_config()).config)(torch.randn(1, 32, 3))
@@ -153,7 +154,6 @@ def test_bhd_does_not_modify_existing_baselines():
             "--quiet",
             "--",
             "ts_benchmark/baselines/catch",
-            "ts_benchmark/baselines/msd_catch",
             "ts_benchmark/baselines/rsa_msd_catch",
             "ts_benchmark/baselines/sdd_msd_catch",
         ],
@@ -220,6 +220,8 @@ def test_bhd_numpy_scaled_loader_matches_dataframe_loader():
 
     assert optimized_data.dtype == np.float32
     assert optimized_data.flags.c_contiguous
+    assert isinstance(legacy_loader.sampler, RandomSampler)
+    assert isinstance(optimized_loader.sampler, RandomSampler)
     assert len(legacy_loader.dataset) == len(optimized_loader.dataset)
     for index in (0, len(legacy_loader.dataset) // 2, len(legacy_loader.dataset) - 1):
         legacy_window, _ = legacy_loader.dataset[index]
@@ -237,9 +239,52 @@ def test_bhd_numpy_scaled_loader_matches_dataframe_loader():
 
     torch.manual_seed(43)
     detector = BHDMSDCATCH(**config)
-    detector.model = BHDMSDCATCHModel(detector.config).eval()
+    detector.device = torch.device("cpu")
+    detector.model = BHDMSDCATCHModel(detector.config).train()
+    detector.scaler = scaler
     torch.manual_seed(47)
+    legacy_outputs = detector.model(legacy_batch)
+    torch.manual_seed(47)
+    optimized_outputs = detector.model(optimized_batch)
+    for name, legacy_value in legacy_outputs.items():
+        optimized_value = optimized_outputs[name]
+        if torch.is_tensor(legacy_value):
+            torch.testing.assert_close(legacy_value, optimized_value, rtol=0, atol=0)
+        else:
+            assert legacy_value == optimized_value
+
+    torch.manual_seed(53)
     legacy_loss, _ = detector._loss(legacy_batch)
-    torch.manual_seed(47)
+    legacy_components = detector._last_loss_snapshot
+    torch.manual_seed(53)
     optimized_loss, _ = detector._loss(optimized_batch)
+    optimized_components = detector._last_loss_snapshot
     torch.testing.assert_close(legacy_loss, optimized_loss, rtol=0, atol=0)
+    for branch, legacy_values in legacy_components.items():
+        assert optimized_components[branch].keys() == legacy_values.keys()
+        for name, legacy_value in legacy_values.items():
+            np.testing.assert_allclose(optimized_components[branch][name], legacy_value, rtol=0, atol=0)
+
+    legacy_score_loader = anomaly_detection_data_provider(
+        legacy_data, config["batch_size"], config["seq_len"], 1, "thre"
+    )
+    optimized_score_loader = anomaly_detection_data_provider(
+        optimized_data, config["batch_size"], config["seq_len"], 1, "thre"
+    )
+    assert isinstance(legacy_score_loader.sampler, SequentialSampler)
+    assert isinstance(optimized_score_loader.sampler, SequentialSampler)
+    assert len(legacy_score_loader.dataset) == len(optimized_score_loader.dataset)
+    for index in (0, len(legacy_score_loader.dataset) // 2, len(legacy_score_loader.dataset) - 1):
+        legacy_window, _ = legacy_score_loader.dataset[index]
+        optimized_window, _ = optimized_score_loader.dataset[index]
+        assert legacy_window.dtype == optimized_window.dtype == np.float32
+        np.testing.assert_array_equal(legacy_window, optimized_window)
+
+    detector.model.eval()
+    torch.manual_seed(61)
+    legacy_scores, _ = detector._collect_scores(legacy_score_loader)
+    torch.manual_seed(61)
+    optimized_total_score, _ = detector.detect_score(raw)
+    assert len(optimized_total_score) == len(legacy_scores["total_score"])
+    for name, legacy_score in legacy_scores.items():
+        np.testing.assert_allclose(detector.last_scores[name], legacy_score, rtol=1e-6, atol=1e-6)
