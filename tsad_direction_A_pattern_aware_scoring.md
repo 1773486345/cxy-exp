@@ -2,15 +2,44 @@
 
 ## 当前状态
 
-最后核查的 Git commit：`c75d0cacd40d74e1ffe2d2de1d475d988abdc093`。
+最后核查的 Git commit：`f6c95f2f579457d5b1592edf6540ef3277046022`。
 
 - 当前正式模型为 CATCH、MSD-CATCH 和 BHD-MSD-CATCH。CATCH 是固定基线，已有结果只读复用；MSD 是主性能模型，BHD 是轻量共享编码版本。
 - 当前正式评价线仅使用 `detect_score`、`total_score`、AUC-PR 和 AUC-ROC。RSA、SDD 与旧 APD-CATCH 仅保留为历史研究路线，不进入当前全数据集主实验。
-- 当前已有 MSD/BHD 的 `detect_score` 结果可复用；正式全数据集比较尚未完成，SWAT 仍待完成。已有 MSD/BHD `detect_score` 结果不因等价的 NumPy 优化而重跑。
+- ASD 由 `ASD_dataset_1` 至 `ASD_dataset_12` 的 12 个独立训练和评价任务构成；12 个子数据集均有 CATCH、MSD-CATCH 和 BHD-MSD-CATCH 的 `detect_score` 脚本。论文主表及真实数据集总数统计将 ASD 计为 1 个真实数据集，任务完成度统计则明确其包含 12 个独立序列任务。
+- 当前已有 MSD/BHD 的 `detect_score` 结果可复用；12 个 ASD 子数据集的两类结果均已分别完成并保留报告。正式全数据集比较尚未完成，SWAT 仍待完成。已有 MSD/BHD `detect_score` 结果不因等价的 NumPy 优化而重跑。
 - BHD 的 contrastive loss 保留零或极小范数分母保护；未采用未经验证的 log-domain 改写。
 - BHD 默认每个 batch 只检查聚合后的 total loss。重型 gradient/optimizer 非有限值诊断仅在 `BHD_MSD_CATCH_DEBUG_NONFINITE=1` 时启用，且诊断路径使用真实的 `dataset_name`。
 - BHD 默认 `detect_score` 只收集 `total_score`；完整 branch diagnostics 仅在显式开启时收集。MSD/BHD 的 `detect_label` 当前也统一使用 `total_score`；修复前的 label 结果为 legacy，不进入当前论文比较。
 - 静态编译和 `git diff --check` 已通过。当前环境缺少可用的 pytest/NumPy/OpenBLAS 依赖，pytest 数值测试尚未实际执行，不能表述为“测试通过”。
+
+### ASD 结果清单与汇总规则
+
+完整结果或附录必须保留以下 12 个独立行；每一行分别保留 CATCH、MSD-CATCH 和 BHD-MSD-CATCH 的原始 AUC-PR 与 AUC-ROC：
+
+```text
+ASD_dataset_1
+ASD_dataset_2
+ASD_dataset_3
+ASD_dataset_4
+ASD_dataset_5
+ASD_dataset_6
+ASD_dataset_7
+ASD_dataset_8
+ASD_dataset_9
+ASD_dataset_10
+ASD_dataset_11
+ASD_dataset_12
+```
+
+论文主表将 ASD 作为 1 个真实数据集，只显示一行 `ASD`，并对每个模型分别计算：
+
+```text
+ASD AUC-PR  = mean(AUC-PR_1, ..., AUC-PR_12)
+ASD AUC-ROC = mean(AUC-ROC_1, ..., AUC-ROC_12)
+```
+
+该 `ASD` 行是 12 个子数据集指标的等权算术平均，不得拼接 12 个子集的 score 和 label 后重新计算 pooled/micro AUC，也不得按子数据集长度、异常点数量或窗口数量加权。它不能删除、替代或覆盖完整结果/附录中的 12 个原始行。
 
 ## 1. 研究目标
 
