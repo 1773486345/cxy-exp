@@ -107,12 +107,14 @@ class RAMSDCATCH:
         mask_update_interval: int,
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
         self.optimizer.zero_grad()
+        should_step_mask = step % mask_update_interval == 0 or step == train_steps
+        if should_step_mask:
+            self.optimizerM.step()
+            self.optimizerM.zero_grad()
+
         loss, diagnostics = self._catch_loss(input_batch)
         if not torch.isfinite(loss):
             raise FloatingPointError("RA-MSD-CATCH training loss became non-finite")
-        if step % mask_update_interval == 0 or step == train_steps:
-            self.optimizerM.step()
-            self.optimizerM.zero_grad()
         loss.backward()
         self.optimizer.step()
         return loss, diagnostics

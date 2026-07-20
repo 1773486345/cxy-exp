@@ -237,7 +237,7 @@ def test_ra_validation_uses_only_final_reconstruction_mse():
     assert detector.model.training
 
 
-def test_ra_mask_optimizer_steps_before_current_backward():
+def test_ra_mask_optimizer_steps_before_current_forward():
     class RecordingOptimizer:
         def __init__(self, name, events):
             self.name = name
@@ -255,7 +255,12 @@ def test_ra_mask_optimizer_steps_before_current_backward():
     detector.optimizerM = RecordingOptimizer("mask", events)
     loss = torch.tensor(1.0, requires_grad=True)
     loss.register_hook(lambda _: events.append("loss.backward"))
-    detector._catch_loss = lambda _: (loss, {"reconstruction": 0.0})
+
+    def catch_loss(_):
+        events.append("forward")
+        return loss, {"reconstruction": 0.0}
+
+    detector._catch_loss = catch_loss
 
     detector._training_step(torch.zeros(2, 32, 3), step=1, train_steps=1, mask_update_interval=1)
 
@@ -263,9 +268,73 @@ def test_ra_mask_optimizer_steps_before_current_backward():
         "main.zero_grad",
         "mask.step",
         "mask.zero_grad",
+        "forward",
         "loss.backward",
         "main.step",
     ]
+
+
+def test_ra_real_mask_update_precedes_next_forward_without_autograd_mismatch():
+    torch.manual_seed(41)
+    config = _tiny_config()
+    config.update({"c_in": 2, "seq_len": 32, "patch_size": 16, "patch_stride": 16})
+    detector = RAMSDCATCH(**config)
+    detector.device = torch.device("cpu")
+    detector.model = RAMSDCATCHModel(detector.config).to(detector.device).train()
+    main_parameters = [
+        parameter
+        for name, parameter in detector.model.named_parameters()
+        if "mask_generator" not in name
+    ]
+    mask_parameters = [
+        parameter
+        for name, parameter in detector.model.named_parameters()
+        if "mask_generator" in name
+    ]
+    detector.optimizer = torch.optim.Adam(main_parameters, lr=1e-3)
+    detector.optimizerM = torch.optim.Adam(mask_parameters, lr=1e-3)
+    first_batch = torch.randn(2, 32, 2)
+    second_batch = torch.randn(2, 32, 2)
+
+    first_loss, _ = detector._training_step(
+        first_batch,
+        step=1,
+        train_steps=2,
+        mask_update_interval=2,
+    )
+    first_gradients = [parameter.grad for parameter in mask_parameters if parameter.grad is not None]
+    assert torch.isfinite(first_loss)
+    assert first_gradients
+    assert all(torch.isfinite(gradient).all() for gradient in first_gradients)
+    assert any(torch.count_nonzero(gradient) for gradient in first_gradients)
+
+    masks_before_second_step = [parameter.detach().clone() for parameter in mask_parameters]
+    original_forward = detector.model.forward
+    mask_step_happened_before_forward = []
+
+    def forward_after_mask_step(input_batch):
+        mask_step_happened_before_forward.append(
+            any(
+                not torch.equal(parameter.detach(), before)
+                for parameter, before in zip(mask_parameters, masks_before_second_step)
+            )
+        )
+        return original_forward(input_batch)
+
+    detector.model.forward = forward_after_mask_step
+    second_loss, _ = detector._training_step(
+        second_batch,
+        step=2,
+        train_steps=2,
+        mask_update_interval=2,
+    )
+    second_gradients = [parameter.grad for parameter in mask_parameters if parameter.grad is not None]
+
+    assert mask_step_happened_before_forward == [True]
+    assert torch.isfinite(second_loss)
+    assert second_gradients
+    assert all(torch.isfinite(gradient).all() for gradient in second_gradients)
+    assert any(torch.count_nonzero(gradient) for gradient in second_gradients)
 
 
 def test_ra_does_not_modify_frozen_baselines():

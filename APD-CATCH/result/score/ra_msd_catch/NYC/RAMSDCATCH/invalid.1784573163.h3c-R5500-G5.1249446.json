@@ -1,0 +1,7 @@
+{
+  "status": "invalid",
+  "reason": "mask optimizer step modified graph parameter before backward",
+  "exclude_from_metrics": true,
+  "archive": "RAMSDCATCH.1784573163.h3c-R5500-G5.1249446.csv.tar.gz",
+  "report": "test_report.1784573163.h3c-R5500-G5.1249446.csv"
+}
