@@ -1,0 +1,2 @@
+strategy_args,metric_name,"RAMSDCATCH;{""Mlr"": 0.001, ""auxi_lambda"": 0.01, ""batch_size"": 128, ""cf_dim"": 16, ""d_ff"": 32, ""d_model"": 16, ""dc_lambda"": 0.05, ""dropout"": 0.3, ""e_layers"": 1, ""head_dim"": 32, ""inference_patch_size"": 96, ""lr"": 0.005, ""n_heads"": 4, ""num_epochs"": 3, ""patch_size"": 16, ""patch_stride"": 8, ""score_lambda"": 0.5, ""seq_len"": 192}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.6409469039616944
