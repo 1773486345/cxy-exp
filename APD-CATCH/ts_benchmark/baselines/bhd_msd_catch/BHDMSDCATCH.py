@@ -180,6 +180,7 @@ class BHDMSDCATCH(SDDMSDCATCH):
             "tensor_name": diagnostic.get("tensor_name"),
             "tensor_stats": diagnostic.get("tensor_stats"),
             "contrastive_tensors": diagnostic.get("contrastive_tensors"),
+            "mask_generator": diagnostic.get("mask_generator"),
             "losses": diagnostic.get("losses", self._last_loss_snapshot),
             "gradient": diagnostic.get("gradient"),
             "optimizer": diagnostic.get("optimizer"),

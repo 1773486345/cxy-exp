@@ -1,0 +1,162 @@
+{
+  "batch_index": 6713,
+  "branch": "residual",
+  "contrastive_tensors": null,
+  "dataset": "SWAT",
+  "epoch": 2,
+  "git_commit": "16933f9ee0ec96ce56719fc904f27abb168ade72",
+  "global_step": 19025,
+  "gradient": null,
+  "losses": {
+    "final": {
+      "channel_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "frequency_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "time_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      }
+    },
+    "residual": {
+      "channel_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "frequency_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "time_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      }
+    },
+    "total": {
+      "loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      }
+    },
+    "trend": {
+      "channel_loss": {
+        "abs_mean": 0.25356099009513855,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 1.0,
+        "max": 0.25356099009513855,
+        "min": 0.25356099009513855,
+        "shape": [],
+        "zero_count": 0
+      },
+      "frequency_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      },
+      "time_loss": {
+        "abs_mean": null,
+        "below_epsilon_count": null,
+        "dtype": "torch.float32",
+        "finite_ratio": 0.0,
+        "max": null,
+        "min": null,
+        "shape": [],
+        "zero_count": 0
+      }
+    }
+  },
+  "optimizer": null,
+  "tensor_name": "residual_dcloss",
+  "tensor_stats": {
+    "abs_mean": null,
+    "below_epsilon_count": null,
+    "dtype": "torch.float32",
+    "finite_ratio": 0.0,
+    "max": null,
+    "min": null,
+    "shape": [],
+    "zero_count": 0
+  }
+}

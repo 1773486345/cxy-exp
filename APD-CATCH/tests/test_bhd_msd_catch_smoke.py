@@ -21,6 +21,7 @@ from ts_benchmark.baselines.sdd_msd_catch.models.SDDMSDCATCH_model import (
 )
 from ts_benchmark.baselines.bhd_msd_catch.BHDMSDCATCH import BHDMSDCATCH
 from ts_benchmark.baselines.bhd_msd_catch.models.BHDMSDCATCH_model import (
+    BHDLocalChannelMaskGenerator,
     BHDMSDCATCHModel,
     BHDNonFiniteTensorError,
     BlockwiseDecoder,
@@ -179,34 +180,113 @@ def _original_contrastive_loss(scores, mask, norm_matrix, temperature, k):
     return (clustering_loss.mean(1) + k * regular_loss).mean()
 
 
+def _original_mask_pre_gumbel_logits(raw_logits):
+    probability = torch.sigmoid(raw_logits)
+    return torch.stack(
+        (
+            torch.log(probability / (1 - probability)),
+            torch.log((1 - probability) / probability),
+        ),
+        dim=-1,
+    )
+
+
+def test_bhd_local_mask_uses_finite_raw_logits_and_hard_binary_masks():
+    raw_logits = torch.tensor(
+        [0.0, 10.0, -10.0, 100.0, -100.0, 1000.0, -1000.0], dtype=torch.float32
+    )
+    stable_logits = BHDLocalChannelMaskGenerator.gumbel_logits(raw_logits)
+    assert torch.isfinite(stable_logits).all()
+    legacy_logits = _original_mask_pre_gumbel_logits(raw_logits)
+    assert not torch.isfinite(legacy_logits[3:]).all()
+
+    normal_raw_logits = torch.tensor([0.0, 10.0, -10.0], dtype=torch.float64)
+    torch.testing.assert_close(
+        BHDLocalChannelMaskGenerator.gumbel_logits(normal_raw_logits),
+        _original_mask_pre_gumbel_logits(normal_raw_logits),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+
+    linear = torch.nn.Linear(4, 3, bias=False)
+    with torch.no_grad():
+        linear.weight.copy_(torch.eye(3, 4))
+    generator = BHDLocalChannelMaskGenerator(linear, n_vars=3)
+    sampled_mask = generator(torch.randn(5, 3, 4))
+    assert torch.isfinite(sampled_mask).all()
+    assert torch.all((sampled_mask == 0) | (sampled_mask == 1))
+    assert torch.equal(sampled_mask.diagonal(dim1=-2, dim2=-1), torch.ones(5, 3))
+
+
 def test_bhd_contrastive_loss_preserves_formula_and_zero_norm_protection():
     loss_module = StableDynamicalContrastiveLoss(temperature=0.1, k=0.3)
-    mask = torch.eye(3).expand(2, -1, -1)
+    mask = torch.eye(3).expand(2, -1, -1).clone()
+    mask[:, 0, 1] = 1
 
-    torch.manual_seed(37)
-    normal_scores = (0.05 * torch.randn(2, 1, 3, 3)).requires_grad_()
-    legacy_scores = normal_scores.detach().clone().requires_grad_()
-    normal_norm = torch.ones_like(normal_scores)
-    stable_loss = loss_module(normal_scores, mask, normal_norm)
-    legacy_loss = _original_contrastive_loss(legacy_scores, mask, normal_norm, 0.1, 0.3)
-    stable_loss.backward()
-    legacy_loss.backward()
-    torch.testing.assert_close(stable_loss, legacy_loss, rtol=1e-6, atol=1e-7)
-    torch.testing.assert_close(normal_scores.grad, legacy_scores.grad, rtol=1e-5, atol=1e-7)
+    for seed in (37, 41, 43):
+        torch.manual_seed(seed)
+        normal_scores = (0.05 * torch.randn(2, 1, 3, 3)).requires_grad_()
+        legacy_scores = normal_scores.detach().clone().requires_grad_()
+        normal_norm = 0.5 + torch.rand_like(normal_scores)
+        stable_loss = loss_module(normal_scores, mask, normal_norm)
+        legacy_loss = _original_contrastive_loss(legacy_scores, mask, normal_norm, 0.1, 0.3)
+        stable_loss.backward()
+        legacy_loss.backward()
+        torch.testing.assert_close(stable_loss, legacy_loss, rtol=1e-6, atol=1e-7)
+        torch.testing.assert_close(normal_scores.grad, legacy_scores.grad, rtol=1e-5, atol=1e-7)
 
-    for norm_matrix in (torch.zeros_like(normal_scores), torch.full_like(normal_scores, 1e-20)):
-        scores = torch.zeros_like(normal_scores, requires_grad=True)
+    reference_scores = torch.zeros(2, 1, 3, 3)
+    for norm_matrix in (torch.zeros_like(reference_scores), torch.full_like(reference_scores, 1e-20)):
+        scores = torch.zeros_like(reference_scores, requires_grad=True)
         loss = loss_module(scores, mask, norm_matrix)
         loss.backward()
         assert torch.isfinite(loss)
         assert torch.isfinite(scores.grad).all()
 
-    for value in (100.0, -100.0):
-        scores = torch.full_like(normal_scores, value, requires_grad=True)
+    for value in (100.0, -100.0, 1000.0, -1000.0):
+        logits = torch.full_like(reference_scores, value)
+        scores = (logits * loss_module.temperature).requires_grad_()
         legacy_loss = _original_contrastive_loss(scores, mask, torch.ones_like(scores), 0.1, 0.3)
-        assert not torch.isfinite(legacy_loss)
+        if value in (100.0, 1000.0, -1000.0):
+            assert not torch.isfinite(legacy_loss)
         stable_loss = loss_module(scores, mask, torch.ones_like(scores))
-        assert not torch.isfinite(stable_loss)
+        stable_loss.backward()
+        assert torch.isfinite(stable_loss)
+        assert torch.isfinite(scores.grad).all()
+
+
+def test_bhd_local_mask_optimizer_path_stays_finite_for_extreme_residual_input():
+    torch.manual_seed(47)
+    model = BHDMSDCATCHModel(BHDMSDCATCH(**_tiny_config()).config).train()
+    mask_generator = model.shared_encoder.mask_generator
+    assert isinstance(mask_generator, BHDLocalChannelMaskGenerator)
+    optimizer = torch.optim.Adam(mask_generator.parameters(), lr=1e-3)
+    residual_style_input = torch.where(
+        torch.arange(32).view(1, 32, 1).remainder(2) == 0,
+        torch.full((1, 32, 3), 1e6),
+        torch.full((1, 32, 3), -1e6),
+    )
+    mask_input = torch.full((2, 3, 16), 1e4)
+
+    for _ in range(3):
+        optimizer.zero_grad()
+        model.zero_grad()
+        outputs = model(residual_style_input)
+        residual_dcloss = outputs["residual_dcloss"]
+        assert torch.isfinite(residual_dcloss)
+        residual_dcloss.backward()
+        for parameter in mask_generator.parameters():
+            assert parameter.grad is not None
+            assert torch.isfinite(parameter.grad).all()
+        optimizer.step()
+        for parameter in mask_generator.parameters():
+            assert torch.isfinite(parameter).all()
+        raw_logits = mask_generator.raw_logits(mask_input)
+        sampled_mask = mask_generator(mask_input)
+        assert torch.isfinite(raw_logits).all()
+        assert torch.isfinite(sampled_mask).all()
+        assert torch.all((sampled_mask == 0) | (sampled_mask == 1))
+        assert torch.equal(sampled_mask.diagonal(dim1=-2, dim2=-1), torch.ones(2, 3))
 
 
 def test_bhd_contrastive_loss_reports_first_nonfinite_tensor():
@@ -231,6 +311,44 @@ def test_bhd_contrastive_loss_reports_first_nonfinite_tensor():
         assert error.diagnostic["branch"] == "residual"
         assert error.diagnostic["tensor_name"] == "scores"
         assert error.diagnostic["context"]["global_step"] == 11
+        assert set(error.diagnostic["contrastive_tensors"]) == {
+            "attn_mask",
+            "scores",
+            "norm_matrix",
+            "safe_norm_matrix",
+            "cosine",
+            "logits",
+            "log_all_sum",
+            "log_positive_sum",
+            "clustering_loss",
+            "dcloss",
+        }
+    else:
+        raise AssertionError("expected a BHDNonFiniteTensorError")
+
+
+def test_bhd_model_nonfinite_diagnostic_includes_mask_generator_stats():
+    model = BHDMSDCATCHModel(BHDMSDCATCH(**_tiny_config()).config)
+    model.set_diagnostic_context(
+        {
+            "branch": "residual",
+            "epoch": 2,
+            "global_step": 11,
+            "batch_index": 3,
+            "debug_nonfinite": True,
+        }
+    )
+    invalid_input = torch.zeros(1, 32, 3)
+    invalid_input[0, 0, 0] = float("nan")
+    try:
+        model(invalid_input)
+    except BHDNonFiniteTensorError as error:
+        assert set(error.diagnostic["mask_generator"]) == {
+            "raw_mask_logits",
+            "gumbel_logits",
+            "sampled_attn_mask",
+            "mask_generator_weight",
+        }
     else:
         raise AssertionError("expected a BHDNonFiniteTensorError")
 
@@ -426,6 +544,8 @@ def test_bhd_debug_scans_metadata_and_label_scores_are_explicit():
             "branch": "total",
             "tensor_name": "total_loss",
             "tensor_stats": {"finite_fraction": 0.0},
+            "contrastive_tensors": {"dcloss": {"finite_ratio": 0.0}},
+            "mask_generator": {"raw_mask_logits": {"finite_ratio": 0.0}},
             "context": {"epoch": 1, "global_step": 2, "batch_index": 2},
         }
         first._save_nonfinite_diagnostic(diagnostic)
@@ -433,8 +553,12 @@ def test_bhd_debug_scans_metadata_and_label_scores_are_explicit():
         first_path = Path(directory) / "first" / "nonfinite_diagnostic.json"
         second_path = Path(directory) / "second" / "nonfinite_diagnostic.json"
         assert first_path.exists() and second_path.exists()
-        assert json.loads(first_path.read_text())["dataset"] == "first_dataset"
-        assert json.loads(second_path.read_text())["dataset"] == "second_dataset"
+        first_payload = json.loads(first_path.read_text())
+        second_payload = json.loads(second_path.read_text())
+        assert first_payload["dataset"] == "first_dataset"
+        assert second_payload["dataset"] == "second_dataset"
+        assert first_payload["contrastive_tensors"] == diagnostic["contrastive_tensors"]
+        assert first_payload["mask_generator"] == diagnostic["mask_generator"]
 
     label_detector = BHDMSDCATCH(**_tiny_config())
     label_detector.config.anomaly_ratio = [50]

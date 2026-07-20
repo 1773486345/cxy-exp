@@ -70,6 +70,57 @@ class BHDNonFiniteTensorError(FloatingPointError):
         )
 
 
+class BHDLocalChannelMaskGenerator(nn.Module):
+    """BHD-only hard channel mask without probability-to-log-odds saturation."""
+
+    def __init__(self, linear: nn.Linear, n_vars: int) -> None:
+        super().__init__()
+        # Reuse the initialized CATCH linear layer so the parameter, state-dict path,
+        # optimizer grouping, and initialization RNG consumption remain unchanged.
+        self.generator = nn.Sequential(linear)
+        self.n_vars = n_vars
+        self._diagnostic_context: Dict[str, Any] = {}
+        self._last_debug_tensors: Dict[str, torch.Tensor] = {}
+
+    @staticmethod
+    def gumbel_logits(raw_logits: torch.Tensor) -> torch.Tensor:
+        return torch.stack((raw_logits, -raw_logits), dim=-1)
+
+    def raw_logits(self, x: torch.Tensor) -> torch.Tensor:
+        return self.generator(x)
+
+    def set_diagnostic_context(self, context: Dict[str, Any]) -> None:
+        self._diagnostic_context = dict(context)
+
+    def diagnostic_stats(self) -> Dict[str, Dict[str, Any]]:
+        if not self._last_debug_tensors:
+            return {}
+        return {
+            name: tensor_diagnostic_stats(value) for name, value in self._last_debug_tensors.items()
+        }
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        raw_logits = self.raw_logits(x)
+        gumbel_logits = self.gumbel_logits(raw_logits)
+        sampled_mask = F.gumbel_softmax(gumbel_logits, hard=True, dim=-1)[..., 0]
+        inverse_eye = 1 - torch.eye(
+            self.n_vars, device=x.device, dtype=sampled_mask.dtype
+        )
+        diagonal = torch.eye(self.n_vars, device=x.device, dtype=sampled_mask.dtype)
+        attn_mask = torch.einsum("bcd,cd->bcd", sampled_mask, inverse_eye) + diagonal
+
+        if self._diagnostic_context.get("debug_nonfinite", False):
+            # Keep only detached device tensors. Scalar statistics and CPU sync happen
+            # only if the contrastive path subsequently reports a non-finite value.
+            self._last_debug_tensors = {
+                "raw_mask_logits": raw_logits.detach(),
+                "gumbel_logits": gumbel_logits.detach(),
+                "sampled_attn_mask": attn_mask.detach(),
+                "mask_generator_weight": self.generator[0].weight.detach(),
+            }
+        return attn_mask
+
+
 class StableDynamicalContrastiveLoss(nn.Module):
     """BHD-local contrastive loss that remains defined for zero-norm tokens."""
 
@@ -89,13 +140,16 @@ class StableDynamicalContrastiveLoss(nn.Module):
         safe_norm_matrix = norm_matrix.clamp_min(epsilon)
         cosine = (scores / safe_norm_matrix).mean(1)
         logits = cosine / self.temperature
-        pos_scores = torch.exp(logits) * attn_mask
-        all_scores = torch.exp(logits)
-        probability_ratio = pos_scores.sum(dim=-1) / all_scores.sum(dim=-1)
-        clustering_loss = -torch.log(probability_ratio)
+        negative_inf = torch.finfo(logits.dtype).min
+        log_all_sum = torch.logsumexp(logits, dim=-1)
+        positive_logits = logits.masked_fill(attn_mask <= 0, negative_inf)
+        log_positive_sum = torch.logsumexp(positive_logits, dim=-1)
+        clustering_loss = log_all_sum - log_positive_sum
         batch_size = scores.shape[0]
         n_vars = scores.shape[-1]
-        eye = torch.eye(n_vars, device=attn_mask.device).unsqueeze(0).repeat(batch_size, 1, 1)
+        eye = torch.eye(
+            n_vars, device=attn_mask.device, dtype=attn_mask.dtype
+        ).unsqueeze(0).repeat(batch_size, 1, 1)
         regular_loss = torch.norm(
             eye.reshape(batch_size, -1) - attn_mask.reshape(batch_size, -1), p=1, dim=-1
         ) / (n_vars * (n_vars - 1))
@@ -103,23 +157,24 @@ class StableDynamicalContrastiveLoss(nn.Module):
         if not self._diagnostic_context.get("debug_nonfinite", False):
             return dcloss
 
-        if torch.isfinite(dcloss).all():
-            return dcloss
-
         tensors = (
+            ("attn_mask", attn_mask),
             ("scores", scores),
             ("norm_matrix", norm_matrix),
             ("safe_norm_matrix", safe_norm_matrix),
             ("cosine", cosine),
             ("logits", logits),
-            ("exp_logits", all_scores),
-            ("probability_ratio", probability_ratio),
+            ("log_all_sum", log_all_sum),
+            ("log_positive_sum", log_positive_sum),
             ("clustering_loss", clustering_loss),
             ("dcloss", dcloss),
         )
-        first_name, first_tensor = next(
-            (name, value) for name, value in tensors if not torch.isfinite(value).all()
+        first_nonfinite = next(
+            ((name, value) for name, value in tensors if not torch.isfinite(value).all()), None
         )
+        if first_nonfinite is None:
+            return dcloss
+        first_name, first_tensor = first_nonfinite
         raise BHDNonFiniteTensorError(
             {
                 "branch": self._diagnostic_context.get("branch", "unknown"),
@@ -228,6 +283,10 @@ class BHDMSDCATCHModel(nn.Module):
         self.adapter_rank = min(32, max(8, self.feature_dim // 8))
         self.scale_gate = ScaleGate(getattr(configs, "scale_gate_hidden", 16))
         self.shared_encoder = SharedCATCHEncoder(configs)
+        original_mask_generator = self.shared_encoder.mask_generator
+        self.shared_encoder.mask_generator = BHDLocalChannelMaskGenerator(
+            original_mask_generator.generator[0], original_mask_generator.n_vars
+        )
         self._contrastive_losses = []
         for layer_index, layer in enumerate(self.shared_encoder.frequency_transformer.transformer.layers):
             attention = layer[0].fn
@@ -253,12 +312,16 @@ class BHDMSDCATCHModel(nn.Module):
         return adaptive_multiscale_decompose(x, self.patch_size, self.scale_gate)
 
     def set_diagnostic_context(self, context: Dict[str, Any]) -> None:
+        self.shared_encoder.mask_generator.set_diagnostic_context(context)
         for contrastive_loss in self._contrastive_losses:
             loss_context = dict(context)
             loss_context["layer"] = contrastive_loss._diagnostic_context.get("layer")
             contrastive_loss.set_diagnostic_context(loss_context)
 
     def _set_branch_context(self, branch: str) -> None:
+        mask_context = dict(self.shared_encoder.mask_generator._diagnostic_context)
+        mask_context["branch"] = branch
+        self.shared_encoder.mask_generator.set_diagnostic_context(mask_context)
         for contrastive_loss in self._contrastive_losses:
             context = dict(contrastive_loss._diagnostic_context)
             context["branch"] = branch
@@ -297,9 +360,17 @@ class BHDMSDCATCHModel(nn.Module):
     def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         trend, residual, scale_weights, kernels = self.decompose(x)
         self._set_branch_context("trend")
-        trend_tokens, trend_context, trend_dcloss = self.shared_encoder(trend)
+        try:
+            trend_tokens, trend_context, trend_dcloss = self.shared_encoder(trend)
+        except BHDNonFiniteTensorError as error:
+            error.diagnostic["mask_generator"] = self.shared_encoder.mask_generator.diagnostic_stats()
+            raise
         self._set_branch_context("residual")
-        residual_tokens, residual_context, residual_dcloss = self.shared_encoder(residual)
+        try:
+            residual_tokens, residual_context, residual_dcloss = self.shared_encoder(residual)
+        except BHDNonFiniteTensorError as error:
+            error.diagnostic["mask_generator"] = self.shared_encoder.mask_generator.diagnostic_stats()
+            raise
         trend_tokens, residual_tokens = self.low_rank_exchange(trend_tokens, residual_tokens)
         trend_tokens = trend_tokens + self.trend_adapter(trend_tokens)
         residual_tokens = residual_tokens + self.residual_adapter(residual_tokens)
