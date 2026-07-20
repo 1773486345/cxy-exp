@@ -208,6 +208,66 @@ def test_ra_gradients_are_finite_at_zero_and_reach_auxiliaries_after_modulation(
     assert torch.isfinite(modulated_loss)
 
 
+def test_ra_validation_uses_only_final_reconstruction_mse():
+    class ValidationModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.raw_dcloss = torch.tensor(0.0)
+            self.frequency = torch.tensor(0.0)
+
+        def forward(self, input_batch):
+            return {
+                "x_hat": input_batch + 0.5,
+                "raw_dcloss": self.raw_dcloss,
+                "output_complex": self.frequency,
+            }
+
+    detector = RAMSDCATCH(**_tiny_config())
+    detector.device = torch.device("cpu")
+    detector.model = ValidationModel()
+    detector._catch_loss = lambda _: (_ for _ in ()).throw(AssertionError("validation used training loss"))
+    batch = torch.zeros(2, 32, 3)
+
+    first_loss = detector.detect_validate([(batch, None)])
+    detector.model.raw_dcloss = torch.tensor(1e9)
+    detector.model.frequency = torch.tensor(1e9)
+    second_loss = detector.detect_validate([(batch, None)])
+
+    assert first_loss == second_loss == 0.25
+    assert detector.model.training
+
+
+def test_ra_mask_optimizer_steps_before_current_backward():
+    class RecordingOptimizer:
+        def __init__(self, name, events):
+            self.name = name
+            self.events = events
+
+        def step(self):
+            self.events.append(f"{self.name}.step")
+
+        def zero_grad(self):
+            self.events.append(f"{self.name}.zero_grad")
+
+    detector = RAMSDCATCH(**_tiny_config())
+    events = []
+    detector.optimizer = RecordingOptimizer("main", events)
+    detector.optimizerM = RecordingOptimizer("mask", events)
+    loss = torch.tensor(1.0, requires_grad=True)
+    loss.register_hook(lambda _: events.append("loss.backward"))
+    detector._catch_loss = lambda _: (loss, {"reconstruction": 0.0})
+
+    detector._training_step(torch.zeros(2, 32, 3), step=1, train_steps=1, mask_update_interval=1)
+
+    assert events == [
+        "main.zero_grad",
+        "mask.step",
+        "mask.zero_grad",
+        "loss.backward",
+        "main.step",
+    ]
+
+
 def test_ra_does_not_modify_frozen_baselines():
     result = subprocess.run(
         [

@@ -92,10 +92,30 @@ class RAMSDCATCH:
         self.model.eval()
         losses = []
         for input_batch, _ in valid_data_loader:
-            loss, _ = self._catch_loss(input_batch.float().to(self.device))
+            input_batch = input_batch.float().to(self.device)
+            outputs = self.model(input_batch)
+            loss = self.criterion(outputs["x_hat"], input_batch)
             losses.append(float(loss.detach().cpu()))
         self.model.train()
         return float(np.mean(losses)) if losses else float("inf")
+
+    def _training_step(
+        self,
+        input_batch: torch.Tensor,
+        step: int,
+        train_steps: int,
+        mask_update_interval: int,
+    ) -> Tuple[torch.Tensor, Dict[str, float]]:
+        self.optimizer.zero_grad()
+        loss, diagnostics = self._catch_loss(input_batch)
+        if not torch.isfinite(loss):
+            raise FloatingPointError("RA-MSD-CATCH training loss became non-finite")
+        if step % mask_update_interval == 0 or step == train_steps:
+            self.optimizerM.step()
+            self.optimizerM.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        return loss, diagnostics
 
     def detect_fit(self, train_data: pd.DataFrame, train_label=None) -> None:
         del train_label
@@ -167,16 +187,13 @@ class RAMSDCATCH:
             epoch_start = time.time()
             losses = []
             for step, (input_batch, _) in enumerate(self.train_data_loader, start=1):
-                self.optimizer.zero_grad()
                 input_batch = input_batch.float().to(self.device)
-                loss, diagnostics = self._catch_loss(input_batch)
-                if not torch.isfinite(loss):
-                    raise FloatingPointError("RA-MSD-CATCH training loss became non-finite")
-                loss.backward()
-                self.optimizer.step()
-                if step % mask_update_interval == 0 or step == train_steps:
-                    self.optimizerM.step()
-                    self.optimizerM.zero_grad()
+                loss, diagnostics = self._training_step(
+                    input_batch,
+                    step,
+                    train_steps,
+                    mask_update_interval,
+                )
                 losses.append(float(loss.detach().cpu()))
                 if step % 100 == 0:
                     print(
