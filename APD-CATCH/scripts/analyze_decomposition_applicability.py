@@ -8,11 +8,13 @@ to describe where the fixed three-scale decomposition was helpful or harmful.
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import math
 import pickle
 import tarfile
+import sys
 from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Iterable, Optional
@@ -53,6 +55,32 @@ PAPER_ORDER = [
 ]
 FORMAL_MSD_JSON = {"CalIt2", "NYC", "MSL"}
 FORMAL_MSD_LOG = {"PSM", "Genesis", "GECCO"}
+# Frozen formal sources. Paths are relative to the cxy workspace root, never selected by mtime.
+FORMAL_RESULT_SOURCES = {
+    "PSM": ("CATCH-master/result/score/CATCH/PSM/run-20260716T222700Z-660928-22488/CATCH.1784241452.h3c-R5500-G5.661628.csv.tar.gz", "APD-CATCH/result/msd_catch_screen/PSM.log"),
+    "Genesis": ("CATCH-master/result/score/CATCH/Genesis/run-20260716T213208Z-6088-16524/CATCH.1784239890.h3c-R5500-G5.6426.csv.tar.gz", "APD-CATCH/result/msd_catch_screen/Genesis.log"),
+    "GECCO": ("APD-CATCH/result/score/CATCH_RSA_GECCO/CATCH.1784315768.h3c-R5500-G5.3595187.csv.tar.gz", "APD-CATCH/result/msd_catch_screen/GECCO.log"),
+    "CalIt2": ("CATCH-master/result/score/CATCH/CalIt2/run-20260715T183704Z-2374669-5874/CATCH.1784140875.h3c-R5500-G5.2376944.csv.tar.gz", "APD-CATCH/result/msd_catch_total_screen/CalIt2.json"),
+    "NYC": ("CATCH-master/result/score/CATCH/NYC/run-20260716T222643Z-657156-32728/CATCH.1784241041.h3c-R5500-G5.657503.csv.tar.gz", "APD-CATCH/result/msd_catch_total_screen/NYC.json"),
+    "MSL": ("CATCH-master/result/score/CATCH/MSL/run-20260716T213635Z-58595-28964/CATCH.1784244404.h3c-R5500-G5.59126.csv.tar.gz", "APD-CATCH/result/msd_catch_total_screen/MSL.json"),
+    "ASD_dataset_1": ("CATCH-master/result/score/CATCH/ASD_dataset_1/run-20260715T120733Z-1347582-29581/CATCH.1784117687.h3c-R5500-G5.1349346.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_1/MSDCATCH/MSDCATCH.1784390185.h3c-R5500-G5.3190810.csv.tar.gz"),
+    "ASD_dataset_2": ("CATCH-master/result/score/CATCH/ASD_dataset_2/run-20260715T123513Z-1655293-4562/CATCH.1784119679.h3c-R5500-G5.1657441.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_2/MSDCATCH/MSDCATCH.1784390351.h3c-R5500-G5.3230432.csv.tar.gz"),
+    "ASD_dataset_3": ("CATCH-master/result/score/CATCH/ASD_dataset_3/run-20260715T130403Z-1970702-20553/CATCH.1784121522.h3c-R5500-G5.1974015.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_3/MSDCATCH/MSDCATCH.1784390812.h3c-R5500-G5.3274854.csv.tar.gz"),
+    "ASD_dataset_4": ("CATCH-master/result/score/CATCH/ASD_dataset_4/run-20260715T134133Z-2385568-17192/CATCH.1784123438.h3c-R5500-G5.2387988.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_4/MSDCATCH/MSDCATCH.1784391366.h3c-R5500-G5.3400081.csv.tar.gz"),
+    "ASD_dataset_5": ("CATCH-master/result/score/CATCH/ASD_dataset_5/run-20260715T141230Z-2968914-11771/CATCH.1784125388.h3c-R5500-G5.2976094.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_5/MSDCATCH/MSDCATCH.1784391918.h3c-R5500-G5.3568954.csv.tar.gz"),
+    "ASD_dataset_6": ("CATCH-master/result/score/CATCH/ASD_dataset_6/run-20260715T143325Z-3669526-27356/CATCH.1784126625.h3c-R5500-G5.3676661.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_6/MSDCATCH/MSDCATCH.1784392471.h3c-R5500-G5.3714799.csv.tar.gz"),
+    "ASD_dataset_7": ("CATCH-master/result/score/CATCH/ASD_dataset_7/run-20260715T150742Z-85080-11778/CATCH.1784128749.h3c-R5500-G5.87689.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_7/MSDCATCH/MSDCATCH.1784392989.h3c-R5500-G5.3864449.csv.tar.gz"),
+    "ASD_dataset_8": ("CATCH-master/result/score/CATCH/ASD_dataset_8/run-20260715T153406Z-377465-29501/CATCH.1784130361.h3c-R5500-G5.379417.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_8/MSDCATCH/MSDCATCH.1784393473.h3c-R5500-G5.4028866.csv.tar.gz"),
+    "ASD_dataset_9": ("CATCH-master/result/score/CATCH/ASD_dataset_9/run-20260715T155915Z-646428-29264/CATCH.1784131876.h3c-R5500-G5.649174.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_9/MSDCATCH/MSDCATCH.1784393964.h3c-R5500-G5.4172863.csv.tar.gz"),
+    "ASD_dataset_10": ("CATCH-master/result/score/CATCH/ASD_dataset_10/run-20260715T120921Z-1368429-738/CATCH.1784118012.h3c-R5500-G5.1369978.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_10/MSDCATCH/MSDCATCH.1784394511.h3c-R5500-G5.126083.csv.tar.gz"),
+    "ASD_dataset_11": ("CATCH-master/result/score/CATCH/ASD_dataset_11/run-20260715T122849Z-1587674-11538/CATCH.1784119230.h3c-R5500-G5.1589378.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_11/MSDCATCH/MSDCATCH.1784395056.h3c-R5500-G5.287470.csv.tar.gz"),
+    "ASD_dataset_12": ("CATCH-master/result/score/CATCH/ASD_dataset_12/run-20260715T125526Z-1885032-7036/CATCH.1784120935.h3c-R5500-G5.1887948.csv.tar.gz", "APD-CATCH/result/score/by_dataset/ASD_dataset_12/MSDCATCH/MSDCATCH.1784395511.h3c-R5500-G5.464310.csv.tar.gz"),
+    "CICIDS": ("CATCH-master/result/score/CATCH/CICIDS/run-20260715T120722Z-1345491-4045/CATCH.1784122606.h3c-R5500-G5.1353374.csv.tar.gz", "APD-CATCH/result/score/by_dataset/CICIDS/MSDCATCH/MSDCATCH.1784402663.h3c-R5500-G5.3309038.csv.tar.gz"),
+    "Creditcard": ("CATCH-master/result/score/CATCH/Creditcard/run-20260716T202925Z-3426561-275/CATCH.1784236079.h3c-R5500-G5.3427278.csv.tar.gz", "APD-CATCH/result/score/by_dataset/Creditcard/MSDCATCH/MSDCATCH.1784402131.h3c-R5500-G5.1040497.csv.tar.gz"),
+    "SMAP": ("CATCH-master/result/score/CATCH/SMAP/run-20260717T070416Z-2731832-15614/CATCH.1784278165.h3c-R5500-G5.2732611.csv.tar.gz", "APD-CATCH/result/score/by_dataset/SMAP/MSDCATCH/MSDCATCH.1784403162.h3c-R5500-G5.1079965.csv.tar.gz"),
+    "SMD": ("CATCH-master/result/score/CATCH/SMD/run-20260716T225633Z-1008371-29270/CATCH.1784301239.h3c-R5500-G5.1011549.csv.tar.gz", "APD-CATCH/result/score/by_dataset/SMD/MSDCATCH/MSDCATCH.1784559943.h3c-R5500-G5.179946.csv.tar.gz"),
+    "SWAT": ("CATCH-master/result/score/CATCH/SWAT/run-20260715T184743Z-2499166-18894/CATCH.1784210821.h3c-R5500-G5.2521250.csv.tar.gz", "APD-CATCH/result/score/by_dataset/SWAT/MSDCATCH/MSDCATCH.1784547386.h3c-R5500-G5.233296.csv.tar.gz"),
+}
 EPSILON = 1e-8
 
 
@@ -88,14 +116,8 @@ def read_tar_row(path: Path) -> dict:
 
 
 def choose_valid_archive(paths: Iterable[Path]) -> tuple[Optional[Path], Optional[dict]]:
-    candidates = []
-    for path in paths:
-        row = read_tar_row(path)
-        if not row.get("log_info") and finite(row.get("auc_pr")) and finite(row.get("auc_roc")):
-            candidates.append((path, row))
-    if not candidates:
-        return None, None
-    return max(candidates, key=lambda item: item[0].stat().st_mtime)
+    del paths
+    raise RuntimeError("Automatic result selection is prohibited; use FORMAL_RESULT_SOURCES.")
 
 
 def msd_json_row(path: Path) -> dict:
@@ -143,7 +165,7 @@ def metric_group(delta: Optional[float]) -> str:
     return "neutral"
 
 
-def discover_metrics(repo: Path, catch_root: Path) -> tuple[pd.DataFrame, list[dict]]:
+def _deprecated_mtime_discovery_do_not_use(repo: Path, catch_root: Path) -> tuple[pd.DataFrame, list[dict]]:
     rows = []
     sources = []
     for task in TASKS:
@@ -264,6 +286,155 @@ def discover_metrics(repo: Path, catch_root: Path) -> tuple[pd.DataFrame, list[d
     return pd.DataFrame(rows), sources
 
 
+def parsed_mapping(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if value in (None, ""):
+        return {}
+    return json.loads(value)
+
+
+def record_config(row: dict) -> dict:
+    params = parsed_mapping(row.get("model_params"))
+    strategy = parsed_mapping(row.get("strategy_args"))
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    dataset = row.get("file_name") or payload.get("dataset")
+    return {
+        "dataset": Path(str(dataset)).stem if dataset else None,
+        "seed": numeric(strategy.get("seed")),
+        "strategy_name": strategy.get("strategy_name"),
+        "seq_len": config_integer(params, "seq_len"),
+        "patch_size": config_integer(params, "patch_size"),
+    }
+
+
+def fixed_msd_row(path: Path) -> tuple[Optional[dict], str]:
+    if path.suffix == ".json":
+        return msd_json_row(path), "formal total-screen JSON"
+    if path.suffix == ".log":
+        return msd_log_row(path), "formal total-screen log"
+    row = read_tar_row(path)
+    if row.get("log_info") or not finite(row.get("auc_pr")) or not finite(row.get("auc_roc")):
+        return None, "invalid fixed archive"
+    return {
+        "auc_pr": row["auc_pr"],
+        "auc_roc": row["auc_roc"],
+        "model_params": parsed_mapping(row.get("model_params")),
+        "strategy_args": parsed_mapping(row.get("strategy_args")),
+        "file_name": row.get("file_name"),
+        "payload": None,
+    }, "formal by-dataset archive"
+
+
+def compare_formal_configs(task: str, catch_config: dict, msd_config: dict) -> tuple[str, str, str]:
+    conflicts = []
+    missing = []
+    for field in ("dataset", "seed", "seq_len", "patch_size", "strategy_name"):
+        catch_value = catch_config.get(field)
+        msd_value = msd_config.get(field)
+        if catch_value is None or msd_value is None:
+            missing.append(field)
+        elif catch_value != msd_value:
+            conflicts.append(field)
+    if catch_config.get("dataset") not in (None, task):
+        conflicts.append("catch_dataset")
+    if msd_config.get("dataset") not in (None, task):
+        conflicts.append("msd_dataset")
+    if conflicts:
+        return "source/config conflict", ",".join(sorted(set(conflicts))), ",".join(missing)
+    if missing:
+        return "partially_verified_not_persisted", "", ",".join(missing)
+    return "verified", "", ""
+
+
+def source_audit_row(task: str, model: str, path: Path, kind: str, config: dict, status: str, conflicts: str, missing: str) -> dict:
+    return {
+        "task": task,
+        "model": model,
+        "artifact": f"{model} formal result",
+        "path": str(path),
+        "status": "fixed_source_used",
+        "source_selection": "explicit FORMAL_RESULT_SOURCES mapping",
+        "source_kind": kind,
+        "record_dataset": config.get("dataset"),
+        "seed": config.get("seed"),
+        "seq_len": config.get("seq_len"),
+        "patch_size": config.get("patch_size"),
+        "evaluation_strategy": config.get("strategy_name"),
+        "primary_score": "detect_score" if model == "CATCH" else "total_score",
+        "config_verification": status,
+        "config_conflict_fields": conflicts,
+        "config_not_persisted_fields": missing,
+        "notes": "GECCO uses the fixed fair seq_len=192 CATCH archive." if task == "GECCO" else "",
+    }
+
+
+def discover_metrics(repo: Path, catch_root: Path) -> tuple[pd.DataFrame, list[dict]]:
+    del catch_root
+    if set(FORMAL_RESULT_SOURCES) != set(TASKS):
+        raise ValueError("FORMAL_RESULT_SOURCES must contain exactly the 23 formal tasks")
+    workspace = repo.parent
+    rows = []
+    sources = []
+    for task in TASKS:
+        catch_relative, msd_relative = FORMAL_RESULT_SOURCES[task]
+        catch_path = workspace / catch_relative
+        msd_path = workspace / msd_relative
+        if not catch_path.exists() or not msd_path.exists():
+            raise FileNotFoundError(f"Fixed formal source missing for {task}: {catch_path}, {msd_path}")
+        catch_row = read_tar_row(catch_path)
+        if catch_row.get("log_info") or not finite(catch_row.get("auc_pr")) or not finite(catch_row.get("auc_roc")):
+            raise ValueError(f"Invalid fixed CATCH archive for {task}: {catch_path}")
+        msd_row, msd_kind = fixed_msd_row(msd_path)
+        if msd_row is None:
+            raise ValueError(f"Invalid fixed MSD source for {task}: {msd_path}")
+
+        catch_config = record_config(catch_row)
+        msd_config = record_config(msd_row)
+        config_status, conflicts, missing = compare_formal_configs(task, catch_config, msd_config)
+        catch_pr = numeric(catch_row["auc_pr"])
+        catch_roc = numeric(catch_row["auc_roc"])
+        msd_pr = numeric(msd_row["auc_pr"])
+        msd_roc = numeric(msd_row["auc_roc"])
+        sources.append(source_audit_row(task, "CATCH", catch_path, "fixed archive", catch_config, config_status, conflicts, missing))
+        sources.append(source_audit_row(task, "MSDCATCH", msd_path, msd_kind, msd_config, config_status, conflicts, missing))
+        rows.append(
+            {
+                "task": task,
+                "paper_dataset": paper_dataset(task),
+                "formal_source_selection": "explicit_fixed_mapping",
+                "formal_seq_len": catch_config["seq_len"],
+                "formal_patch_size": catch_config["patch_size"],
+                "catch_record_dataset": catch_config["dataset"],
+                "catch_seed": catch_config["seed"],
+                "catch_strategy": catch_config["strategy_name"],
+                "catch_primary_score": "detect_score",
+                "msd_record_dataset": msd_config["dataset"],
+                "msd_seed": msd_config["seed"],
+                "msd_seq_len": msd_config["seq_len"],
+                "msd_patch_size": msd_config["patch_size"],
+                "msd_strategy": msd_config["strategy_name"],
+                "msd_primary_score": "total_score",
+                "source_config_status": config_status,
+                "source_config_conflict_fields": conflicts,
+                "source_config_not_persisted_fields": missing,
+                "catch_auc_pr": catch_pr,
+                "msd_auc_pr": msd_pr,
+                "delta_auc_pr": msd_pr - catch_pr,
+                "pr_group": metric_group(msd_pr - catch_pr),
+                "catch_auc_roc": catch_roc,
+                "msd_auc_roc": msd_roc,
+                "delta_auc_roc": msd_roc - catch_roc,
+                "roc_group": metric_group(msd_roc - catch_roc),
+                "catch_source": str(catch_path),
+                "msd_source": str(msd_path),
+                "msd_source_kind": msd_kind,
+                "notes": "fixed fair GECCO source" if task == "GECCO" else "",
+            }
+        )
+    return pd.DataFrame(rows), sources
+
+
 def metadata_lookup(repo: Path) -> dict[str, dict]:
     metadata = pd.read_csv(repo / "dataset" / "anomaly_detect" / "DETECT_META.csv")
     return {Path(row.file_name).stem: row.to_dict() for _, row in metadata.iterrows()}
@@ -312,9 +483,50 @@ def read_train_and_labels(path: Path, train_length: int, test_length: int) -> tu
     labels = np.concatenate(label_chunks)[:test_length] if label_chunks else np.empty(0)
     if len(labels) != test_length:
         raise ValueError(f"{path.name} has {len(labels)} formal test labels, expected {test_length}")
-    return np.column_stack(features), (labels > 0).astype(np.int8)
+    return np.column_stack(features), labels
 
 
+def formal_loader_test_labels(repo: Path, path: Path, train_length: int) -> np.ndarray:
+    """Use the benchmark's data-only long-format loader; no strategy or model is constructed."""
+    project_root = str(repo)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from ts_benchmark.data.utils import process_data_df
+
+    loaded = process_data_df(pd.read_csv(path))
+    return np.ascontiguousarray(loaded["label"].iloc[train_length:].to_numpy())
+
+
+def checksum(values: np.ndarray) -> str:
+    return hashlib.sha256(np.ascontiguousarray(values).tobytes()).hexdigest()
+
+
+def asd_parity_row(task: str, analysis_labels: np.ndarray, loader_labels: np.ndarray, expected_length: int) -> dict:
+    analysis_count = int(np.count_nonzero(analysis_labels > 0))
+    loader_count = int(np.count_nonzero(loader_labels > 0))
+    exact_match = bool(
+        analysis_labels.shape == loader_labels.shape
+        and analysis_labels.dtype == loader_labels.dtype
+        and np.array_equal(analysis_labels, loader_labels)
+    )
+    analysis_checksum = checksum(analysis_labels)
+    loader_checksum = checksum(loader_labels)
+    return {
+        "asd_subset": task,
+        "analysis_length": len(analysis_labels),
+        "loader_length": len(loader_labels),
+        "expected_formal_test_length": expected_length,
+        "analysis_dtype": str(analysis_labels.dtype),
+        "loader_dtype": str(loader_labels.dtype),
+        "analysis_anomaly_count": analysis_count,
+        "loader_anomaly_count": loader_count,
+        "anomaly_count_match": analysis_count == loader_count,
+        "exact_match": exact_match,
+        "analysis_checksum": analysis_checksum,
+        "loader_checksum": loader_checksum,
+        "checksum_match": analysis_checksum == loader_checksum,
+        "formal_length_match": len(loader_labels) == expected_length,
+    }
 def anomaly_segments(labels: np.ndarray) -> np.ndarray:
     starts = np.flatnonzero(np.diff(np.r_[0, labels, 0]) == 1)
     ends = np.flatnonzero(np.diff(np.r_[0, labels, 0]) == -1)
@@ -389,6 +601,7 @@ def describe_training_data(
         global_correlation = np.nan_to_num(np.corrcoef(standardized, rowvar=False))
 
     drift_mean_sum = drift_std_sum = drift_count = 0.0
+    legacy_mean_drift_sum = legacy_variance_drift_sum = 0.0
     correlation_sum = correlation_count = 0.0
     low_sum = np.zeros(channels)
     entropy_sum = np.zeros(channels)
@@ -412,8 +625,12 @@ def describe_training_data(
             window_mean = raw_window.mean(axis=0)
             window_std = raw_window.std(axis=0)
             if previous_mean is not None:
-                drift_mean_sum += float(np.abs(window_mean - previous_mean).sum() / stds.sum())
-                drift_std_sum += float(np.abs(window_std - previous_std).sum() / stds.sum())
+                normalized_mean_change = np.abs(window_mean - previous_mean) / (stds + EPSILON)
+                normalized_std_change = np.abs(window_std - previous_std) / (stds + EPSILON)
+                drift_mean_sum += float(np.mean(normalized_mean_change))
+                drift_std_sum += float(np.mean(normalized_std_change))
+                legacy_mean_drift_sum += float(np.abs(window_mean - previous_mean).sum() / stds.sum())
+                legacy_variance_drift_sum += float(np.abs(window_std - previous_std).sum() / stds.sum())
                 drift_count += 1
             previous_mean, previous_std = window_mean, window_std
 
@@ -466,6 +683,8 @@ def describe_training_data(
         "train_windows": window_count,
         "mean_drift": drift_mean_sum / drift_count if drift_count else None,
         "variance_drift": drift_std_sum / drift_count if drift_count else None,
+        "mean_drift_pre_correction": legacy_mean_drift_sum / drift_count if drift_count else None,
+        "variance_drift_pre_correction": legacy_variance_drift_sum / drift_count if drift_count else None,
         "low_frequency_energy_ratio_mean": float((low_sum / spectral_count).mean()) if spectral_count else None,
         "low_frequency_energy_ratio_median": float(np.median(low_sum / spectral_count)) if spectral_count else None,
         "spectral_entropy": float((entropy_sum / spectral_count).mean()) if spectral_count else None,
@@ -637,8 +856,199 @@ def aggregate_paper_descriptors(task_descriptors: pd.DataFrame, paper_metric_row
         metric = paper_metric_rows[paper_metric_rows.paper_dataset == paper].iloc[0]
         row["delta_auc_pr"] = metric.delta_auc_pr
         row["delta_auc_roc"] = metric.delta_auc_roc
+        row["pr_group"] = metric.pr_group
+        row["roc_group"] = metric.roc_group
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+
+CORRELATION_DESCRIPTORS = [
+    "channel_count", "mean_drift", "variance_drift", "low_frequency_energy_ratio_mean",
+    "spectral_entropy", "periodicity_top3_ratio", "correlation_drift", "trend_energy_over_raw",
+    "residual_energy_over_raw", "trend_over_residual_energy",
+]
+
+
+def rank_spearman(values: pd.DataFrame, descriptor: str, target: str) -> Optional[float]:
+    subset = values[[descriptor, target]].dropna()
+    if len(subset) < 3:
+        return None
+    return numeric(subset[descriptor].rank(method="average").corr(subset[target].rank(method="average")))
+
+
+def has_sign_flip(full_rho: Optional[float], candidate_rho: Optional[float]) -> bool:
+    return full_rho is not None and candidate_rho is not None and np.sign(candidate_rho) != np.sign(full_rho)
+
+
+def row_leave_one_out(values: pd.DataFrame, level: str, descriptor: str, target: str) -> tuple[dict, list[dict]]:
+    subset = values[["task", "paper_dataset", descriptor, target]].dropna()
+    full_rho = rank_spearman(subset, descriptor, target)
+    rows = []
+    for index, row in subset.iterrows():
+        loo_rho = rank_spearman(subset.drop(index), descriptor, target)
+        rows.append(
+            {
+                "level": level,
+                "descriptor": descriptor,
+                "target": target,
+                "removed_item": row.task,
+                "removed_group": row.paper_dataset,
+                "n": len(subset),
+                "full_rho": full_rho,
+                "loo_rho": loo_rho,
+                "absolute_shift": abs(loo_rho - full_rho) if loo_rho is not None and full_rho is not None else None,
+                "sign_flip": has_sign_flip(full_rho, loo_rho),
+            }
+        )
+    valid = [row for row in rows if row["loo_rho"] is not None]
+    influential = max(valid, key=lambda row: row["absolute_shift"]) if valid else None
+    return {
+        "spearman_rho": full_rho,
+        "n": len(subset),
+        "most_influential_leave_one_out": influential["removed_item"] if influential else None,
+        "max_leave_one_out_shift": influential["absolute_shift"] if influential else None,
+        "minimum_loo_rho": min(row["loo_rho"] for row in valid) if valid else None,
+        "maximum_loo_rho": max(row["loo_rho"] for row in valid) if valid else None,
+        "any_loo_sign_flip": any(row["sign_flip"] for row in rows),
+    }, rows
+
+
+def grouped_leave_out(values: pd.DataFrame, descriptor: str, target: str) -> tuple[dict, list[dict]]:
+    subset = values[["task", "paper_dataset", descriptor, target]].dropna()
+    full_rho = rank_spearman(subset, descriptor, target)
+    rows = []
+    for group in PAPER_ORDER:
+        remaining = subset[subset.paper_dataset != group]
+        group_rho = rank_spearman(remaining, descriptor, target)
+        if len(remaining) == len(subset):
+            continue
+        rows.append(
+            {
+                "level": "task",
+                "descriptor": descriptor,
+                "target": target,
+                "removed_group": group,
+                "n": len(subset),
+                "remaining_n": len(remaining),
+                "full_rho": full_rho,
+                "group_loo_rho": group_rho,
+                "absolute_shift": abs(group_rho - full_rho) if group_rho is not None and full_rho is not None else None,
+                "sign_flip": has_sign_flip(full_rho, group_rho),
+            }
+        )
+    valid = [row for row in rows if row["group_loo_rho"] is not None]
+    asd = next((row for row in rows if row["removed_group"] == "ASD"), None)
+    return {
+        "rho_without_asd_group": asd["group_loo_rho"] if asd else None,
+        "minimum_group_loo_rho": min(row["group_loo_rho"] for row in valid) if valid else None,
+        "maximum_group_loo_rho": max(row["group_loo_rho"] for row in valid) if valid else None,
+        "any_group_loo_sign_flip": any(row["sign_flip"] for row in rows),
+    }, rows
+
+
+def descriptor_group_differences(values: pd.DataFrame, level: str, correlations_df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for descriptor in CORRELATION_DESCRIPTORS:
+        for target, group_column in (("delta_auc_pr", "pr_group"), ("delta_auc_roc", "roc_group")):
+            subset = values[[descriptor, group_column]].dropna()
+            gains = subset.loc[subset[group_column] == "gain", descriptor]
+            other = subset.loc[subset[group_column].isin(["loss", "neutral"]), descriptor]
+            rho = correlations_df.loc[
+                (correlations_df.level == level)
+                & (correlations_df.descriptor == descriptor)
+                & (correlations_df.target == target),
+                "spearman_rho",
+            ].iloc[0]
+            gain_median = numeric(gains.median()) if len(gains) else None
+            other_median = numeric(other.median()) if len(other) else None
+            difference = gain_median - other_median if gain_median is not None and other_median is not None else None
+            direction_consistent = bool(
+                difference is not None
+                and rho is not None
+                and ((rho > 0 and difference > 0) or (rho < 0 and difference < 0))
+            )
+            rows.append(
+                {
+                    "level": level,
+                    "descriptor": descriptor,
+                    "target": target,
+                    "gain_count": len(gains),
+                    "loss_or_neutral_count": len(other),
+                    "gain_median": gain_median,
+                    "loss_or_neutral_median": other_median,
+                    "gain_minus_loss_or_neutral_median": difference,
+                    "direction_consistent_with_rho": direction_consistent,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def correlations(task_values: pd.DataFrame, paper_values: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    summary_rows = []
+    row_loo_rows = []
+    group_loo_rows = []
+    for level, values in (("task", task_values), ("paper", paper_values)):
+        for descriptor in CORRELATION_DESCRIPTORS:
+            for target in ("delta_auc_pr", "delta_auc_roc"):
+                row_summary, rows = row_leave_one_out(values, level, descriptor, target)
+                row_loo_rows.extend(rows)
+                summary_rows.append({"level": level, "descriptor": descriptor, "target": target, **row_summary})
+                if level == "task":
+                    group_summary, groups = grouped_leave_out(values, descriptor, target)
+                    group_loo_rows.extend(groups)
+                    summary_rows[-1].update(group_summary)
+                else:
+                    summary_rows[-1].update(
+                        {
+                            "rho_without_asd_group": None,
+                            "minimum_group_loo_rho": None,
+                            "maximum_group_loo_rho": None,
+                            "any_group_loo_sign_flip": None,
+                        }
+                    )
+    summary = pd.DataFrame(summary_rows)
+    differences = pd.concat(
+        [
+            descriptor_group_differences(task_values, "task", summary),
+            descriptor_group_differences(paper_values, "paper", summary),
+        ],
+        ignore_index=True,
+    )
+    qualifications = []
+    for descriptor in CORRELATION_DESCRIPTORS:
+        for target in ("delta_auc_pr", "delta_auc_roc"):
+            task_row = summary[(summary.level == "task") & (summary.descriptor == descriptor) & (summary.target == target)].iloc[0]
+            paper_row = summary[(summary.level == "paper") & (summary.descriptor == descriptor) & (summary.target == target)].iloc[0]
+            group_diff = differences[(differences.level == "task") & (differences.descriptor == descriptor) & (differences.target == target)].iloc[0]
+            same_direction = (
+                task_row.spearman_rho is not None
+                and paper_row.spearman_rho is not None
+                and np.sign(task_row.spearman_rho) == np.sign(paper_row.spearman_rho)
+            )
+            qualified = bool(
+                same_direction
+                and abs(task_row.spearman_rho) >= 0.35
+                and abs(paper_row.spearman_rho) >= 0.35
+                and not task_row.any_loo_sign_flip
+                and not paper_row.any_loo_sign_flip
+                and not task_row.any_group_loo_sign_flip
+                and task_row.rho_without_asd_group is not None
+                and np.sign(task_row.rho_without_asd_group) == np.sign(task_row.spearman_rho)
+                and group_diff.gain_count >= 3
+                and group_diff.loss_or_neutral_count >= 3
+                and group_diff.direction_consistent_with_rho
+            )
+            qualifications.append(
+                {
+                    "descriptor": descriptor,
+                    "target": target,
+                    "qualified_for_pr": qualified if target == "delta_auc_pr" else False,
+                    "qualified_for_roc": qualified if target == "delta_auc_roc" else False,
+                }
+            )
+    summary = summary.merge(pd.DataFrame(qualifications), on=["descriptor", "target"], how="left")
+    return summary, pd.DataFrame(row_loo_rows), pd.DataFrame(group_loo_rows), differences
 
 
 def paper_reference(repo: Path, catch_root: Path) -> pd.DataFrame:
@@ -734,6 +1144,127 @@ def report(output: Path, task_metrics: pd.DataFrame, paper: pd.DataFrame, correl
     (output / "DECOMPOSITION_APPLICABILITY_REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+
+def drift_correction_summary(descriptors: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for corrected, legacy in (("mean_drift", "mean_drift_pre_correction"), ("variance_drift", "variance_drift_pre_correction")):
+        subset = descriptors[["task", corrected, legacy]].dropna()
+        difference = (subset[corrected] - subset[legacy]).abs()
+        corrected_rank = subset[corrected].rank(method="min")
+        legacy_rank = subset[legacy].rank(method="min")
+        rows.append(
+            {
+                "descriptor": corrected,
+                "maximum_absolute_difference": float(difference.max()) if len(difference) else None,
+                "tasks_with_rank_change": int((corrected_rank != legacy_rank).sum()),
+                "maximum_rank_change": int((corrected_rank - legacy_rank).abs().max()) if len(subset) else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def candidate_screen(correlations_df: pd.DataFrame, differences: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for descriptor in CORRELATION_DESCRIPTORS:
+        for target in ("delta_auc_pr", "delta_auc_roc"):
+            task_row = correlations_df[(correlations_df.level == "task") & (correlations_df.descriptor == descriptor) & (correlations_df.target == target)].iloc[0]
+            paper_row = correlations_df[(correlations_df.level == "paper") & (correlations_df.descriptor == descriptor) & (correlations_df.target == target)].iloc[0]
+            difference = differences[(differences.level == "task") & (differences.descriptor == descriptor) & (differences.target == target)].iloc[0]
+            rows.append(
+                {
+                    "descriptor": descriptor,
+                    "target": target,
+                    "task_rho": task_row.spearman_rho,
+                    "paper_rho": paper_row.spearman_rho,
+                    "rho_without_asd_group": task_row.rho_without_asd_group,
+                    "task_any_loo_sign_flip": task_row.any_loo_sign_flip,
+                    "paper_any_loo_sign_flip": paper_row.any_loo_sign_flip,
+                    "task_any_group_loo_sign_flip": task_row.any_group_loo_sign_flip,
+                    "gain_median": difference.gain_median,
+                    "loss_or_neutral_median": difference.loss_or_neutral_median,
+                    "median_direction_consistent": difference.direction_consistent_with_rho,
+                    "qualified_for_pr": task_row.qualified_for_pr,
+                    "qualified_for_roc": task_row.qualified_for_roc,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def report(
+    output: Path,
+    task_metrics: pd.DataFrame,
+    paper: pd.DataFrame,
+    descriptors: pd.DataFrame,
+    correlations_df: pd.DataFrame,
+    differences: pd.DataFrame,
+    parity: pd.DataFrame,
+) -> None:
+    available = task_metrics.dropna(subset=["delta_auc_pr"])
+    current_pr_groups = task_metrics.pr_group.value_counts().to_dict()
+    previous_delta = task_metrics[["task", "delta_auc_pr"]].copy()
+    previous_delta.loc[previous_delta.task == "GECCO", "delta_auc_pr"] = 0.40649507103606486 - 0.4174229654567119
+    previous_groups = previous_delta.delta_auc_pr.map(metric_group).value_counts().to_dict()
+    drift_summary = drift_correction_summary(descriptors)
+    screen = candidate_screen(correlations_df, differences)
+    qualified = screen[(screen.qualified_for_pr) | (screen.qualified_for_roc)]
+    cross_level_signal = screen[(screen.task_rho.abs() >= 0.35) & (screen.paper_rho.abs() >= 0.35) & (np.sign(screen.task_rho) == np.sign(screen.paper_rho))]
+    if len(qualified):
+        clauses = []
+        for _, row in qualified.iterrows():
+            label = "Delta AUC-PR" if row.qualified_for_pr else "Delta AUC-ROC"
+            clauses.append(f"{row.descriptor} is a candidate association for {label}")
+        conclusion = "A: " + "; ".join(clauses) + "."
+    elif len(cross_level_signal):
+        conclusion = "B: candidate stratification signals exist, but the complete robustness and grouped-LOO criteria are not met."
+    else:
+        conclusion = "C: the corrected formal sources and descriptors do not support a repeatable explanatory condition for fixed decomposition benefit."
+    conflict_tasks = task_metrics.loc[task_metrics.source_config_status == "source/config conflict", "task"].tolist()
+    partial_tasks = task_metrics.loc[task_metrics.source_config_status == "partially_verified_not_persisted", "task"].tolist()
+    parity_ok = bool(len(parity) == 12 and parity.exact_match.all() and parity.checksum_match.all() and parity.anomaly_count_match.all() and parity.formal_length_match.all())
+    lines = [
+        "# Decomposition Applicability Report",
+        "",
+        "This report is read-only: it does not train, infer, rescore, or invoke a benchmark runner.",
+        "",
+        "## Fixed Formal Sources",
+        f"- Explicit frozen source mapping used for {len(available)}/{len(task_metrics)} execution tasks; no archive was selected by mtime.",
+        "- GECCO CATCH uses CATCH_RSA_GECCO seq_len=192: PR 0.409311912, ROC 0.963459932; MSD uses the seq_len=192 total_score: PR 0.406495071, ROC 0.964381743.",
+        f"- Source/config conflicts: {', '.join(conflict_tasks) if conflict_tasks else 'none'}.",
+        f"- Required fields not persisted by the frozen log/JSON sources: {', '.join(partial_tasks) if partial_tasks else 'none'}; these are reported as partial verification, not silently substituted.",
+        "",
+        "## ASD Loader Parity",
+        f"- ASD parity exact match: {int(parity.exact_match.sum())}/12; overall status: {'pass' if parity_ok else 'fail'}.",
+        "- Analysis labels and formal loader labels are compared for shape, dtype, anomaly count, element equality, and SHA-256 checksum.",
+        "",
+        "## Drift Correction",
+        "```text",
+        drift_summary.to_string(index=False),
+        "```",
+        "- mean_drift and variance_drift now use per-channel normalized changes before averaging adjacent-window pairs; legacy values are retained only for this comparison.",
+        "",
+        "## Performance Groups",
+        f"- Task PR groups before GECCO fair-source correction: {previous_groups}; after correction: {current_pr_groups}.",
+        "- ASD paper-level values are equal-weight macro means of its 12 execution tasks.",
+        "```text",
+        paper[["paper_dataset", "task_count", "delta_auc_pr", "pr_group", "delta_auc_roc", "roc_group"]].to_string(index=False),
+        "```",
+        "",
+        "## Candidate Correlations",
+        "```text",
+        screen.to_string(index=False),
+        "```",
+        "- Row LOO evaluates every removed execution/paper record. Grouped LOO removes all ASD subsets together and each remaining paper dataset once.",
+        "",
+        "## Score Diagnostics",
+        "- CATCH continuous scores are absent from frozen formal archives; score-vector Spearman remains N/A without prohibited rescoring.",
+        "",
+        "## Conclusion",
+        f"- {conclusion}",
+        "- Any qualified association is descriptive, non-causal, not a direct model-selection rule, and not externally validated on independent datasets.",
+    ]
+    (output / "DECOMPOSITION_APPLICABILITY_REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     repo = Path(__file__).resolve().parents[1]
     catch_root = repo.parent / "CATCH-master"
@@ -743,6 +1274,7 @@ def main() -> None:
     task_metrics, sources = discover_metrics(repo, catch_root)
     metadata = metadata_lookup(repo)
     descriptor_rows = []
+    parity_rows = []
     decomposition_rows = []
 
     for task in TASKS:
@@ -813,6 +1345,18 @@ def main() -> None:
         )
         print(f"[descriptor] {task}", flush=True)
         train, labels = read_train_and_labels(raw_path, train_length, test_length)
+        if task.startswith("ASD_dataset_"):
+            loader_labels = formal_loader_test_labels(repo, raw_path, train_length)
+            parity_rows.append(asd_parity_row(task, labels, loader_labels, test_length))
+            sources.append(
+                {
+                    "task": task,
+                    "artifact": "formal benchmark data-only loader",
+                    "path": str(raw_path),
+                    "status": "used_for_asd_label_parity",
+                    "notes": "process_data_df only; no strategy, score, or model invocation",
+                }
+            )
         base, decomp = describe_training_data(
             train=train,
             labels=labels,
@@ -840,23 +1384,38 @@ def main() -> None:
 
     descriptors = pd.DataFrame(descriptor_rows)
     decomposition = pd.DataFrame(decomposition_rows)
+    parity = pd.DataFrame(parity_rows).sort_values("asd_subset").reset_index(drop=True)
+    task_metrics.to_csv(output / "task_level_metrics.csv", index=False)
+    descriptors.to_csv(output / "dataset_descriptors.csv", index=False)
+    decomposition.to_csv(output / "decomposition_descriptors.csv", index=False)
+    pd.DataFrame(sources).to_csv(output / "analysis_sources.csv", index=False)
+    parity.to_csv(output / "asd_label_parity.csv", index=False)
+    parity_pass = bool(
+        len(parity) == 12
+        and parity.exact_match.all()
+        and parity.checksum_match.all()
+        and parity.anomaly_count_match.all()
+        and parity.formal_length_match.all()
+    )
+    if not parity_pass:
+        raise RuntimeError("ASD label parity failed; descriptor association outputs were not regenerated.")
+
     diagnostics = score_diagnostics(repo, task_metrics)
     paper = paper_metrics(task_metrics)
     task_descriptor_values = descriptors.merge(decomposition, on=["task", "paper_dataset"], how="outer")
     task_values = task_metrics.merge(task_descriptor_values, on=["task", "paper_dataset"], how="left")
     paper_values = aggregate_paper_descriptors(task_descriptor_values, paper)
-    correlations_df = correlations(task_values, paper_values)
+    correlations_df, row_loo, group_loo, differences = correlations(task_values, paper_values)
     baseline_reference = paper_reference(repo, catch_root)
 
-    task_metrics.to_csv(output / "task_level_metrics.csv", index=False)
     paper.to_csv(output / "paper_level_metrics.csv", index=False)
-    descriptors.to_csv(output / "dataset_descriptors.csv", index=False)
-    decomposition.to_csv(output / "decomposition_descriptors.csv", index=False)
     diagnostics.to_csv(output / "score_distribution_diagnostics.csv", index=False)
     correlations_df.to_csv(output / "descriptor_delta_correlations.csv", index=False)
+    differences.to_csv(output / "descriptor_group_differences.csv", index=False)
+    row_loo.to_csv(output / "descriptor_leave_one_out.csv", index=False)
+    group_loo.to_csv(output / "descriptor_group_leave_out.csv", index=False)
     baseline_reference.to_csv(output / "paper_baseline_reference.csv", index=False)
-    pd.DataFrame(sources).to_csv(output / "analysis_sources.csv", index=False)
-    report(output, task_metrics, paper, correlations_df)
+    report(output, task_metrics, paper, descriptors, correlations_df, differences, parity)
     print(f"[done] {output}", flush=True)
 
 
