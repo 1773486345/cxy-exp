@@ -1,0 +1,2 @@
+strategy_args,metric_name,"BHDMSDCATCH;{""auxi_lambda"": 0, ""batch_size"": 32, ""dataset_name"": ""SWAT"", ""inference_patch_size"": 256, ""inference_patch_stride"": 32, ""patch_size"": 256, ""patch_stride"": 64, ""score_lambda"": 0, ""seq_len"": 2048}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.3206304504555496
