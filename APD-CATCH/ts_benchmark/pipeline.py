@@ -11,6 +11,7 @@ from ts_benchmark.data.data_source import (
     LocalStForecastingDataSource,
     DataSource,
     LocalAnomalyDetectDataSource,
+    LocalExternalAnomalyDetectDataSource,
 )
 from ts_benchmark.data.suites.global_storage import GlobalStorageDataServer
 from ts_benchmark.evaluation.evaluate_model import eval_model
@@ -57,6 +58,9 @@ PREDEFINED_DATASETS = {
     ),
     "user_detect": DatasetInfo(
         size_value=["user"], datasrc_class=LocalAnomalyDetectDataSource
+    ),
+    "external_detect": DatasetInfo(
+        size_value=["external"], datasrc_class=LocalExternalAnomalyDetectDataSource
     ),
 }
 

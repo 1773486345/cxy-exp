@@ -1,0 +1,194 @@
+"""Integrity checks for the fixed external validation protocol.
+
+Run after the data-preparation commands have completed. The small invariant tests
+remain useful before download; data-dependent tests are skipped until the prepared
+files exist rather than fabricating substitute data.
+"""
+
+from __future__ import annotations
+
+import json
+import hashlib
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+
+ROOT = Path(__file__).resolve().parents[1]
+EXTERNAL_SCRIPT_DIR = ROOT / "scripts" / "data_preparation" / "external_validation"
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(EXTERNAL_SCRIPT_DIR))
+
+from common import (  # noqa: E402
+    BATADAL_ATTACK_INTERVALS,
+    DATA_ROOT,
+    METADATA_PATH,
+    METRO_FAULT_INTERVALS,
+    MTSBENCH_MISSING_PATHS,
+    PAPER_DATASET,
+    REGISTRY_PATH,
+    RESULT_ROOT,
+    TASK_ORDER,
+    load_prepared_task,
+    validate_mtsbench_source_dir,
+)
+
+
+class TestExternalValidationInvariants(unittest.TestCase):
+    def test_fixed_task_cardinality_and_macro_mapping(self):
+        self.assertEqual(len(TASK_ORDER), 20)
+        self.assertEqual(sum(task.startswith("MTSB_OPPORTUNITY_") for task in TASK_ORDER), 13)
+        self.assertEqual(sum(task.startswith("MTSB_OCCUPANCY_") for task in TASK_ORDER), 2)
+        counts = pd.Series(PAPER_DATASET).value_counts()
+        self.assertEqual(counts["OPPORTUNITY"], 13)
+        self.assertEqual(counts["Occupancy"], 2)
+        self.assertEqual(len(counts), 7)
+
+    def test_batadal_intervals_are_hourly_endpoint_inclusive(self):
+        expected_counts = [70, 65, 31, 31, 100, 80, 30]
+        counts = []
+        for start, end in BATADAL_ATTACK_INTERVALS:
+            hours = (pd.to_datetime(end, format="%d/%m/%Y %H") - pd.to_datetime(start, format="%d/%m/%Y %H")).total_seconds() / 3600
+            counts.append(int(hours) + 1)
+        self.assertEqual(counts, expected_counts)
+
+    def test_metro_fault_intervals_are_fixed(self):
+        self.assertEqual(len(METRO_FAULT_INTERVALS), 4)
+        self.assertEqual(METRO_FAULT_INTERVALS[0], ("2020-04-18 00:00", "2020-04-18 23:59"))
+        self.assertEqual(METRO_FAULT_INTERVALS[-1], ("2020-07-15 14:30", "2020-07-15 19:00"))
+
+    def test_external_wide_loader_excludes_timestamp_and_keeps_label(self):
+        from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frame = pd.DataFrame(
+                {
+                    "timestamp": ["2020-01-01T00:00:00.000000", "2020-01-01T00:01:00.000000"],
+                    "sensor_a": [1.0, 2.0],
+                    "sensor_b": [3.0, 4.0],
+                    "label": [0, 1],
+                }
+            )
+            frame.to_csv(root / "sample.csv", index=False)
+            source = object.__new__(LocalExternalAnomalyDetectDataSource)
+            source.local_data_path = str(root)
+            loaded = source._load_series("sample.csv")
+            self.assertEqual(list(loaded.columns), ["sensor_a", "sensor_b", "label"])
+            self.assertEqual(loaded.iloc[:, :2].to_numpy().dtype, np.float32)
+            self.assertEqual(loaded["label"].tolist(), [0, 1])
+
+    def test_local_mtsbench_artifact_accepts_only_the_frozen_missing_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rows = []
+            for index, relative in enumerate(MTSBENCH_MISSING_PATHS):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                payload = f"source-{index}".encode("ascii")
+                path.write_bytes(payload)
+                rows.append(
+                    {
+                        "repo_relative_path": relative,
+                        "bytes": len(payload),
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                    }
+                )
+            pd.DataFrame(rows).to_csv(root / "mtsbench_missing_sha256.csv", index=False)
+            self.assertEqual(
+                [row["repo_relative_path"] for row in validate_mtsbench_source_dir(root)],
+                list(MTSBENCH_MISSING_PATHS),
+            )
+            rows[-1]["repo_relative_path"] = "swan/swan_sf_val.csv"
+            pd.DataFrame(rows).to_csv(root / "mtsbench_missing_sha256.csv", index=False)
+            with self.assertRaises(ValueError):
+                validate_mtsbench_source_dir(root)
+
+
+@unittest.skipUnless(METADATA_PATH.exists() and REGISTRY_PATH.exists(), "run external download, preparation, and descriptor freeze first")
+class TestPreparedExternalValidationData(unittest.TestCase):
+    def setUp(self):
+        self.metadata = pd.read_csv(METADATA_PATH).set_index("file_name")
+        self.registry = pd.read_csv(REGISTRY_PATH).set_index("task")
+
+    def test_all_twenty_tasks_are_registered_and_discoverable(self):
+        self.assertEqual(set(self.registry.index), set(TASK_ORDER))
+        self.assertEqual(set(self.metadata.index), {f"{task}.csv" for task in TASK_ORDER})
+        self.assertTrue(all((DATA_ROOT / f"{task}.csv").exists() for task in TASK_ORDER))
+        from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
+
+        source = LocalExternalAnomalyDetectDataSource()
+        self.assertEqual(set(source.dataset.metadata.index), {f"{task}.csv" for task in TASK_ORDER})
+
+    def test_shapes_labels_and_numeric_contracts(self):
+        for task in TASK_ORDER:
+            with self.subTest(task=task):
+                train, test, train_labels, test_labels, frame = load_prepared_task(task)
+                self.assertGreaterEqual(train.shape[1], 2)
+                self.assertEqual(train.shape[1], test.shape[1])
+                self.assertGreaterEqual(len(train), 192)
+                self.assertGreaterEqual(len(test), 192)
+                self.assertEqual(train.dtype, np.float32)
+                self.assertTrue(train.flags.c_contiguous)
+                self.assertTrue(test.flags.c_contiguous)
+                self.assertTrue(np.isfinite(train).all())
+                self.assertTrue(np.isfinite(test).all())
+                self.assertEqual(test_labels.ndim, 1)
+                self.assertEqual(set(np.unique(test_labels)), {0, 1})
+                self.assertEqual(len(train_labels), len(train))
+                self.assertEqual(list(frame.columns)[0], "timestamp")
+                self.assertEqual(list(frame.columns)[-1], "label")
+                train_length = len(train)
+                timestamps = pd.to_datetime(frame["timestamp"])
+                self.assertTrue(timestamps.iloc[:train_length].is_monotonic_increasing)
+                self.assertTrue(timestamps.iloc[train_length:].is_monotonic_increasing)
+
+    def test_batadal_and_metro_official_interval_labels(self):
+        batadal = self.registry.loc["BATADAL"]
+        metro = self.registry.loc["MetroPT3"]
+        batadal_counts = json.loads(batadal["official_attack_interval_counts"])
+        metro_counts = json.loads(metro["official_fault_interval_counts"])
+        self.assertEqual(len(batadal_counts), 7)
+        self.assertTrue(all(count > 0 for count in batadal_counts))
+        self.assertEqual(len(metro_counts), 4)
+        self.assertTrue(all(count > 0 for count in metro_counts))
+
+    def test_mtsbench_task_counts_and_macro_means(self):
+        self.assertEqual(sum(self.registry["paper_dataset"] == "OPPORTUNITY"), 13)
+        self.assertEqual(sum(self.registry["paper_dataset"] == "Occupancy"), 2)
+        values = pd.DataFrame({"paper_dataset": ["OPPORTUNITY"] * 13, "metric": np.arange(13, dtype=float)})
+        self.assertEqual(values.groupby("paper_dataset")["metric"].mean().iloc[0], 6.0)
+
+    def test_descriptor_freeze_is_pre_result_and_train_only(self):
+        path = RESULT_ROOT / "external_descriptor_freeze.json"
+        self.assertTrue(path.exists())
+        freeze = json.loads(path.read_text(encoding="utf-8"))
+        self.assertFalse(freeze["model_results_present_at_freeze"])
+        self.assertEqual(freeze["seq_len"], 192)
+        self.assertEqual(set(freeze["candidate_expected_delta_auc_roc_directions"]), {
+            "mean_drift",
+            "low_frequency_energy_ratio_mean",
+            "periodicity_top3_ratio",
+            "correlation_drift",
+        })
+
+    def test_frozen_model_directories_remain_unmodified(self):
+        changed = subprocess.check_output(
+            ["git", "-C", str(ROOT.parent), "diff", "--name-only"], text=True
+        ).splitlines()
+        protected = (
+            "APD-CATCH/ts_benchmark/baselines/catch/",
+            "APD-CATCH/ts_benchmark/baselines/msd_catch/",
+            "APD-CATCH/ts_benchmark/baselines/bhd_msd_catch/",
+            "APD-CATCH/ts_benchmark/baselines/ra_msd_catch/",
+        )
+        self.assertFalse(any(path.startswith(protected) for path in changed))
+
+
+if __name__ == "__main__":
+    unittest.main()

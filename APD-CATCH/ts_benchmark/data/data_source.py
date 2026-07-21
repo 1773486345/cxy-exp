@@ -4,11 +4,13 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, NoReturn, List
 
+import numpy as np
 import pandas as pd
 
 from ts_benchmark.common.constant import (
     FORECASTING_DATASET_PATH,
     ANOMALY_DETECT_DATASET_PATH,
+    EXTERNAL_ANOMALY_DETECT_DATASET_PATH,
     ST_FORECASTING_DATASET_PATH,
 )
 from ts_benchmark.data.dataset import Dataset
@@ -220,3 +222,59 @@ class LocalAnomalyDetectDataSource(LocalDataSource):
             ANOMALY_DETECT_DATASET_PATH,
             "DETECT_META.csv",
         )
+
+
+class LocalExternalAnomalyDetectDataSource(LocalDataSource):
+    """Read prepared external-validation data without long-format expansion.
+
+    External files are deliberately kept as wide CSVs with a ``timestamp`` column,
+    float32 feature columns, and a binary ``label`` column. The source is isolated
+    from the legacy anomaly data source so existing datasets and loaders are
+    unchanged.
+    """
+
+    def __init__(self):
+        super().__init__(
+            EXTERNAL_ANOMALY_DETECT_DATASET_PATH,
+            "EXTERNAL_DETECT_META.csv",
+        )
+
+    def update_meta_index(self) -> pd.DataFrame:
+        metadata = self._load_metadata()
+        csv_files = {
+            filename
+            for filename in os.listdir(self.local_data_path)
+            if filename.endswith(".csv")
+        }
+        unregistered = csv_files.difference(metadata.index)
+        if unregistered:
+            raise RuntimeError(
+                "External validation data must be registered by the preparation "
+                f"scripts before use: {sorted(unregistered)}"
+            )
+        return metadata
+
+    def _load_series(self, series_name: str) -> pd.DataFrame:
+        path = os.path.join(self.local_data_path, series_name)
+        data = pd.read_csv(path)
+        required = {"timestamp", "label"}
+        missing = required.difference(data.columns)
+        if missing:
+            raise ValueError(f"{series_name} is missing required columns: {sorted(missing)}")
+        feature_columns = [
+            column for column in data.columns if column not in {"timestamp", "label"}
+        ]
+        if len(feature_columns) < 2:
+            raise ValueError(f"{series_name} has fewer than two feature columns")
+        timestamps = pd.to_datetime(data.pop("timestamp"), errors="raise")
+        labels = pd.to_numeric(data.pop("label"), errors="raise").astype("int8")
+        features = data.loc[:, feature_columns].apply(pd.to_numeric, errors="raise")
+        if not np.isfinite(features.to_numpy(dtype=np.float64, copy=False)).all():
+            raise ValueError(f"{series_name} contains non-finite prepared features")
+        result = pd.DataFrame(
+            np.ascontiguousarray(features.to_numpy(dtype=np.float32, copy=True)),
+            columns=feature_columns,
+            index=timestamps,
+        )
+        result["label"] = labels.to_numpy(dtype=np.int8, copy=True)
+        return result

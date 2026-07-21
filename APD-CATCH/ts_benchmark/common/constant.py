@@ -8,6 +8,9 @@ ROOT_PATH = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
 FORECASTING_DATASET_PATH = os.path.join(ROOT_PATH, "dataset", "forecasting")
 ST_FORECASTING_DATASET_PATH = os.path.join(ROOT_PATH, "dataset", "st_forecasting")
 ANOMALY_DETECT_DATASET_PATH = os.path.join(ROOT_PATH, "dataset", "anomaly_detect")
+EXTERNAL_ANOMALY_DETECT_DATASET_PATH = os.path.join(
+    ROOT_PATH, "dataset", "external_validation"
+)
 
 # Profile Path
 CONFIG_PATH = os.path.join(ROOT_PATH, "config")
