@@ -1,1 +1,1 @@
-python ./scripts/run_benchmark.py --config-path "unfixed_detect_score_multi_config.json" --data-name-list "MSL.csv" --model-name "merlion.IsolationForest" --model-hyper-params '{}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "score/IsolationForest"
+python ./scripts/run_benchmark.py --config-path "unfixed_detect_score_multi_config.json" --data-name-list "MSL.csv" --model-name "merlion.IsolationForest" --model-hyper-params '{}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "${BASELINE_SAVE_PATH:-score/IsolationForest/MSL/run-$(date -u +%Y%m%dT%H%M%SZ)-$$}"

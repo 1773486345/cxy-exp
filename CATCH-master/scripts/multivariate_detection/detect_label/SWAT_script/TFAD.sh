@@ -1,1 +1,1 @@
-python ./scripts/run_benchmark.py --config-path "unfixed_detect_label_multi_config.json" --data-name-list "SWAT.csv" --model-name "self_impl.TFAD" --model-hyper-params '{"anomaly_ratio": 0.1}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "label/TFAD"
+python ./scripts/run_benchmark.py --config-path "unfixed_detect_label_multi_config.json" --data-name-list "SWAT.csv" --model-name "self_impl.TFAD" --model-hyper-params '{"anomaly_ratio": 0.1}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "${BASELINE_SAVE_PATH:-label/TFAD/SWAT/run-$(date -u +%Y%m%dT%H%M%SZ)-$$}"

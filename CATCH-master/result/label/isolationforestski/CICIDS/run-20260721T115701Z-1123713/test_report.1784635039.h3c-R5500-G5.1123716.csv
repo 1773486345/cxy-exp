@@ -1,0 +1,2 @@
+strategy_args,metric_name,"isolationforestski;{""contamination"": 0.15, ""n_estimators"": 25}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_label""}",affiliation_f,0.6037796957701288

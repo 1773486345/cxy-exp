@@ -1,1 +1,1 @@
-python ./scripts/run_benchmark.py --config-path "unfixed_detect_score_multi_config.json" --data-name-list "ASD_dataset_10.csv" --model-name "self_impl.TFAD" --model-hyper-params '{}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "score/TFAD"
+python ./scripts/run_benchmark.py --config-path "unfixed_detect_score_multi_config.json" --data-name-list "ASD_dataset_10.csv" --model-name "self_impl.TFAD" --model-hyper-params '{}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "${BASELINE_SAVE_PATH:-score/TFAD/ASD_dataset_10/run-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
