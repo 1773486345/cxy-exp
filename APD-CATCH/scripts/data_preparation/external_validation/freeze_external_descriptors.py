@@ -50,6 +50,10 @@ def git_head() -> str:
     return subprocess.check_output(["git", "-C", str(PROJECT_ROOT.parent), "rev-parse", "HEAD"], text=True).strip()
 
 
+def nullable(value):
+    return None if pd.isna(value) else value
+
+
 def main() -> None:
     if not REGISTRY_PATH.exists():
         raise FileNotFoundError("prepare all external tasks before freezing descriptors")
@@ -59,10 +63,16 @@ def main() -> None:
     registry = pd.read_csv(REGISTRY_PATH).set_index("task")
     missing = [task for task in TASK_ORDER if task not in registry.index]
     if missing:
-        raise RuntimeError(f"cannot freeze descriptors; missing prepared tasks: {missing}")
+        raise RuntimeError(f"cannot freeze descriptors; missing registry tasks: {missing}")
+    status = registry.get("status", pd.Series("valid", index=registry.index)).fillna("valid")
+    valid_tasks = [task for task in TASK_ORDER if status.loc[task] == "valid"]
+    excluded_tasks = [task for task in TASK_ORDER if status.loc[task] == "excluded_integrity_rule"]
+    unknown = [task for task in TASK_ORDER if task not in valid_tasks + excluded_tasks]
+    if unknown:
+        raise RuntimeError(f"unknown external task status: {unknown}")
     formula, formula_path = analysis_module()
     rows = []
-    for task in TASK_ORDER:
+    for task in valid_tasks:
         train, test, train_labels, test_labels, _ = load_prepared_task(task)
         base, _ = formula.describe_training_data(
             train,
@@ -102,14 +112,22 @@ def main() -> None:
         "seq_len": SEQ_LEN,
         "patch_size": PATCH_SIZE,
         "candidate_expected_delta_auc_roc_directions": CANDIDATES,
-        "prepared_data_sha256": {task: registry.loc[task, "prepared_sha256"] for task in TASK_ORDER},
+        "prepared_data_sha256": {task: registry.loc[task, "prepared_sha256"] for task in valid_tasks},
+        "planned_task_count": len(TASK_ORDER),
+        "valid_task_count": len(valid_tasks),
+        "planned_dataset_count": len(set(PAPER_DATASET.values())),
+        "valid_dataset_count": int(task_output["paper_dataset"].nunique()),
+        "metropt3_status": status.loc["MetroPT3"],
+        "metropt3_exclusion_reason": nullable(registry.loc["MetroPT3"].get("exclusion_reason")),
+        "metropt3_split_audit": nullable(registry.loc["MetroPT3"].get("metropt3_split_audit")),
+        "metropt3_split_audit_sha256": nullable(registry.loc["MetroPT3"].get("metropt3_split_audit_sha256")),
         "computed_at": utc_now(),
         "model_results_present_at_freeze": False,
     }
     with (RESULT_ROOT / "external_descriptor_freeze.json").open("w", encoding="utf-8") as handle:
         json.dump(freeze, handle, indent=2, sort_keys=True)
         handle.write("\n")
-    print(f"frozen {len(task_output)} task descriptors and {len(macro)} dataset descriptors")
+    print(f"frozen {len(task_output)} valid task descriptors and {len(macro)} valid dataset descriptors")
 
 
 if __name__ == "__main__":

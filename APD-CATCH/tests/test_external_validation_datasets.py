@@ -115,18 +115,20 @@ class TestPreparedExternalValidationData(unittest.TestCase):
     def setUp(self):
         self.metadata = pd.read_csv(METADATA_PATH).set_index("file_name")
         self.registry = pd.read_csv(REGISTRY_PATH).set_index("task")
+        self.registry["status"] = self.registry.get("status", pd.Series("valid", index=self.registry.index)).fillna("valid")
+        self.valid_tasks = [task for task in TASK_ORDER if self.registry.loc[task, "status"] == "valid"]
 
     def test_all_twenty_tasks_are_registered_and_discoverable(self):
         self.assertEqual(set(self.registry.index), set(TASK_ORDER))
-        self.assertEqual(set(self.metadata.index), {f"{task}.csv" for task in TASK_ORDER})
-        self.assertTrue(all((DATA_ROOT / f"{task}.csv").exists() for task in TASK_ORDER))
+        self.assertEqual(set(self.metadata.index), {f"{task}.csv" for task in self.valid_tasks})
+        self.assertTrue(all((DATA_ROOT / f"{task}.csv").exists() for task in self.valid_tasks))
         from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
 
         source = LocalExternalAnomalyDetectDataSource()
-        self.assertEqual(set(source.dataset.metadata.index), {f"{task}.csv" for task in TASK_ORDER})
+        self.assertEqual(set(source.dataset.metadata.index), {f"{task}.csv" for task in self.valid_tasks})
 
     def test_shapes_labels_and_numeric_contracts(self):
-        for task in TASK_ORDER:
+        for task in self.valid_tasks:
             with self.subTest(task=task):
                 train, test, train_labels, test_labels, frame = load_prepared_task(task)
                 self.assertGreaterEqual(train.shape[1], 2)
@@ -150,13 +152,38 @@ class TestPreparedExternalValidationData(unittest.TestCase):
 
     def test_batadal_and_metro_official_interval_labels(self):
         batadal = self.registry.loc["BATADAL"]
-        metro = self.registry.loc["MetroPT3"]
         batadal_counts = json.loads(batadal["official_attack_interval_counts"])
-        metro_counts = json.loads(metro["official_fault_interval_counts"])
         self.assertEqual(len(batadal_counts), 7)
         self.assertTrue(all(count > 0 for count in batadal_counts))
-        self.assertEqual(len(metro_counts), 4)
-        self.assertTrue(all(count > 0 for count in metro_counts))
+        metro = self.registry.loc["MetroPT3"]
+        if metro["status"] == "valid":
+            metro_counts = json.loads(metro["official_fault_interval_counts"])
+            self.assertEqual(len(metro_counts), 4)
+            self.assertTrue(all(count > 0 for count in metro_counts))
+        else:
+            self.assertEqual(metro["status"], "excluded_integrity_rule")
+            self.assertEqual(metro["exclusion_reason"], "no_complete_calendar_month")
+
+    def test_metro_calendar_audit_and_status_are_consistent(self):
+        coverage_path = RESULT_ROOT / "metropt3_calendar_coverage.csv"
+        audit_path = RESULT_ROOT / "METROPT3_SPLIT_AUDIT.md"
+        self.assertTrue(coverage_path.exists())
+        self.assertTrue(audit_path.exists())
+        coverage = pd.read_csv(coverage_path)
+        required = {
+            "year_month", "first_timestamp", "last_timestamp", "row_count",
+            "observed_natural_day_count", "calendar_day_count", "missing_natural_dates",
+            "definition_a_calendar_boundary", "definition_b_every_natural_day",
+            "definition_c_every_theoretical_sample", "theoretical_sample_count",
+            "actual_to_theoretical_ratio",
+        }
+        self.assertTrue(required.issubset(coverage.columns))
+        self.assertEqual(coverage.loc[coverage["definition_a_calendar_boundary"], "year_month"].iloc[0], "2020-03")
+        self.assertEqual(coverage.loc[coverage["definition_b_every_natural_day"], "year_month"].iloc[0], "2020-03")
+        self.assertFalse(coverage["definition_c_every_theoretical_sample"].any())
+        metro = self.registry.loc["MetroPT3"]
+        self.assertEqual(metro["status"], "valid")
+        self.assertEqual(metro["first_complete_calendar_month"], "2020-03")
 
     def test_mtsbench_task_counts_and_macro_means(self):
         self.assertEqual(sum(self.registry["paper_dataset"] == "OPPORTUNITY"), 13)
@@ -176,6 +203,12 @@ class TestPreparedExternalValidationData(unittest.TestCase):
             "periodicity_top3_ratio",
             "correlation_drift",
         })
+        self.assertEqual(freeze["planned_task_count"], 20)
+        self.assertEqual(freeze["valid_task_count"], len(self.valid_tasks))
+        self.assertEqual(freeze["planned_dataset_count"], 7)
+        self.assertEqual(freeze["valid_dataset_count"], len({PAPER_DATASET[task] for task in self.valid_tasks}))
+        descriptors = pd.read_csv(RESULT_ROOT / "external_task_descriptors.csv")
+        self.assertEqual(set(descriptors["task"]), set(self.valid_tasks))
 
     def test_frozen_model_directories_remain_unmodified(self):
         changed = subprocess.check_output(

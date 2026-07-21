@@ -432,6 +432,8 @@ def write_prepared_task(
         "constant_column_count": int(np.sum(np.nanstd(train_values, axis=0) == 0.0)),
         "missing_value_count_before_fill": missing_count,
         "prepared_at": utc_now(),
+        "status": "valid",
+        "exclusion_reason": None,
         **(extra or {}),
     }
     _upsert_csv(REGISTRY_PATH, registry_row, "task")
@@ -520,25 +522,161 @@ def prepare_batadal() -> dict:
     )
 
 
-def prepare_metropt3() -> dict:
-    directory = RAW_ROOT / "metropt3"
-    archive_path = directory / "metropt+3+dataset.zip"
+def _metropt3_source() -> tuple[Path, pd.DataFrame, str]:
+    archive_path = RAW_ROOT / "metropt3" / "metropt+3+dataset.zip"
     if not archive_path.exists():
         raise FileNotFoundError("MetroPT-3 archive missing; run download_external_validation_data.py")
+    member = "MetroPT3(AirCompressor).csv"
     with zipfile.ZipFile(archive_path) as archive:
-        member = "MetroPT3(AirCompressor).csv"
         with archive.open(member) as handle:
             source = pd.read_csv(handle)
+    return archive_path, source, member
+
+
+def audit_metropt3_calendar() -> tuple[pd.DataFrame, dict]:
+    """Audit the official MetroPT-3 calendar coverage without changing samples."""
+    archive_path, source, member = _metropt3_source()
     timestamp_column = "timestamp"
+    if timestamp_column not in source.columns:
+        raise ValueError(f"MetroPT-3 source does not contain {timestamp_column!r}")
+    raw_timestamps = source[timestamp_column]
+    parsed = pd.to_datetime(raw_timestamps, format="%Y-%m-%d %H:%M:%S", errors="coerce")
+    valid = parsed.notna()
+    valid_timestamps = parsed.loc[valid]
+    original_monotonic = bool(valid_timestamps.is_monotonic_increasing)
+    sorted_timestamps = valid_timestamps.sort_values(kind="mergesort").reset_index(drop=True)
+    duplicate_count = int(sorted_timestamps.duplicated().sum())
+    deltas = sorted_timestamps.diff().dropna().dt.total_seconds()
+    positive_deltas = deltas[deltas > 0]
+    inferred_seconds = float(positive_deltas.mode().iloc[0]) if len(positive_deltas) else None
+    first_period = sorted_timestamps.iloc[0].to_period("M")
+    last_period = sorted_timestamps.iloc[-1].to_period("M")
+    periods = pd.period_range(first_period, last_period, freq="M")
+    rows = []
+    for period in periods:
+        month = sorted_timestamps.loc[sorted_timestamps.dt.to_period("M") == period]
+        month_start = period.start_time
+        month_end = period.end_time
+        observed_days = pd.DatetimeIndex(month.dt.normalize().unique()).sort_values()
+        calendar_days = pd.date_range(month_start.normalize(), month_end.normalize(), freq="D")
+        missing_days = calendar_days.difference(observed_days)
+        first_day_present = bool((month.dt.normalize() == month_start.normalize()).any())
+        last_day_present = bool((month.dt.normalize() == month_end.normalize()).any())
+        not_truncated_edge = period not in {first_period, last_period}
+        definition_a = bool(not_truncated_edge and first_day_present and last_day_present)
+        definition_b = bool(definition_a and not len(missing_days))
+        if inferred_seconds is None:
+            theoretical = None
+            definition_c = False
+        else:
+            theoretical = int(round((month_end - month_start).total_seconds() / inferred_seconds)) + 1
+            unique = month.drop_duplicates().reset_index(drop=True)
+            continuous = (
+                len(unique) == theoretical
+                and len(unique)
+                and unique.iloc[0] == month_start
+                and unique.iloc[-1] == month_end
+                and bool((unique.diff().dropna().dt.total_seconds() == inferred_seconds).all())
+            )
+            definition_c = bool(definition_b and continuous)
+        rows.append(
+            {
+                "year_month": str(period),
+                "first_timestamp": month.iloc[0].isoformat(sep=" ") if len(month) else None,
+                "last_timestamp": month.iloc[-1].isoformat(sep=" ") if len(month) else None,
+                "row_count": int(len(month)),
+                "observed_natural_day_count": int(len(observed_days)),
+                "calendar_day_count": int(period.days_in_month),
+                "missing_natural_dates": json.dumps([day.strftime("%Y-%m-%d") for day in missing_days]),
+                "first_day_present": first_day_present,
+                "last_day_present": last_day_present,
+                "calendar_boundary_covered": definition_a,
+                "definition_a_calendar_boundary": definition_a,
+                "definition_b_every_natural_day": definition_b,
+                "definition_c_every_theoretical_sample": definition_c,
+                "inferred_sampling_interval_seconds": inferred_seconds,
+                "theoretical_sample_count": theoretical,
+                "actual_to_theoretical_ratio": float(len(month) / theoretical) if theoretical else None,
+            }
+        )
+    coverage = pd.DataFrame(rows)
+    RESULT_ROOT.mkdir(parents=True, exist_ok=True)
+    coverage_path = RESULT_ROOT / "metropt3_calendar_coverage.csv"
+    coverage.to_csv(coverage_path, index=False)
+
+    def first_match(column: str) -> str:
+        matches = coverage.loc[coverage[column], "year_month"]
+        return str(matches.iloc[0]) if len(matches) else "NONE"
+
+    summary = {
+        "archive_path": str(archive_path.relative_to(PROJECT_ROOT)),
+        "archive_bytes": archive_path.stat().st_size,
+        "archive_sha256": sha256(archive_path),
+        "archive_member": member,
+        "timestamp_column": timestamp_column,
+        "timestamp_parse_format": "%Y-%m-%d %H:%M:%S",
+        "raw_row_count": int(len(source)),
+        "invalid_timestamp_count": int((~valid).sum()),
+        "duplicate_timestamp_count": duplicate_count,
+        "original_timestamp_monotonic": original_monotonic,
+        "stable_sorted_first_timestamp": sorted_timestamps.iloc[0].isoformat(sep=" "),
+        "stable_sorted_last_timestamp": sorted_timestamps.iloc[-1].isoformat(sep=" "),
+        "adjacent_interval_min_seconds": float(deltas.min()) if len(deltas) else None,
+        "adjacent_interval_median_seconds": float(deltas.median()) if len(deltas) else None,
+        "adjacent_interval_mode_seconds": inferred_seconds,
+        "adjacent_interval_max_seconds": float(deltas.max()) if len(deltas) else None,
+        "first_month_definition_a": first_match("definition_a_calendar_boundary"),
+        "first_month_definition_b": first_match("definition_b_every_natural_day"),
+        "first_month_definition_c": first_match("definition_c_every_theoretical_sample"),
+        "coverage_path": str(coverage_path.relative_to(PROJECT_ROOT)),
+    }
+    audit_path = RESULT_ROOT / "METROPT3_SPLIT_AUDIT.md"
+    audit_text = f"""# MetroPT-3 Split Audit
+
+## Official Source
+
+- Archive: `{summary['archive_path']}`
+- Archive member: `{member}`
+- Bytes: `{summary['archive_bytes']}`
+- SHA-256: `{summary['archive_sha256']}`
+- Timestamp column and parse format: `{timestamp_column}`, `{summary['timestamp_parse_format']}`
+- Raw rows: `{summary['raw_row_count']}`
+- Invalid timestamps: `{summary['invalid_timestamp_count']}`
+- Duplicate timestamps: `{summary['duplicate_timestamp_count']}`
+- Original timestamp order monotonic: `{summary['original_timestamp_monotonic']}`
+- Stable-sorted time range: `{summary['stable_sorted_first_timestamp']}` to `{summary['stable_sorted_last_timestamp']}`
+- Adjacent interval seconds (min / median / mode / max): `{summary['adjacent_interval_min_seconds']}` / `{summary['adjacent_interval_median_seconds']}` / `{summary['adjacent_interval_mode_seconds']}` / `{summary['adjacent_interval_max_seconds']}`
+
+## Complete-Month Definitions
+
+The previous loader selected only the first observed month and required its final timestamp to reach that month's final theoretical second. This is definition **D**: a stricter range-edge condition than calendar coverage, and it does not search later calendar months.
+
+- **A**: a month is not the truncated first or last coverage month, and has at least one observation on both its first and last natural day.
+- **B**: definition A plus at least one observation on every natural day.
+- **C**: definition B plus every theoretical sample at the inferred modal interval.
+
+First satisfying month: A = `{summary['first_month_definition_a']}`, B = `{summary['first_month_definition_b']}`, C = `{summary['first_month_definition_c']}`.
+
+The formal loader uses definition A. It does not fill missing timestamps, resample, select an arbitrary 30-day interval, or inspect test labels to choose the month. The detailed monthly evidence is in [metropt3_calendar_coverage.csv](metropt3_calendar_coverage.csv).
+"""
+    audit_path.write_text(audit_text, encoding="utf-8")
+    summary["audit_path"] = str(audit_path.relative_to(PROJECT_ROOT))
+    summary["audit_sha256"] = sha256(audit_path)
+    return coverage, summary
+
+
+def prepare_metropt3() -> dict:
+    coverage, audit = audit_metropt3_calendar()
+    archive_path, source, _ = _metropt3_source()
+    timestamp_column = audit["timestamp_column"]
     timestamps = _timestamp(source, timestamp_column)
     source = source.assign(**{timestamp_column: timestamps}).sort_values(timestamp_column, kind="stable").reset_index(drop=True)
     timestamps = source[timestamp_column]
     months = timestamps.dt.to_period("M")
-    first_month = months.iloc[0]
-    month_values = timestamps.loc[months == first_month]
-    month_end = (first_month + 1).start_time - pd.Timedelta(seconds=1)
-    if month_values.iloc[0].day != 1 or month_values.iloc[-1] < month_end:
-        raise ValueError(f"MetroPT-3 first observed month {first_month} is not a complete calendar month")
+    selected = audit["first_month_definition_a"]
+    if selected == "NONE":
+        raise ValueError("MetroPT-3 has no complete calendar month under definition A")
+    first_month = pd.Period(selected, freq="M")
     train_mask = months == first_month
     test_mask = ~train_mask
     dropped = [column for column in source.columns if column.lower() in {"index", "unnamed: 0", timestamp_column}]
@@ -569,6 +707,12 @@ def prepare_metropt3() -> dict:
         {
             "timestamp_column": timestamp_column,
             "first_complete_calendar_month": str(first_month),
+            "metropt3_status": "valid",
+            "metropt3_split_audit": audit["audit_path"],
+            "metropt3_split_audit_sha256": audit["audit_sha256"],
+            "metropt3_definition_a": audit["first_month_definition_a"],
+            "metropt3_definition_b": audit["first_month_definition_b"],
+            "metropt3_definition_c": audit["first_month_definition_c"],
             "dropped_id_timestamp_columns": json.dumps(dropped),
             "official_fault_interval_count": len(METRO_FAULT_INTERVALS),
             "official_fault_interval_counts": json.dumps(interval_counts),

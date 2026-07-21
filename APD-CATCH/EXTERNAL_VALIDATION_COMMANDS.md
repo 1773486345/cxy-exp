@@ -2,6 +2,12 @@
 
 Run each command from the `APD-CATCH` directory after the external preparation and descriptor-freeze steps have completed. Every command is an independent `detect_score` task; none launches another task, retries a failure, or starts a background process.
 
+```text
+planned commands = 40
+executable commands = 40
+MetroPT3 status = valid; audited first complete calendar month = 2020-03
+```
+
 ## HAI 20.07
 
 ```bash
@@ -175,5 +181,4 @@ sh ./scripts/multivariate_detection/detect_score/MTSB_SWAN_SF_script/CATCH.sh
 ```bash
 sh ./scripts/multivariate_detection/detect_score/MTSB_SWAN_SF_script/MSDCATCH.sh
 ```
-
 

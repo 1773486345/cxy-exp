@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from common import PAPER_DATASET, PROJECT_ROOT, RESULT_ROOT, TASK_ORDER
+from common import PAPER_DATASET, PROJECT_ROOT, REGISTRY_PATH, RESULT_ROOT, TASK_ORDER
 
 
 CANDIDATES = {
@@ -130,8 +130,12 @@ def main() -> None:
         freeze = json.load(handle)
     if set(freeze["candidate_expected_delta_auc_roc_directions"]) != set(CANDIDATES):
         raise RuntimeError("frozen descriptor candidate set differs from the fixed external protocol")
+    registry = pd.read_csv(REGISTRY_PATH).set_index("task")
+    status = registry.get("status", pd.Series("valid", index=registry.index)).fillna("valid")
+    valid_tasks = [task for task in TASK_ORDER if task in registry.index and status.loc[task] == "valid"]
+    excluded = registry.loc[[task for task in TASK_ORDER if task in registry.index and status.loc[task] != "valid"]].reset_index()
     source_rows, metric_rows = [], []
-    for task in TASK_ORDER:
+    for task in valid_tasks:
         catch_path, catch = single_valid_archive(task, "CATCH")
         msd_path, msd = single_valid_archive(task, "MSDCATCH")
         if catch["model_params"] != msd["model_params"] or catch["strategy_args"] != msd["strategy_args"]:
@@ -167,6 +171,7 @@ def main() -> None:
     dataset.to_csv(RESULT_ROOT / "external_dataset_results.csv", index=False)
     validation.to_csv(RESULT_ROOT / "external_descriptor_roc_validation.csv", index=False)
     pd.DataFrame(source_rows).to_csv(RESULT_ROOT / "external_result_sources.csv", index=False)
+    excluded.to_csv(RESULT_ROOT / "external_excluded_tasks.csv", index=False)
     print("read-only external result summary complete")
 
 
