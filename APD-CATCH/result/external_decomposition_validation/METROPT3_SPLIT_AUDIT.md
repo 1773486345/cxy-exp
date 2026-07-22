@@ -24,4 +24,4 @@ The previous loader selected only the first observed month and required its fina
 
 First satisfying month: A = `2020-03`, B = `2020-03`, C = `NONE`.
 
-The formal loader uses definition A. It does not fill missing timestamps, resample, select an arbitrary 30-day interval, or inspect test labels to choose the month. The detailed monthly evidence is in [metropt3_calendar_coverage.csv](metropt3_calendar_coverage.csv).
+The formal loader uses definition A. With `2020-03` selected, train is March observations only and test starts at `2020-04-01 00:00:00`; the preceding truncated February observations are excluded from both formal train and formal test. It does not fill missing timestamps, resample, select an arbitrary 30-day interval, or inspect test labels to choose the month. The detailed monthly evidence is in [metropt3_calendar_coverage.csv](metropt3_calendar_coverage.csv).

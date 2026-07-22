@@ -1,21 +1,30 @@
 {
-  "analysis_code_commit": "5d38412abeb40d8bb39561f79ae30e720e019a9b",
+  "analysis_code_commit": "079df0a5453377fdc8c3e84a28d5a18ed4b997ab",
   "candidate_expected_delta_auc_roc_directions": {
     "correlation_drift": "negative",
     "low_frequency_energy_ratio_mean": "positive",
     "mean_drift": "positive",
     "periodicity_top3_ratio": "positive"
   },
-  "computed_at": "2026-07-21T20:34:35+00:00",
+  "computed_at": "2026-07-22T11:35:30+00:00",
   "descriptor_formula_file": "scripts/analyze_decomposition_applicability.py",
   "descriptor_formula_sha256": "7d7ed226bb0b11a386b6ff3f25d4795c4b2f675a71d7b882e88d51f6f16fedbc",
   "descriptor_function": "describe_training_data",
   "formula_version": "frozen applicability formulas at formal seq_len windows",
+  "metropt3_archive_sha256": "aab991a970e58210de853bb8078ce0e63abb4d9412fdc5c79792dae3d8e1721a",
   "metropt3_exclusion_reason": null,
+  "metropt3_prepared_sha256": "bb877da63d68a422e42da16a80bd70e4a702b525423c253a02cadc5de9de7bd0",
   "metropt3_split_audit": "result/external_decomposition_validation/METROPT3_SPLIT_AUDIT.md",
-  "metropt3_split_audit_sha256": "084d10da1869f0f78be80151c5dd82c1cdbe9ec5cc784edf97ffa3c211be2a78",
+  "metropt3_split_audit_sha256": "f70da130c79dff70485b949edc745352dfccc1d63c7c6e54f0bf380debd42660",
   "metropt3_status": "valid",
+  "metropt3_test_start": "2020-04-01 00:00:00",
+  "metropt3_train_month": "2020-03",
   "model_results_present_at_freeze": false,
+  "mtsbench_mismatch_count": 0,
+  "mtsbench_repo_id": "PLAN-Lab/mTSBench",
+  "mtsbench_revision": "9ea52adfa86373576f446a7f3f26395e506f1b8b",
+  "mtsbench_revision_manifest_sha256": "3e3d06ef0928535058b1ea33bd561b54f37ee0c6d653308d7252a8547bb1a9df",
+  "mtsbench_verified_file_count": 34,
   "patch_size": 16,
   "planned_dataset_count": 7,
   "planned_task_count": 20,
@@ -39,9 +48,10 @@
     "MTSB_OPPORTUNITY_12": "20b56cc4c4b2fd6d3c6c5f7b3359d56ceb5bb079d5760393b281060c57e12391",
     "MTSB_OPPORTUNITY_13": "f2e4abaacf87b5c526e24014ae5640ff238061dd0a013e3aedf687370ac23912",
     "MTSB_SWAN_SF": "fece4ac5adc744b872008bb35a68e9f768ada72401348125e83653cb28108757",
-    "MetroPT3": "81ceff1cff6492b4a96cf35a87725a080167d8db397dae8921983aa432d780c5"
+    "MetroPT3": "bb877da63d68a422e42da16a80bd70e4a702b525423c253a02cadc5de9de7bd0"
   },
   "seq_len": 192,
   "valid_dataset_count": 7,
-  "valid_task_count": 20
+  "valid_task_count": 20,
+  "working_tree_code_dirty": false
 }
