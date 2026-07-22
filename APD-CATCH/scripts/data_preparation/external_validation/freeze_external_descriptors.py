@@ -17,6 +17,10 @@ import pandas as pd
 
 from common import (
     PAPER_DATASET,
+    MTSBENCH_REPO_ID,
+    MTSBENCH_REVISION,
+    MTSBENCH_REVISION_MANIFEST_PATH,
+    MTSBENCH_VERIFICATION_PATH,
     PROJECT_ROOT,
     REGISTRY_PATH,
     RESULT_ROOT,
@@ -54,6 +58,16 @@ def nullable(value):
     return None if pd.isna(value) else value
 
 
+def working_tree_code_dirty() -> bool:
+    lines = subprocess.check_output(
+        ["git", "-C", str(PROJECT_ROOT.parent), "status", "--porcelain"], text=True
+    ).splitlines()
+    return any(
+        line[3:].strip() and not line[3:].strip().startswith("APD-CATCH/result/")
+        for line in lines
+    )
+
+
 def main() -> None:
     if not REGISTRY_PATH.exists():
         raise FileNotFoundError("prepare all external tasks before freezing descriptors")
@@ -71,6 +85,13 @@ def main() -> None:
     if unknown:
         raise RuntimeError(f"unknown external task status: {unknown}")
     formula, formula_path = analysis_module()
+    if not MTSBENCH_VERIFICATION_PATH.exists() or not MTSBENCH_REVISION_MANIFEST_PATH.exists():
+        raise FileNotFoundError("fixed-revision mTSBench manifest verification is required before descriptor freeze")
+    revision_verification = pd.read_csv(MTSBENCH_VERIFICATION_PATH)
+    if len(revision_verification) != 34 or not (revision_verification["status"] == "match").all():
+        raise RuntimeError("mTSBench fixed-revision verification is incomplete or mismatched")
+    previous_path = RESULT_ROOT / "external_task_descriptors.csv"
+    previous = pd.read_csv(previous_path) if previous_path.exists() else None
     rows = []
     for task in valid_tasks:
         train, test, train_labels, test_labels, _ = load_prepared_task(task)
@@ -95,7 +116,15 @@ def main() -> None:
         )
     RESULT_ROOT.mkdir(parents=True, exist_ok=True)
     task_output = pd.DataFrame(rows)
-    task_output.to_csv(RESULT_ROOT / "external_task_descriptors.csv", index=False)
+    task_output.to_csv(previous_path, index=False)
+    if previous is not None:
+        comparison = task_output[["task", *CANDIDATES]].merge(
+            previous[["task", *CANDIDATES]], on="task", how="outer", suffixes=("_new", "_old"), indicator=True
+        )
+        for name in CANDIDATES:
+            comparison[f"{name}_abs_diff"] = (comparison[f"{name}_new"] - comparison[f"{name}_old"]).abs()
+        comparison["all_descriptor_values_match"] = comparison[[f"{name}_abs_diff" for name in CANDIDATES]].fillna(float("inf")).le(1e-12).all(axis=1)
+        comparison.to_csv(RESULT_ROOT / "descriptor_refreeze_comparison.csv", index=False)
     macro = task_output.groupby("paper_dataset", sort=False).mean(numeric_only=True).reset_index()
     macro["task_count"] = macro["paper_dataset"].map(task_output.groupby("paper_dataset").size())
     paper_order = ["HAI20_07", "BATADAL", "MetroPT3", "OPPORTUNITY", "Occupancy", "Metro", "SWAN-SF"]
@@ -105,6 +134,7 @@ def main() -> None:
     source_digest = hashlib.sha256(formula_path.read_bytes()).hexdigest()
     freeze = {
         "analysis_code_commit": git_head(),
+        "working_tree_code_dirty": working_tree_code_dirty(),
         "descriptor_formula_file": str(formula_path.relative_to(PROJECT_ROOT)),
         "descriptor_formula_sha256": source_digest,
         "descriptor_function": "describe_training_data",
@@ -121,6 +151,15 @@ def main() -> None:
         "metropt3_exclusion_reason": nullable(registry.loc["MetroPT3"].get("exclusion_reason")),
         "metropt3_split_audit": nullable(registry.loc["MetroPT3"].get("metropt3_split_audit")),
         "metropt3_split_audit_sha256": nullable(registry.loc["MetroPT3"].get("metropt3_split_audit_sha256")),
+        "metropt3_train_month": nullable(registry.loc["MetroPT3"].get("first_complete_calendar_month")),
+        "metropt3_test_start": nullable(registry.loc["MetroPT3"].get("test_start")),
+        "metropt3_archive_sha256": json.loads(registry.loc["MetroPT3", "source_sha256"]).get("metropt3/metropt+3+dataset.zip"),
+        "metropt3_prepared_sha256": registry.loc["MetroPT3", "prepared_sha256"],
+        "mtsbench_repo_id": MTSBENCH_REPO_ID,
+        "mtsbench_revision": MTSBENCH_REVISION,
+        "mtsbench_revision_manifest_sha256": hashlib.sha256(MTSBENCH_REVISION_MANIFEST_PATH.read_bytes()).hexdigest(),
+        "mtsbench_verified_file_count": int((revision_verification["status"] == "match").sum()),
+        "mtsbench_mismatch_count": int((revision_verification["status"] != "match").sum()),
         "computed_at": utc_now(),
         "model_results_present_at_freeze": False,
     }

@@ -93,11 +93,16 @@ MTSBENCH_PAIRS = [
     ("metro", "metro_traffic-volume"),
     ("swan", "swan_sf"),
 ]
+MTSBENCH_REPO_ID = "PLAN-Lab/mTSBench"
+MTSBENCH_REVISION = "9ea52adfa86373576f446a7f3f26395e506f1b8b"
 MTSBENCH_RELATIVE_PATHS = tuple(
     f"{directory}/{stem}_{split}.csv"
     for directory, stem in MTSBENCH_PAIRS
     for split in ("train", "test")
 )
+MTSBENCH_LOCAL_MANIFEST_PATH = RESULT_ROOT / "mtsbench_local_source_manifest.csv"
+MTSBENCH_REVISION_MANIFEST_PATH = RESULT_ROOT / "mtsbench_revision_manifest.csv"
+MTSBENCH_VERIFICATION_PATH = RESULT_ROOT / "mtsbench_revision_verification.csv"
 MTSBENCH_MISSING_PATHS = (
     "room-occupancy/room-occupancy_test.csv",
     "room-occupancy/room-occupancy_1_train.csv",
@@ -196,7 +201,98 @@ def download(url: str, destination: Path, force: bool = False) -> Path:
 
 
 def mbench_url(relative_path: str) -> str:
-    return "https://huggingface.co/datasets/PLAN-Lab/mTSBench/resolve/main/" + relative_path
+    return (
+        "https://huggingface.co/datasets/"
+        + MTSBENCH_REPO_ID
+        + "/resolve/"
+        + MTSBENCH_REVISION
+        + "/"
+        + relative_path
+    )
+
+
+def write_mtsbench_local_source_manifest() -> pd.DataFrame:
+    """Record the 34 local mTSBench files against the frozen upstream revision."""
+    rows = []
+    root = RAW_ROOT / "mTSBench"
+    for relative in MTSBENCH_RELATIVE_PATHS:
+        path = root / relative
+        if not path.is_file():
+            raise FileNotFoundError(f"missing mTSBench source file: {relative}")
+        rows.append(
+            {
+                "source_repo_id": MTSBENCH_REPO_ID,
+                "source_revision": MTSBENCH_REVISION,
+                "source_relative_path": relative,
+                "source_size_bytes": path.stat().st_size,
+                "source_sha256": sha256(path),
+            }
+        )
+    actual = sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*.csv")
+    )
+    expected = sorted(MTSBENCH_RELATIVE_PATHS)
+    if actual != expected:
+        raise RuntimeError(f"mTSBench local source set mismatch; missing={sorted(set(expected) - set(actual))}, extra={sorted(set(actual) - set(expected))}")
+    manifest = pd.DataFrame(rows)
+    RESULT_ROOT.mkdir(parents=True, exist_ok=True)
+    manifest.to_csv(MTSBENCH_LOCAL_MANIFEST_PATH, index=False)
+    return manifest
+
+
+def verify_mtsbench_revision_manifest(official_manifest_path: Path) -> pd.DataFrame:
+    """Compare every local mTSBench file with the official fixed-revision relay manifest."""
+    if not official_manifest_path.is_file():
+        raise FileNotFoundError(f"official mTSBench revision manifest not found: {official_manifest_path}")
+    official = pd.read_csv(official_manifest_path)
+    required = {"relative_path", "size_bytes", "sha256"}
+    if not required.issubset(official.columns):
+        raise ValueError(f"official manifest missing columns: {sorted(required - set(official.columns))}")
+    official = official.loc[:, ["relative_path", "size_bytes", "sha256"]].copy()
+    official["relative_path"] = official["relative_path"].astype(str)
+    if any(path.endswith("_val.csv") for path in official["relative_path"]):
+        raise ValueError("official manifest contains prohibited validation files")
+    if set(official["relative_path"]) != set(MTSBENCH_RELATIVE_PATHS) or len(official) != len(MTSBENCH_RELATIVE_PATHS):
+        raise ValueError("official manifest does not contain exactly the fixed 34 mTSBench files")
+    local = write_mtsbench_local_source_manifest().rename(
+        columns={
+            "source_relative_path": "relative_path",
+            "source_size_bytes": "local_size_bytes",
+            "source_sha256": "local_sha256",
+        }
+    )
+    merged = local.merge(
+        official.rename(columns={"size_bytes": "official_size_bytes", "sha256": "official_sha256"}),
+        on="relative_path",
+        how="outer",
+        validate="one_to_one",
+        indicator=True,
+    )
+    merged["size_match"] = merged["local_size_bytes"] == merged["official_size_bytes"]
+    merged["sha256_match"] = merged["local_sha256"] == merged["official_sha256"]
+    merged["status"] = np.where(
+        merged["_merge"] != "both",
+        "missing_or_extra",
+        np.where(merged["size_match"] & merged["sha256_match"], "match", "mismatch"),
+    )
+    merged.drop(columns=["_merge"], inplace=True)
+    merged.to_csv(MTSBENCH_VERIFICATION_PATH, index=False)
+    audit_path = RESULT_ROOT / "MTSBENCH_REVISION_VERIFICATION.md"
+    mismatch = int((merged["status"] != "match").sum())
+    audit_path.write_text(
+        "# mTSBench Revision Verification\n\n"
+        f"- Source: `{MTSBENCH_REPO_ID}@{MTSBENCH_REVISION}`\n"
+        f"- Expected files: `{len(MTSBENCH_RELATIVE_PATHS)}`\n"
+        f"- Matching files: `{int((merged['status'] == 'match').sum())}`\n"
+        f"- Mismatches: `{mismatch}`\n"
+        f"- Official manifest SHA-256: `{sha256(official_manifest_path)}`\n"
+        "- Validation files: `0`\n",
+        encoding="utf-8",
+    )
+    if mismatch:
+        raise RuntimeError(f"mTSBench fixed-revision verification found {mismatch} mismatches")
+    return merged
 
 
 def validate_mtsbench_source_dir(source_root: Path) -> list[dict[str, str]]:
@@ -657,7 +753,7 @@ The previous loader selected only the first observed month and required its fina
 
 First satisfying month: A = `{summary['first_month_definition_a']}`, B = `{summary['first_month_definition_b']}`, C = `{summary['first_month_definition_c']}`.
 
-The formal loader uses definition A. It does not fill missing timestamps, resample, select an arbitrary 30-day interval, or inspect test labels to choose the month. The detailed monthly evidence is in [metropt3_calendar_coverage.csv](metropt3_calendar_coverage.csv).
+The formal loader uses definition A. With `2020-03` selected, train is March observations only and test starts at `2020-04-01 00:00:00`; the preceding truncated February observations are excluded from both formal train and formal test. It does not fill missing timestamps, resample, select an arbitrary 30-day interval, or inspect test labels to choose the month. The detailed monthly evidence is in [metropt3_calendar_coverage.csv](metropt3_calendar_coverage.csv).
 """
     audit_path.write_text(audit_text, encoding="utf-8")
     summary["audit_path"] = str(audit_path.relative_to(PROJECT_ROOT))
@@ -677,8 +773,7 @@ def prepare_metropt3() -> dict:
     if selected == "NONE":
         raise ValueError("MetroPT-3 has no complete calendar month under definition A")
     first_month = pd.Period(selected, freq="M")
-    train_mask = months == first_month
-    test_mask = ~train_mask
+    train_mask, test_mask, train_month_start, test_start = metropt3_split_masks(timestamps, first_month)
     dropped = [column for column in source.columns if column.lower() in {"index", "unnamed: 0", timestamp_column}]
     features = [column for column in source.columns if column not in dropped]
     train_raw = source.loc[train_mask].reset_index(drop=True)
@@ -703,10 +798,12 @@ def prepare_metropt3() -> dict:
         labels,
         [archive_path],
         "https://archive.ics.uci.edu/dataset/791/metropt%2B3%2Bdataset",
-        "four UCI fault intervals with both supplied timestamp endpoints inclusive",
+        "four UCI fault intervals with both supplied timestamp endpoints inclusive; test begins at the month after training",
         {
             "timestamp_column": timestamp_column,
             "first_complete_calendar_month": str(first_month),
+            "train_month_start": train_month_start.isoformat(sep=" "),
+            "test_start": test_start.isoformat(sep=" "),
             "metropt3_status": "valid",
             "metropt3_split_audit": audit["audit_path"],
             "metropt3_split_audit_sha256": audit["audit_sha256"],
@@ -719,6 +816,17 @@ def prepare_metropt3() -> dict:
             "invalid_value_count_before_fill": train_invalid + test_invalid,
         },
     )
+
+
+def metropt3_split_masks(
+    timestamps: pd.Series, first_month: pd.Period
+) -> tuple[pd.Series, pd.Series, pd.Timestamp, pd.Timestamp]:
+    """Return the formal month-only train and strictly-following test masks."""
+    train_month_start = pd.Timestamp(first_month.start_time)
+    test_start = pd.Timestamp((first_month + 1).start_time)
+    train_mask = (timestamps >= train_month_start) & (timestamps < test_start)
+    test_mask = timestamps >= test_start
+    return train_mask, test_mask, train_month_start, test_start
 
 
 def _mtsbench_frame(path: Path) -> tuple[pd.Series, pd.DataFrame, np.ndarray, str, str]:
@@ -739,6 +847,9 @@ def _mtsbench_frame(path: Path) -> tuple[pd.Series, pd.DataFrame, np.ndarray, st
 
 
 def prepare_mtsbench() -> list[dict]:
+    source_manifest = write_mtsbench_local_source_manifest().set_index(
+        "source_relative_path"
+    )
     results: list[dict] = []
     for index, (directory, stem) in enumerate(MTSBENCH_PAIRS):
         if directory == "OPPORTUNITY":
@@ -765,7 +876,7 @@ def prepare_mtsbench() -> list[dict]:
                 test_features,
                 test_labels,
                 [train_path, test_path],
-                "https://huggingface.co/datasets/PLAN-Lab/mTSBench",
+                f"https://huggingface.co/datasets/{MTSBENCH_REPO_ID}/tree/{MTSBENCH_REVISION}",
                 "provided is_anomaly field, thresholded to normal=0/anomaly=1; provided train/test split only, validation file excluded",
                 {
                     "source_pair": stem,
@@ -773,6 +884,26 @@ def prepare_mtsbench() -> list[dict]:
                     "test_timestamp_column": test_time_column,
                     "train_label_column": train_label_column,
                     "test_label_column": test_label_column,
+                    "source_repo_id": MTSBENCH_REPO_ID,
+                    "source_revision": MTSBENCH_REVISION,
+                    "source_relative_paths": json.dumps(
+                        [f"{directory}/{stem}_train.csv", f"{directory}/{stem}_test.csv"]
+                    ),
+                    "source_size_bytes": json.dumps(
+                        [
+                            int(source_manifest.loc[f"{directory}/{stem}_train.csv", "source_size_bytes"]),
+                            int(source_manifest.loc[f"{directory}/{stem}_test.csv", "source_size_bytes"]),
+                        ]
+                    ),
+                    "source_file_sha256": json.dumps(
+                        [
+                            source_manifest.loc[f"{directory}/{stem}_train.csv", "source_sha256"],
+                            source_manifest.loc[f"{directory}/{stem}_test.csv", "source_sha256"],
+                        ]
+                    ),
+                    "source_manifest": str(
+                        MTSBENCH_LOCAL_MANIFEST_PATH.relative_to(PROJECT_ROOT)
+                    ),
                 },
             )
         )

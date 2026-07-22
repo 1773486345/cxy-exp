@@ -29,12 +29,18 @@ from common import (  # noqa: E402
     DATA_ROOT,
     METADATA_PATH,
     METRO_FAULT_INTERVALS,
+    MTSBENCH_REPO_ID,
+    MTSBENCH_REVISION,
+    MTSBENCH_RELATIVE_PATHS,
     MTSBENCH_MISSING_PATHS,
+    MTSBENCH_VERIFICATION_PATH,
     PAPER_DATASET,
     REGISTRY_PATH,
     RESULT_ROOT,
     TASK_ORDER,
     load_prepared_task,
+    mbench_url,
+    metropt3_split_masks,
     validate_mtsbench_source_dir,
 )
 
@@ -61,6 +67,34 @@ class TestExternalValidationInvariants(unittest.TestCase):
         self.assertEqual(len(METRO_FAULT_INTERVALS), 4)
         self.assertEqual(METRO_FAULT_INTERVALS[0], ("2020-04-18 00:00", "2020-04-18 23:59"))
         self.assertEqual(METRO_FAULT_INTERVALS[-1], ("2020-07-15 14:30", "2020-07-15 19:00"))
+
+    def test_metro_split_excludes_the_preceding_month(self):
+        timestamps = pd.Series(pd.to_datetime([
+            "2020-02-28 23:59:50", "2020-03-01 00:00:00", "2020-03-31 23:59:59", "2020-04-01 00:00:00",
+        ]))
+        train, test, train_start, test_start = metropt3_split_masks(timestamps, pd.Period("2020-03", freq="M"))
+        self.assertEqual(train_start, pd.Timestamp("2020-03-01 00:00:00"))
+        self.assertEqual(test_start, pd.Timestamp("2020-04-01 00:00:00"))
+        self.assertEqual(train.tolist(), [False, True, True, False])
+        self.assertEqual(test.tolist(), [False, False, False, True])
+
+    def test_mtsbench_download_path_is_pinned_and_excludes_validation_files(self):
+        self.assertEqual(MTSBENCH_REPO_ID, "PLAN-Lab/mTSBench")
+        self.assertEqual(MTSBENCH_REVISION, "9ea52adfa86373576f446a7f3f26395e506f1b8b")
+        self.assertEqual(len(MTSBENCH_RELATIVE_PATHS), 34)
+        self.assertFalse(any(path.endswith("_val.csv") for path in MTSBENCH_RELATIVE_PATHS))
+        self.assertIn("/resolve/" + MTSBENCH_REVISION + "/", mbench_url(MTSBENCH_RELATIVE_PATHS[0]))
+        self.assertNotIn("resolve/main", mbench_url(MTSBENCH_RELATIVE_PATHS[0]))
+
+    def test_external_command_list_has_exactly_forty_independent_tasks(self):
+        commands = [
+            line.strip()
+            for line in (ROOT / "EXTERNAL_VALIDATION_COMMANDS.md").read_text(encoding="utf-8").splitlines()
+            if line.startswith("sh ./scripts/multivariate_detection/detect_score/")
+        ]
+        self.assertEqual(len(commands), 40)
+        self.assertEqual(len(set(commands)), 40)
+        self.assertTrue(all(command.endswith(("/CATCH.sh", "/MSDCATCH.sh")) for command in commands))
 
     def test_external_wide_loader_excludes_timestamp_and_keeps_label(self):
         from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
@@ -149,6 +183,13 @@ class TestPreparedExternalValidationData(unittest.TestCase):
                 timestamps = pd.to_datetime(frame["timestamp"])
                 self.assertTrue(timestamps.iloc[:train_length].is_monotonic_increasing)
                 self.assertTrue(timestamps.iloc[train_length:].is_monotonic_increasing)
+                if task == "MetroPT3":
+                    self.assertEqual(len(train), 230448)
+                    self.assertEqual(len(test), 1071650)
+                    self.assertTrue((timestamps.iloc[:train_length] >= pd.Timestamp("2020-03-01")).all())
+                    self.assertTrue((timestamps.iloc[:train_length] < pd.Timestamp("2020-04-01")).all())
+                    self.assertTrue((timestamps.iloc[train_length:] >= pd.Timestamp("2020-04-01")).all())
+                    self.assertFalse((timestamps.dt.month == 2).any())
 
     def test_batadal_and_metro_official_interval_labels(self):
         batadal = self.registry.loc["BATADAL"]
@@ -184,12 +225,21 @@ class TestPreparedExternalValidationData(unittest.TestCase):
         metro = self.registry.loc["MetroPT3"]
         self.assertEqual(metro["status"], "valid")
         self.assertEqual(metro["first_complete_calendar_month"], "2020-03")
+        self.assertEqual(metro["test_start"], "2020-04-01 00:00:00")
+        self.assertEqual(json.loads(metro["official_fault_interval_counts"]), [8657, 2360, 17315, 1622])
+        self.assertEqual(int(metro["test_anomaly_count"]), 29954)
 
     def test_mtsbench_task_counts_and_macro_means(self):
         self.assertEqual(sum(self.registry["paper_dataset"] == "OPPORTUNITY"), 13)
         self.assertEqual(sum(self.registry["paper_dataset"] == "Occupancy"), 2)
         values = pd.DataFrame({"paper_dataset": ["OPPORTUNITY"] * 13, "metric": np.arange(13, dtype=float)})
         self.assertEqual(values.groupby("paper_dataset")["metric"].mean().iloc[0], 6.0)
+        verification = pd.read_csv(MTSBENCH_VERIFICATION_PATH)
+        self.assertEqual(len(verification), 34)
+        self.assertTrue((verification["status"] == "match").all())
+        mbench = self.registry[self.registry["paper_dataset"].isin(["OPPORTUNITY", "Occupancy", "Metro", "SWAN-SF"])]
+        self.assertEqual(set(mbench["source_repo_id"]), {MTSBENCH_REPO_ID})
+        self.assertEqual(set(mbench["source_revision"]), {MTSBENCH_REVISION})
 
     def test_descriptor_freeze_is_pre_result_and_train_only(self):
         path = RESULT_ROOT / "external_descriptor_freeze.json"
