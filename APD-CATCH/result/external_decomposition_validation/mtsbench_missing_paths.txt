@@ -1,7 +1,0 @@
-room-occupancy/room-occupancy_test.csv
-room-occupancy/room-occupancy_1_train.csv
-room-occupancy/room-occupancy_1_test.csv
-metro/metro_traffic-volume_train.csv
-metro/metro_traffic-volume_test.csv
-swan/swan_sf_train.csv
-swan/swan_sf_test.csv
