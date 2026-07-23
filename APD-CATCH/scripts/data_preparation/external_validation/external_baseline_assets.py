@@ -17,11 +17,6 @@ from common import PROJECT_ROOT, RESULT_ROOT, TASK_ORDER
 
 BENCHMARK_PYTHON = "python"
 CONFIG_PATH = "unfixed_detect_score_multi_config.json"
-OCCUPANCY_TASKS = {"MTSB_OCCUPANCY_01", "MTSB_OCCUPANCY_02"}
-BATCHED_BASELINES = {
-    "ModernTCN", "iTransformer", "DualTF", "AnomalyTransformer", "DCdetector",
-    "TimesNet", "PatchTST", "DLinear", "NLinear", "TFAD", "AutoEncoder",
-}
 
 
 BASELINE_SPECS = (
@@ -34,7 +29,6 @@ BASELINE_SPECS = (
         "implementation_class": "ModernTCN",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/ModernTCN.sh",
         "model_hyper_params": {"anomaly_ratio": 1, "batch_size": 128, "dims": [8], "dropout": 0.1, "ffn_ratio": 1, "head_dropout": 0.0, "itr": 1, "large_size": [51], "lr": 0.0005, "num_blocks": [1], "num_epochs": 2, "patch_size": 8, "patch_stride": 4, "patience": 10, "small_kernel_merged": False, "small_size": [5], "use_multi_scale": False},
-        "base_batch_size": 128,
         "adapter": None,
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -49,7 +43,6 @@ BASELINE_SPECS = (
         "implementation_class": "iTransformer",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/iTransformer.sh",
         "model_hyper_params": {"batch_size": 64, "d_ff": 512, "d_model": 256, "e_layers": 1, "horizon": 0, "lr": 0.0001, "norm": True, "num_epochs": 5, "seq_len": 100},
-        "base_batch_size": 64,
         "adapter": "transformer_adapter",
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -64,7 +57,6 @@ BASELINE_SPECS = (
         "implementation_class": "DualTF",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/DualTF.sh",
         "model_hyper_params": {"batch_size": 8, "fre_anormly_ratio": 10, "lr": 0.001, "num_epochs": 3, "seq_len": 50},
-        "base_batch_size": 8,
         "adapter": None,
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -79,7 +71,6 @@ BASELINE_SPECS = (
         "implementation_class": "AnomalyTransformer",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/AnomalyTransformer.sh",
         "model_hyper_params": {"batch_size": 128, "lr": 0.001, "num_epochs": 3, "win_size": 50},
-        "base_batch_size": 128,
         "adapter": None,
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -94,7 +85,6 @@ BASELINE_SPECS = (
         "implementation_class": "DCdetector",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/DCdetector.sh",
         "model_hyper_params": {"batch_size": 128, "lr": 0.0001, "num_epochs": 3, "win_size": 110},
-        "base_batch_size": 128,
         "adapter": None,
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -109,7 +99,6 @@ BASELINE_SPECS = (
         "implementation_class": "TimesNet",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/TimesNet.sh",
         "model_hyper_params": {"batch_size": 128, "d_ff": 8, "d_model": 8, "e_layers": 3, "horizon": 0, "norm": True, "num_epochs": 3, "seq_len": 100},
-        "base_batch_size": 128,
         "adapter": "transformer_adapter",
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -124,7 +113,6 @@ BASELINE_SPECS = (
         "implementation_class": "PatchTST",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/PatchTST.sh",
         "model_hyper_params": {"batch_size": 128, "d_ff": 16, "d_model": 8, "e_layers": 1, "horizon": 0, "norm": True, "num_epochs": 1, "seq_len": 100},
-        "base_batch_size": 128,
         "adapter": "transformer_adapter",
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -139,7 +127,6 @@ BASELINE_SPECS = (
         "implementation_class": "DLinear",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/DLinear.sh",
         "model_hyper_params": {"batch_size": 128, "d_ff": 16, "d_model": 8, "e_layers": 1, "horizon": 0, "norm": True, "num_epochs": 1, "seq_len": 100},
-        "base_batch_size": 128,
         "adapter": "transformer_adapter",
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -154,7 +141,6 @@ BASELINE_SPECS = (
         "implementation_class": "NLinear",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/NLinear.sh",
         "model_hyper_params": {"batch_size": 128, "d_ff": 16, "d_model": 8, "e_layers": 1, "horizon": 0, "norm": True, "num_epochs": 1, "seq_len": 100},
-        "base_batch_size": 128,
         "adapter": "transformer_adapter",
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -169,7 +155,6 @@ BASELINE_SPECS = (
         "implementation_class": "TFAD",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/TFAD.sh",
         "model_hyper_params": {},
-        "base_batch_size": 256,
         "adapter": None,
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -184,7 +169,6 @@ BASELINE_SPECS = (
         "implementation_class": "MerlionModelAdapter(AutoEncoder)",
         "source_existing_script": "scripts/multivariate_detection/detect_score/PSM_script/AutoEncoder.sh",
         "model_hyper_params": {"hidden_size": 1, "layer_sizes": [10, 3], "lr": 0.00001, "num_epochs": 1},
-        "base_batch_size": 512,
         "adapter": None,
         "python": BENCHMARK_PYTHON,
         "environment_name": "catch_env",
@@ -251,7 +235,7 @@ BASELINE_SPECS = (
 
 def command_for(task: str, spec: dict) -> str:
     """Return one independent, foreground benchmark command."""
-    params = json.dumps(hyper_params_for(task, spec), separators=(",", ":"), sort_keys=True)
+    params = json.dumps(spec["model_hyper_params"], separators=(",", ":"), sort_keys=True)
     command = (
         f'{spec["python"]} ./scripts/run_benchmark.py '
         f'--config-path "{CONFIG_PATH}" '
@@ -265,14 +249,6 @@ def command_for(task: str, spec: dict) -> str:
     if spec["adapter"]:
         command += f' --adapter "{spec["adapter"]}"'
     return command + "\n"
-
-
-def hyper_params_for(task: str, spec: dict) -> dict:
-    """Apply the pre-recorded Occupancy compatibility batch-size exception."""
-    params = dict(spec["model_hyper_params"])
-    if task in OCCUPANCY_TASKS and spec["paper_name"] in BATCHED_BASELINES:
-        params["batch_size"] = 64
-    return params
 
 
 def script_path(task: str, spec: dict) -> Path:
@@ -298,7 +274,7 @@ def write_external_baseline_assets() -> None:
         "- Every command is foreground-only and operates on one model and one task.",
         "- Activate `catch_env` for all models except OCSVM, PCA, and HBOS; activate `tods_legacy` for those three TODS models.",
         "- Shell scripts intentionally use `python`, matching the existing CATCH/MSD external scripts.",
-        "- The 11 deep Baselines use the recorded `batch_size=64` compatibility setting on both Occupancy tasks; traditional Baselines have no training batch parameter.",
+        "- Each Baseline uses its own frozen PSM detect_score template on every task; any future CUDA OOM override must be recorded per model and task.",
         "",
     ]
     for spec in BASELINE_SPECS:
@@ -352,18 +328,6 @@ def write_external_baseline_assets() -> None:
         fields = ["task", "paper_name", "original_batch_size", "final_batch_size", "reason"]
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
-        for task in sorted(OCCUPANCY_TASKS):
-            for spec in BASELINE_SPECS:
-                if spec["paper_name"] in BATCHED_BASELINES:
-                    writer.writerow(
-                        {
-                            "task": task,
-                            "paper_name": spec["paper_name"],
-                            "original_batch_size": spec["base_batch_size"],
-                            "final_batch_size": 64,
-                            "reason": "MTSBench Occupancy compatibility setting; fixed before Baseline results",
-                        }
-                    )
 
 
 if __name__ == "__main__":
