@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import math
+import re
 import subprocess
 import sys
 import tempfile
@@ -43,6 +45,36 @@ from common import (  # noqa: E402
     metropt3_split_masks,
     validate_mtsbench_source_dir,
 )
+from external_baseline_assets import (  # noqa: E402
+    BASELINE_SPECS,
+    BATCHED_BASELINES,
+    OCCUPANCY_TASKS,
+    command_for,
+    hyper_params_for,
+    script_path,
+)
+from summarize_external_validation import (  # noqa: E402
+    ALL_METHODS,
+    aggregate_all_method_results,
+    collect_all_method_task_results,
+)
+
+
+def catch_script_hyper_parameters(task: str, model: str) -> tuple[dict, str]:
+    path = ROOT / "scripts" / "multivariate_detection" / "detect_score" / f"{task}_script" / f"{model}.sh"
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r"--model-hyper-params '([^']+)'", text)
+    if match is None:
+        raise AssertionError(f"missing model hyperparameters: {path}")
+    return json.loads(match.group(1)), text
+
+
+def catch_training_batch_summary(train_length: int, batch_size: int, seq_len: int = 192) -> tuple[int, int, int, int]:
+    train_split_length = int(train_length * 0.8)
+    train_window_count = train_split_length - seq_len + 1
+    train_batch_count = math.ceil(train_window_count / batch_size)
+    catch_update_step = min(int(train_batch_count / 10), 100)
+    return train_split_length, train_window_count, train_batch_count, catch_update_step
 
 
 class TestExternalValidationInvariants(unittest.TestCase):
@@ -95,6 +127,107 @@ class TestExternalValidationInvariants(unittest.TestCase):
         self.assertEqual(len(commands), 40)
         self.assertEqual(len(set(commands)), 40)
         self.assertTrue(all(command.endswith(("/CATCH.sh", "/MSDCATCH.sh")) for command in commands))
+
+    def test_frozen_baseline_set_and_static_external_scripts(self):
+        expected = {
+            "ModernTCN", "iTransformer", "DualTF", "AnomalyTransformer", "DCdetector",
+            "TimesNet", "PatchTST", "DLinear", "NLinear", "TFAD", "AutoEncoder",
+            "OCSVM", "IsolationForest", "PCA", "HBOS",
+        }
+        self.assertEqual({spec["paper_name"] for spec in BASELINE_SPECS}, expected)
+        self.assertFalse(expected & {"TranAD", "GDN", "USAD"})
+        self.assertEqual(len(BASELINE_SPECS), 15)
+        planned = []
+        for task in TASK_ORDER:
+            for spec in BASELINE_SPECS:
+                path = script_path(task, spec)
+                self.assertTrue(path.is_file(), path)
+                subprocess.check_call(["bash", "-n", str(path)])
+                text = path.read_text(encoding="utf-8")
+                self.assertEqual(text.count("run_benchmark.py"), 1)
+                self.assertEqual(text.count("--model-name"), 1)
+                self.assertIn('--data-set-name "external_detect"', text)
+                self.assertIn(f'--data-name-list "{task}.csv"', text)
+                self.assertIn("--seed 2021", text)
+                self.assertIn("unfixed_detect_score_multi_config.json", text)
+                self.assertIn(f'score/external_validation/{task}/{spec["result_name"]}', text)
+                self.assertNotIn("nohup", text)
+                self.assertNotIn(" &", text)
+                self.assertNotIn("for ", text)
+                self.assertNotIn("while ", text)
+                planned.append(path)
+        self.assertEqual(len(planned), 300)
+        self.assertEqual(len(set(planned)), 300)
+        commands = [
+            line.strip()
+            for line in (ROOT / "EXTERNAL_BASELINE_COMMANDS.md").read_text(encoding="utf-8").splitlines()
+            if line.startswith("sh ./scripts/multivariate_detection/detect_score/")
+        ]
+        self.assertEqual(len(commands), 300)
+        self.assertEqual(len(set(commands)), 300)
+        self.assertTrue(all(" &" not in command and "nohup" not in command for command in commands))
+
+    def test_baseline_command_templates_are_fixed_and_model_specific(self):
+        transformer_names = {"iTransformer", "TimesNet", "PatchTST", "DLinear", "NLinear"}
+        for spec in BASELINE_SPECS:
+            with self.subTest(spec=spec["paper_name"]):
+                command = command_for("HAI20_07", spec)
+                self.assertIn(spec["framework_model_name"], command)
+                self.assertIn("--seed 2021", command)
+                self.assertIn("--data-set-name \"external_detect\"", command)
+                self.assertIn("--save-path \"score/external_validation/HAI20_07/", command)
+                self.assertEqual(spec["adapter"] == "transformer_adapter", spec["paper_name"] in transformer_names)
+                self.assertTrue((ROOT / spec["source_existing_script"]).is_file())
+                self.assertNotIn("label", str(spec["model_hyper_params"]).lower())
+
+    def test_occupancy_catch_and_msd_share_the_recorded_compatibility_batch_size(self):
+        for task in ("MTSB_OCCUPANCY_01", "MTSB_OCCUPANCY_02"):
+            commands = {}
+            for model in ("CATCH", "MSDCATCH"):
+                script = ROOT / "scripts" / "multivariate_detection" / "detect_score" / f"{task}_script" / f"{model}.sh"
+                text = script.read_text(encoding="utf-8")
+                match = re.search(r"--model-hyper-params '([^']+)'", text)
+                self.assertIsNotNone(match, script)
+                commands[model] = json.loads(match.group(1))
+            self.assertEqual(commands["CATCH"], commands["MSDCATCH"])
+            self.assertEqual(commands["CATCH"]["batch_size"], 64)
+            self.assertEqual(commands["CATCH"]["seq_len"], 192)
+
+    def test_occupancy_deep_baselines_use_the_same_fixed_compatibility_batch_size(self):
+        self.assertEqual(len(BATCHED_BASELINES), 11)
+        for task in OCCUPANCY_TASKS:
+            for spec in BASELINE_SPECS:
+                params = hyper_params_for(task, spec)
+                if spec["paper_name"] in BATCHED_BASELINES:
+                    self.assertEqual(params["batch_size"], 64)
+                    script = script_path(task, spec).read_text(encoding="utf-8")
+                    self.assertIn('"batch_size":64', script)
+                else:
+                    self.assertNotIn("batch_size", params)
+
+    def test_all_method_macro_and_ranking_leave_missing_results_unranked(self):
+        records = pd.DataFrame(
+            [
+                {"task": "MTSB_OPPORTUNITY_01", "paper_dataset": "OPPORTUNITY", "method": "CATCH", "auc_pr": 0.4, "auc_roc": 0.6, "status": "valid"},
+                {"task": "MTSB_OPPORTUNITY_01", "paper_dataset": "OPPORTUNITY", "method": "MSDCATCH", "auc_pr": 0.5, "auc_roc": 0.7, "status": "valid"},
+                {"task": "MTSB_OPPORTUNITY_02", "paper_dataset": "OPPORTUNITY", "method": "CATCH", "auc_pr": 0.6, "auc_roc": 0.8, "status": "valid"},
+                {"task": "MTSB_OPPORTUNITY_02", "paper_dataset": "OPPORTUNITY", "method": "MSDCATCH", "auc_pr": np.nan, "auc_roc": np.nan, "status": "missing"},
+            ]
+        )
+        self.assertIn("CATCH", ALL_METHODS)
+        dataset, summary = aggregate_all_method_results(records)
+        catch = dataset[(dataset["paper_dataset"] == "OPPORTUNITY") & (dataset["method"] == "CATCH")].iloc[0]
+        msd = dataset[(dataset["paper_dataset"] == "OPPORTUNITY") & (dataset["method"] == "MSDCATCH")].iloc[0]
+        self.assertEqual(catch["auc_pr"], 0.5)
+        self.assertEqual(catch["valid_task_count"], 2)
+        self.assertEqual(catch["expected_task_count"], 13)
+        self.assertFalse(catch["complete"])
+        self.assertEqual(msd["valid_task_count"], 1)
+        self.assertFalse(msd["complete"])
+        self.assertTrue(np.isfinite(msd["auc_pr_rank"]))
+        missing = dataset[(dataset["paper_dataset"] == "HAI20_07") & (dataset["method"] == "CATCH")].iloc[0]
+        self.assertTrue(np.isnan(missing["auc_pr_rank"]))
+        self.assertEqual(summary.loc[summary["method"] == "CATCH", "expected_dataset_count"].iloc[0], 7)
 
     def test_external_wide_loader_excludes_timestamp_and_keeps_label(self):
         from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
@@ -260,6 +393,60 @@ class TestPreparedExternalValidationData(unittest.TestCase):
         descriptors = pd.read_csv(RESULT_ROOT / "external_task_descriptors.csv")
         self.assertEqual(set(descriptors["task"]), set(self.valid_tasks))
 
+    def test_catch_mask_interval_compatibility_batch_size_exception(self):
+        expected_step_zero_at_default = {"MTSB_OCCUPANCY_01", "MTSB_OCCUPANCY_02"}
+        default_step_zero = set()
+        configured_batch_sizes = {}
+        for task in self.valid_tasks:
+            with self.subTest(task=task):
+                catch_params, catch_text = catch_script_hyper_parameters(task, "CATCH")
+                msd_params, msd_text = catch_script_hyper_parameters(task, "MSDCATCH")
+                self.assertEqual(catch_params["batch_size"], msd_params["batch_size"])
+                self.assertEqual(catch_params["seq_len"], 192)
+                self.assertEqual(msd_params["seq_len"], 192)
+                self.assertEqual(catch_params["patch_size"], 16)
+                self.assertEqual(msd_params["patch_size"], 16)
+                self.assertIn("--seed 2021", catch_text)
+                self.assertIn("--seed 2021", msd_text)
+                configured_batch_sizes[task] = catch_params["batch_size"]
+
+                train_length = int(self.registry.loc[task, "train_length"])
+                _, _, _, default_step = catch_training_batch_summary(train_length, 128)
+                if default_step == 0:
+                    default_step_zero.add(task)
+
+        self.assertEqual(default_step_zero, expected_step_zero_at_default)
+        self.assertEqual(
+            {task for task, batch_size in configured_batch_sizes.items() if batch_size == 64},
+            expected_step_zero_at_default,
+        )
+        self.assertTrue(
+            all(batch_size == 128 for task, batch_size in configured_batch_sizes.items() if task not in expected_step_zero_at_default)
+        )
+
+        expected = {
+            "MTSB_OCCUPANCY_01": (1073, 858, 667, 11, 1),
+            "MTSB_OCCUPANCY_02": (1492, 1193, 1002, 16, 1),
+        }
+        for task, (train_length, split_length, window_count, batch_count, update_step) in expected.items():
+            with self.subTest(task=task):
+                self.assertEqual(int(self.registry.loc[task, "train_length"]), train_length)
+                self.assertEqual(
+                    catch_training_batch_summary(train_length, 64),
+                    (split_length, window_count, batch_count, update_step),
+                )
+
+    def test_failed_attempts_are_outside_formal_result_discovery(self):
+        failed_root = (
+            ROOT / "result" / "score" / "external_validation" / "_failed_attempts"
+            / "MTSB_OCCUPANCY_01" / "CATCH"
+        )
+        reason = failed_root / "failure_reason.txt"
+        if reason.exists():
+            self.assertIn("catch mask update step=0", reason.read_text(encoding="utf-8").lower())
+        records = collect_all_method_task_results(tasks=["MTSB_OCCUPANCY_01"])
+        self.assertFalse(records["archive"].fillna("").str.contains("_failed_attempts", regex=False).any())
+
     def test_frozen_model_directories_remain_unmodified(self):
         changed = subprocess.check_output(
             ["git", "-C", str(ROOT.parent), "diff", "--name-only"], text=True
@@ -269,6 +456,18 @@ class TestPreparedExternalValidationData(unittest.TestCase):
             "APD-CATCH/ts_benchmark/baselines/msd_catch/",
             "APD-CATCH/ts_benchmark/baselines/bhd_msd_catch/",
             "APD-CATCH/ts_benchmark/baselines/ra_msd_catch/",
+        )
+        self.assertFalse(any(path.startswith(protected) for path in changed))
+
+    def test_baseline_model_source_directories_remain_unmodified(self):
+        changed = subprocess.check_output(
+            ["git", "-C", str(ROOT.parent), "diff", "--name-only"], text=True
+        ).splitlines()
+        protected = (
+            "APD-CATCH/ts_benchmark/baselines/self_impl/",
+            "APD-CATCH/ts_benchmark/baselines/time_series_library/",
+            "APD-CATCH/ts_benchmark/baselines/merlion/",
+            "APD-CATCH/ts_benchmark/baselines/tods/",
         )
         self.assertFalse(any(path.startswith(protected) for path in changed))
 

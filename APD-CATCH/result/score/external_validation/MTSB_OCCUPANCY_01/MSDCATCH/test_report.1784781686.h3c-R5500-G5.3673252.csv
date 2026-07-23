@@ -1,0 +1,2 @@
+strategy_args,metric_name,"MSDCATCH;{""Mlr"": 1e-05, ""anomaly_ratio"": 2, ""auxi_lambda"": 0.3, ""batch_size"": 64, ""cf_dim"": 32, ""d_ff"": 128, ""d_model"": 128, ""dc_lambda"": 0.1, ""dropout"": 0.2, ""e_layers"": 1, ""head_dim"": 32, ""head_dropout"": 0.1, ""lr"": 1e-05, ""n_heads"": 16, ""num_epochs"": 3, ""patch_size"": 16, ""patch_stride"": 8, ""score_lambda"": 0.05, ""seq_len"": 192, ""temperature"": 0.07}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.7985220564008233

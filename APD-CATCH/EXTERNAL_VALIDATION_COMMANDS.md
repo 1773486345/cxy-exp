@@ -8,6 +8,14 @@ executable commands = 40
 MetroPT3 status = valid; audited first complete calendar month = 2020-03
 ```
 
+## Fixed Configuration
+
+Default batch size: 128
+
+Pre-run compatibility exception: `MTSB_OCCUPANCY_01` and `MTSB_OCCUPANCY_02` use batch size 64 for both CATCH and MSD-CATCH.
+
+Reason: With batch size 128, the original frozen CATCH implementation produces fewer than 10 training batches and computes its mask update interval as zero, causing a deterministic `ZeroDivisionError`. The reduction was fixed before obtaining any valid result and was not selected using labels or performance.
+
 ## HAI 20.07
 
 ```bash
@@ -181,4 +189,3 @@ sh ./scripts/multivariate_detection/detect_score/MTSB_SWAN_SF_script/CATCH.sh
 ```bash
 sh ./scripts/multivariate_detection/detect_score/MTSB_SWAN_SF_script/MSDCATCH.sh
 ```
-

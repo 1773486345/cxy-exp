@@ -1,0 +1,23 @@
+task,paper_name,original_batch_size,final_batch_size,reason
+MTSB_OCCUPANCY_01,ModernTCN,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,iTransformer,64,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,DualTF,8,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,AnomalyTransformer,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,DCdetector,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,TimesNet,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,PatchTST,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,DLinear,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,NLinear,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,TFAD,256,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_01,AutoEncoder,512,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,ModernTCN,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,iTransformer,64,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,DualTF,8,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,AnomalyTransformer,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,DCdetector,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,TimesNet,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,PatchTST,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,DLinear,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,NLinear,128,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,TFAD,256,64,MTSBench Occupancy compatibility setting; fixed before Baseline results
+MTSB_OCCUPANCY_02,AutoEncoder,512,64,MTSBench Occupancy compatibility setting; fixed before Baseline results

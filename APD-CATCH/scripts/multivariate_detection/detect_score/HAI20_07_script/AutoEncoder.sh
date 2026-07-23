@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+python ./scripts/run_benchmark.py --config-path "unfixed_detect_score_multi_config.json" --data-set-name "external_detect" --data-name-list "HAI20_07.csv" --model-name "merlion.AutoEncoder" --model-hyper-params '{"hidden_size":1,"layer_sizes":[10,3],"lr":1e-05,"num_epochs":1}' --seed 2021 --gpus 0 --num-workers 1 --timeout 60000 --save-path "score/external_validation/HAI20_07/AutoEncoder"

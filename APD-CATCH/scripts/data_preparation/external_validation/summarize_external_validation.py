@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from common import PAPER_DATASET, PROJECT_ROOT, REGISTRY_PATH, RESULT_ROOT, TASK_ORDER
+from external_baseline_assets import BASELINE_SPECS
 
 
 CANDIDATES = {
@@ -25,6 +26,14 @@ CANDIDATES = {
     "low_frequency_energy_ratio_mean": 1,
     "periodicity_top3_ratio": 1,
     "correlation_drift": -1,
+}
+
+
+ALL_METHODS = ("CATCH", "MSDCATCH", *(spec["paper_name"] for spec in BASELINE_SPECS))
+METHOD_RESULT_DIR = {
+    "CATCH": "CATCH",
+    "MSDCATCH": "MSDCATCH",
+    **{spec["paper_name"]: spec["result_name"] for spec in BASELINE_SPECS},
 }
 
 
@@ -61,6 +70,98 @@ def single_valid_archive(task: str, model: str) -> tuple[Path, dict]:
     if len(candidates) != 1:
         raise RuntimeError(f"{task}/{model}: expected exactly one valid archive, found {len(candidates)}")
     return candidates[0]
+
+
+def archive_status(root: Path) -> tuple[str, Path | None, dict | None]:
+    """Collect a method archive without pretending incomplete coverage is valid."""
+    archives = sorted(root.rglob("*.tar.gz")) if root.exists() else []
+    valid = [(path, row) for path in archives if (row := read_archive(path)) is not None]
+    if len(valid) == 1:
+        return "valid", valid[0][0], valid[0][1]
+    if len(valid) > 1:
+        return "multiple_valid", None, None
+    return ("invalid" if archives else "missing"), None, None
+
+
+def collect_all_method_task_results(
+    result_root: Path = PROJECT_ROOT / "result" / "score" / "external_validation",
+    tasks: tuple[str, ...] | list[str] = TASK_ORDER,
+) -> pd.DataFrame:
+    """Return the fixed 20 by 17 result grid without reading descriptors."""
+    rows = []
+    for task in tasks:
+        for method in ALL_METHODS:
+            status, path, values = archive_status(result_root / task / METHOD_RESULT_DIR[method])
+            if path is None:
+                archive = ""
+            else:
+                try:
+                    archive = str(path.relative_to(PROJECT_ROOT))
+                except ValueError:
+                    archive = str(path)
+            rows.append(
+                {
+                    "task": task,
+                    "paper_dataset": PAPER_DATASET[task],
+                    "method": method,
+                    "auc_pr": values["auc_pr"] if values else np.nan,
+                    "auc_roc": values["auc_roc"] if values else np.nan,
+                    "status": status,
+                    "archive": archive,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def aggregate_all_method_results(task_results: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Macro-average by paper dataset and rank only finite, valid observations."""
+    expected = pd.Series(PAPER_DATASET).value_counts().rename("expected_task_count")
+    valid = task_results.loc[task_results["status"] == "valid"].copy()
+    metrics = valid.groupby(["paper_dataset", "method"], as_index=False)[["auc_pr", "auc_roc"]].mean()
+    counts = valid.groupby(["paper_dataset", "method"], as_index=False).size().rename(columns={"size": "valid_task_count"})
+    grid = pd.MultiIndex.from_product([expected.index.tolist(), list(ALL_METHODS)], names=["paper_dataset", "method"]).to_frame(index=False)
+    dataset = grid.merge(metrics, on=["paper_dataset", "method"], how="left").merge(counts, on=["paper_dataset", "method"], how="left")
+    dataset["expected_task_count"] = dataset["paper_dataset"].map(expected).astype(int)
+    dataset["valid_task_count"] = dataset["valid_task_count"].fillna(0).astype(int)
+    dataset["complete"] = dataset["valid_task_count"] == dataset["expected_task_count"]
+    dataset["auc_pr_rank"] = dataset.groupby("paper_dataset")["auc_pr"].rank(ascending=False, method="average")
+    dataset["auc_roc_rank"] = dataset.groupby("paper_dataset")["auc_roc"].rank(ascending=False, method="average")
+    msd = dataset.loc[dataset["method"] == "MSDCATCH", ["paper_dataset", "auc_pr", "auc_roc"]].rename(
+        columns={"auc_pr": "msd_auc_pr", "auc_roc": "msd_auc_roc"}
+    )
+    dataset = dataset.merge(msd, on="paper_dataset", how="left", validate="many_to_one")
+    dataset["msd_minus_method_auc_pr"] = dataset["msd_auc_pr"] - dataset["auc_pr"]
+    dataset["msd_minus_method_auc_roc"] = dataset["msd_auc_roc"] - dataset["auc_roc"]
+
+    summary = dataset.groupby("method", as_index=False).agg(
+        auc_pr_mean=("auc_pr", "mean"),
+        auc_pr_median=("auc_pr", "median"),
+        auc_roc_mean=("auc_roc", "mean"),
+        auc_roc_median=("auc_roc", "median"),
+        average_auc_pr_rank=("auc_pr_rank", "mean"),
+        average_auc_roc_rank=("auc_roc_rank", "mean"),
+        valid_dataset_count=("auc_pr", "count"),
+        complete_dataset_count=("complete", "sum"),
+    )
+    summary["expected_dataset_count"] = len(expected)
+    summary["complete"] = summary["complete_dataset_count"] == summary["expected_dataset_count"]
+    return dataset, summary
+
+
+def write_all_method_outputs() -> None:
+    """Write the competitive comparison only; no scores are recomputed here."""
+    task = collect_all_method_task_results()
+    dataset, summary = aggregate_all_method_results(task)
+    task.to_csv(RESULT_ROOT / "external_all_methods_task_results.csv", index=False)
+    dataset.to_csv(RESULT_ROOT / "external_all_methods_dataset_results.csv", index=False)
+    summary.to_csv(RESULT_ROOT / "external_all_methods_average_ranks.csv", index=False)
+    lines = ["# External All-Methods Summary", "", "Results are read-only archive metadata. Missing or invalid tasks are never ranked.", ""]
+    for row in summary.itertuples(index=False):
+        lines.append(
+            f"- {row.method}: PR mean={row.auc_pr_mean}, ROC mean={row.auc_roc_mean}, "
+            f"dataset coverage={row.valid_dataset_count}/{row.expected_dataset_count}, complete={row.complete}"
+        )
+    (RESULT_ROOT / "external_all_methods_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def rho(frame: pd.DataFrame, x: str, y: str) -> float | None:
@@ -172,6 +273,9 @@ def main() -> None:
     validation.to_csv(RESULT_ROOT / "external_descriptor_roc_validation.csv", index=False)
     pd.DataFrame(source_rows).to_csv(RESULT_ROOT / "external_result_sources.csv", index=False)
     excluded.to_csv(RESULT_ROOT / "external_excluded_tasks.csv", index=False)
+    # The baseline comparison is deliberately separate from the frozen CATCH/MSD
+    # descriptor path above; it neither changes candidate validation nor adds data.
+    write_all_method_outputs()
     print("read-only external result summary complete")
 
 
