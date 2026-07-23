@@ -7,7 +7,7 @@
 - Every command is foreground-only and operates on one model and one task.
 - Activate `catch_env` for all models except OCSVM, PCA, and HBOS; activate `tods_legacy` for those three TODS models.
 - Shell scripts intentionally use `python`, matching the existing CATCH/MSD external scripts.
-- The 11 deep Baselines use the recorded `batch_size=64` compatibility setting on both Occupancy tasks; traditional Baselines have no training batch parameter.
+- Each Baseline uses its own frozen PSM detect_score template on every task; any future CUDA OOM override must be recorded per model and task.
 
 ## ModernTCN
 

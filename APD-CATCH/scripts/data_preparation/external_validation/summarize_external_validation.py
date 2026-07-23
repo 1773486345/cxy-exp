@@ -114,16 +114,23 @@ def collect_all_method_task_results(
 
 
 def aggregate_all_method_results(task_results: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Macro-average by paper dataset and rank only finite, valid observations."""
+    """Macro-average by paper dataset and rank only complete formal observations."""
     expected = pd.Series(PAPER_DATASET).value_counts().rename("expected_task_count")
     valid = task_results.loc[task_results["status"] == "valid"].copy()
     metrics = valid.groupby(["paper_dataset", "method"], as_index=False)[["auc_pr", "auc_roc"]].mean()
     counts = valid.groupby(["paper_dataset", "method"], as_index=False).size().rename(columns={"size": "valid_task_count"})
     grid = pd.MultiIndex.from_product([expected.index.tolist(), list(ALL_METHODS)], names=["paper_dataset", "method"]).to_frame(index=False)
     dataset = grid.merge(metrics, on=["paper_dataset", "method"], how="left").merge(counts, on=["paper_dataset", "method"], how="left")
+    dataset.rename(columns={"auc_pr": "provisional_auc_pr", "auc_roc": "provisional_auc_roc"}, inplace=True)
     dataset["expected_task_count"] = dataset["paper_dataset"].map(expected).astype(int)
     dataset["valid_task_count"] = dataset["valid_task_count"].fillna(0).astype(int)
-    dataset["complete"] = dataset["valid_task_count"] == dataset["expected_task_count"]
+    dataset["complete"] = (
+        (dataset["valid_task_count"] == dataset["expected_task_count"])
+        & np.isfinite(dataset["provisional_auc_pr"])
+        & np.isfinite(dataset["provisional_auc_roc"])
+    )
+    dataset["auc_pr"] = dataset["provisional_auc_pr"].where(dataset["complete"])
+    dataset["auc_roc"] = dataset["provisional_auc_roc"].where(dataset["complete"])
     dataset["auc_pr_rank"] = dataset.groupby("paper_dataset")["auc_pr"].rank(ascending=False, method="average")
     dataset["auc_roc_rank"] = dataset.groupby("paper_dataset")["auc_roc"].rank(ascending=False, method="average")
     msd = dataset.loc[dataset["method"] == "MSDCATCH", ["paper_dataset", "auc_pr", "auc_roc"]].rename(
@@ -133,7 +140,8 @@ def aggregate_all_method_results(task_results: pd.DataFrame) -> tuple[pd.DataFra
     dataset["msd_minus_method_auc_pr"] = dataset["msd_auc_pr"] - dataset["auc_pr"]
     dataset["msd_minus_method_auc_roc"] = dataset["msd_auc_roc"] - dataset["auc_roc"]
 
-    summary = dataset.groupby("method", as_index=False).agg(
+    formal = dataset.loc[dataset["complete"]].copy()
+    summary = formal.groupby("method", as_index=False).agg(
         auc_pr_mean=("auc_pr", "mean"),
         auc_pr_median=("auc_pr", "median"),
         auc_roc_mean=("auc_roc", "mean"),
@@ -143,6 +151,13 @@ def aggregate_all_method_results(task_results: pd.DataFrame) -> tuple[pd.DataFra
         valid_dataset_count=("auc_pr", "count"),
         complete_dataset_count=("complete", "sum"),
     )
+    summary = pd.DataFrame({"method": list(ALL_METHODS)}).merge(summary, on="method", how="left")
+    coverage = dataset.groupby("method", as_index=False).agg(
+        provisional_dataset_count=("provisional_auc_pr", "count"),
+        complete_dataset_count=("complete", "sum"),
+    )
+    summary.drop(columns=["complete_dataset_count"], errors="ignore", inplace=True)
+    summary = summary.merge(coverage, on="method", how="left")
     summary["expected_dataset_count"] = len(expected)
     summary["complete"] = summary["complete_dataset_count"] == summary["expected_dataset_count"]
     return dataset, summary
@@ -159,7 +174,8 @@ def write_all_method_outputs() -> None:
     for row in summary.itertuples(index=False):
         lines.append(
             f"- {row.method}: PR mean={row.auc_pr_mean}, ROC mean={row.auc_roc_mean}, "
-            f"dataset coverage={row.valid_dataset_count}/{row.expected_dataset_count}, complete={row.complete}"
+            f"provisional dataset coverage={row.provisional_dataset_count}/{row.expected_dataset_count}, "
+            f"complete datasets={row.complete_dataset_count}/{row.expected_dataset_count}, complete={row.complete}"
         )
     (RESULT_ROOT / "external_all_methods_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 

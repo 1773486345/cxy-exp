@@ -47,10 +47,7 @@ from common import (  # noqa: E402
 )
 from external_baseline_assets import (  # noqa: E402
     BASELINE_SPECS,
-    BATCHED_BASELINES,
-    OCCUPANCY_TASKS,
     command_for,
-    hyper_params_for,
     script_path,
 )
 from summarize_external_validation import (  # noqa: E402
@@ -193,17 +190,30 @@ class TestExternalValidationInvariants(unittest.TestCase):
             self.assertEqual(commands["CATCH"]["batch_size"], 64)
             self.assertEqual(commands["CATCH"]["seq_len"], 192)
 
-    def test_occupancy_deep_baselines_use_the_same_fixed_compatibility_batch_size(self):
-        self.assertEqual(len(BATCHED_BASELINES), 11)
-        for task in OCCUPANCY_TASKS:
+    def test_all_baseline_tasks_keep_their_frozen_psm_template_parameters(self):
+        for task in TASK_ORDER:
             for spec in BASELINE_SPECS:
-                params = hyper_params_for(task, spec)
-                if spec["paper_name"] in BATCHED_BASELINES:
-                    self.assertEqual(params["batch_size"], 64)
-                    script = script_path(task, spec).read_text(encoding="utf-8")
-                    self.assertIn('"batch_size":64', script)
+                command = command_for(task, spec)
+                params = json.loads(re.search(r"--model-hyper-params '([^']+)'", command).group(1))
+                self.assertEqual(params, spec["model_hyper_params"])
+                if "batch_size" in spec["model_hyper_params"]:
+                    self.assertLessEqual(params["batch_size"], spec["model_hyper_params"]["batch_size"])
                 else:
                     self.assertNotIn("batch_size", params)
+
+        occupancy = {spec["paper_name"]: json.loads(re.search(r"--model-hyper-params '([^']+)'", command_for("MTSB_OCCUPANCY_01", spec)).group(1)) for spec in BASELINE_SPECS}
+        self.assertEqual(occupancy["DualTF"]["batch_size"], 8)
+        self.assertEqual(occupancy["iTransformer"]["batch_size"], 64)
+        for model in ("ModernTCN", "AnomalyTransformer", "DCdetector", "TimesNet", "PatchTST", "DLinear", "NLinear"):
+            self.assertEqual(occupancy[model]["batch_size"], 128)
+        self.assertNotIn("batch_size", occupancy["TFAD"])
+        self.assertNotIn("batch_size", occupancy["AutoEncoder"])
+        overrides = pd.read_csv(RESULT_ROOT / "external_baseline_batch_overrides.csv")
+        self.assertEqual(
+            list(overrides.columns),
+            ["task", "paper_name", "original_batch_size", "final_batch_size", "reason"],
+        )
+        self.assertTrue(overrides.empty)
 
     def test_all_method_macro_and_ranking_leave_missing_results_unranked(self):
         records = pd.DataFrame(
@@ -212,22 +222,37 @@ class TestExternalValidationInvariants(unittest.TestCase):
                 {"task": "MTSB_OPPORTUNITY_01", "paper_dataset": "OPPORTUNITY", "method": "MSDCATCH", "auc_pr": 0.5, "auc_roc": 0.7, "status": "valid"},
                 {"task": "MTSB_OPPORTUNITY_02", "paper_dataset": "OPPORTUNITY", "method": "CATCH", "auc_pr": 0.6, "auc_roc": 0.8, "status": "valid"},
                 {"task": "MTSB_OPPORTUNITY_02", "paper_dataset": "OPPORTUNITY", "method": "MSDCATCH", "auc_pr": np.nan, "auc_roc": np.nan, "status": "missing"},
+                {"task": "HAI20_07", "paper_dataset": "HAI20_07", "method": "CATCH", "auc_pr": 0.7, "auc_roc": 0.9, "status": "valid"},
+                {"task": "HAI20_07", "paper_dataset": "HAI20_07", "method": "MSDCATCH", "auc_pr": 0.8, "auc_roc": 0.95, "status": "valid"},
             ]
         )
         self.assertIn("CATCH", ALL_METHODS)
         dataset, summary = aggregate_all_method_results(records)
         catch = dataset[(dataset["paper_dataset"] == "OPPORTUNITY") & (dataset["method"] == "CATCH")].iloc[0]
         msd = dataset[(dataset["paper_dataset"] == "OPPORTUNITY") & (dataset["method"] == "MSDCATCH")].iloc[0]
-        self.assertEqual(catch["auc_pr"], 0.5)
+        self.assertEqual(catch["provisional_auc_pr"], 0.5)
+        self.assertTrue(np.isnan(catch["auc_pr"]))
+        self.assertTrue(np.isnan(catch["auc_roc"]))
+        self.assertTrue(np.isnan(catch["auc_pr_rank"]))
+        self.assertTrue(np.isnan(catch["auc_roc_rank"]))
         self.assertEqual(catch["valid_task_count"], 2)
         self.assertEqual(catch["expected_task_count"], 13)
         self.assertFalse(catch["complete"])
         self.assertEqual(msd["valid_task_count"], 1)
         self.assertFalse(msd["complete"])
-        self.assertTrue(np.isfinite(msd["auc_pr_rank"]))
+        self.assertTrue(np.isnan(msd["auc_pr"]))
+        self.assertTrue(np.isnan(msd["auc_roc"]))
+        self.assertTrue(np.isnan(msd["auc_pr_rank"]))
+        self.assertTrue(np.isnan(msd["auc_roc_rank"]))
+        complete = dataset[(dataset["paper_dataset"] == "HAI20_07") & (dataset["method"] == "MSDCATCH")].iloc[0]
+        self.assertTrue(complete["complete"])
+        self.assertTrue(np.isfinite(complete["auc_pr_rank"]))
         missing = dataset[(dataset["paper_dataset"] == "HAI20_07") & (dataset["method"] == "CATCH")].iloc[0]
-        self.assertTrue(np.isnan(missing["auc_pr_rank"]))
-        self.assertEqual(summary.loc[summary["method"] == "CATCH", "expected_dataset_count"].iloc[0], 7)
+        self.assertTrue(np.isfinite(missing["auc_pr_rank"]))
+        summary_catch = summary.loc[summary["method"] == "CATCH"].iloc[0]
+        self.assertEqual(summary_catch["expected_dataset_count"], 7)
+        self.assertEqual(summary_catch["provisional_dataset_count"], 2)
+        self.assertEqual(summary_catch["complete_dataset_count"], 1)
 
     def test_external_wide_loader_excludes_timestamp_and_keeps_label(self):
         from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
