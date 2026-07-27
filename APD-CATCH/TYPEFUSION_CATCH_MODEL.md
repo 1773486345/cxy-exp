@@ -156,6 +156,44 @@ test, but passing that test is a reproducibility property rather than evidence
 that the model is effective.  There is currently no real-data performance
 conclusion.
 
+## Main Experiment Tasks And Data Sources
+
+The prepared main experiment scope is limited to the 23 real `detect_score`
+tasks already reproduced by the read-only `CATCH-master` archive: twelve
+`ASD_dataset_*` physical tasks plus CICIDS, CalIt2, Creditcard, GECCO, Genesis,
+MSL, NYC, PSM, SMAP, SMD and SWAT.  Synthetic series, `detect_label`, and
+external-validation tasks do not enter this main experiment.
+
+The ASD paper-level result is the equal macro average of its twelve physical
+tasks.  Together with the eleven remaining datasets, this produces twelve
+paper-level datasets; the overall macro averages those twelve rows, not all 23
+tasks.  Prepared data reuse the existing resolved anomaly-data directory by
+shared path only, without copying the large CSV files.  `CATCH-master`, its
+data, source, scripts and results remain read-only.
+
+Each TypeFusion script inherits its supported public hyperparameters from the
+audited successful CATCH configuration, including values supplied by CATCH's
+documented adapter defaults when an archived command omits them.  All
+TypeFusion-specific parameters remain fixed across tasks.  GECCO is the sole
+recorded fairness override: TypeFusion uses `seq_len=192`, `patch_size=16` and
+`patch_stride=8`; its archived CATCH score was produced with `seq_len=96`, so a
+prepared but unexecuted paired CATCH `seq_len=192` rerun is required before any
+comparison.  TypeFusion's three-stage optimizer updates match the corresponding
+CATCH training-window exposure count, while CATCH retains its original optimizer
+and scheduler behavior.
+
+`ASD_dataset_1` has one recorded construction compatibility mapping, not a
+fairness search: CATCH's custom channel block accepts `cf_dim=4, n_heads=16`,
+whereas TypeFusion's multi-head attention requires divisibility.  Its prepared
+TypeFusion script therefore uses `n_heads=4` (`gcd(4, 16)`), while retaining the
+audited sequence, patch, batch and all TypeFusion-specific settings.  This is
+recorded in the source registry and script header; no other task receives this
+mapping.
+
+Prepared scripts and registries are not completed experiments.  The parameter
+count difference remains an architecture fact only, not evidence of performance,
+speed, generalisation or successful lightweight design.
+
 ## CATCH Relationship
 
 Retained from CATCH: benchmark defaults for sequence length, patch size/stride,
