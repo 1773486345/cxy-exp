@@ -1,1 +1,1 @@
-python ./scripts/run_benchmark.py --config-path "unfixed_detect_label_multi_config.json" --data-name-list "MSL.csv" --model-name "self_impl.TFAD" --model-hyper-params '{"anomaly_ratio": 1.0}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "label/TFAD"
+python ./scripts/run_benchmark.py --config-path "unfixed_detect_label_multi_config.json" --data-name-list "MSL.csv" --model-name "self_impl.TFAD" --model-hyper-params '{"anomaly_ratio": 1.0}' --gpus 0 --num-workers 1 --timeout 60000 --save-path "${BASELINE_SAVE_PATH:-label/TFAD/MSL/run-$(date -u +%Y%m%dT%H%M%SZ)-$$}"

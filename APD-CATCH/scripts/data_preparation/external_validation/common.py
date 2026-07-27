@@ -33,8 +33,8 @@ RAW_ROOT = PROJECT_ROOT / "dataset" / "external_validation" / "raw"
 PREPARED_ROOT = PROJECT_ROOT / "dataset" / "external_validation"
 DATA_ROOT = PREPARED_ROOT / "data"
 METADATA_PATH = PREPARED_ROOT / "EXTERNAL_DETECT_META.csv"
-RESULT_ROOT = PROJECT_ROOT / "result" / "external_decomposition_validation"
-REGISTRY_PATH = RESULT_ROOT / "external_dataset_registry.csv"
+METADATA_ROOT = PREPARED_ROOT / "metadata"
+REGISTRY_PATH = METADATA_ROOT / "source_registry.csv"
 
 TASK_ORDER = [
     "HAI20_07",
@@ -100,9 +100,9 @@ MTSBENCH_RELATIVE_PATHS = tuple(
     for directory, stem in MTSBENCH_PAIRS
     for split in ("train", "test")
 )
-MTSBENCH_LOCAL_MANIFEST_PATH = RESULT_ROOT / "mtsbench_local_source_manifest.csv"
-MTSBENCH_REVISION_MANIFEST_PATH = RESULT_ROOT / "mtsbench_revision_manifest.csv"
-MTSBENCH_VERIFICATION_PATH = RESULT_ROOT / "mtsbench_revision_verification.csv"
+MTSBENCH_LOCAL_MANIFEST_PATH = METADATA_ROOT / "mtsbench_local_source_manifest.csv"
+MTSBENCH_REVISION_MANIFEST_PATH = METADATA_ROOT / "mtsbench_revision_manifest.csv"
+MTSBENCH_VERIFICATION_PATH = METADATA_ROOT / "mtsbench_revision_verification.csv"
 MTSBENCH_MISSING_PATHS = (
     "room-occupancy/room-occupancy_test.csv",
     "room-occupancy/room-occupancy_1_train.csv",
@@ -115,7 +115,7 @@ MTSBENCH_MISSING_PATHS = (
 
 
 def ensure_directories() -> None:
-    for path in (RAW_ROOT, DATA_ROOT, RESULT_ROOT):
+    for path in (RAW_ROOT, DATA_ROOT, METADATA_ROOT):
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -236,7 +236,7 @@ def write_mtsbench_local_source_manifest() -> pd.DataFrame:
     if actual != expected:
         raise RuntimeError(f"mTSBench local source set mismatch; missing={sorted(set(expected) - set(actual))}, extra={sorted(set(actual) - set(expected))}")
     manifest = pd.DataFrame(rows)
-    RESULT_ROOT.mkdir(parents=True, exist_ok=True)
+    METADATA_ROOT.mkdir(parents=True, exist_ok=True)
     manifest.to_csv(MTSBENCH_LOCAL_MANIFEST_PATH, index=False)
     return manifest
 
@@ -278,7 +278,7 @@ def verify_mtsbench_revision_manifest(official_manifest_path: Path) -> pd.DataFr
     )
     merged.drop(columns=["_merge"], inplace=True)
     merged.to_csv(MTSBENCH_VERIFICATION_PATH, index=False)
-    audit_path = RESULT_ROOT / "MTSBENCH_REVISION_VERIFICATION.md"
+    audit_path = METADATA_ROOT / "MTSBENCH_REVISION_VERIFICATION.md"
     mismatch = int((merged["status"] != "match").sum())
     audit_path.write_text(
         "# mTSBench Revision Verification\n\n"
@@ -696,8 +696,8 @@ def audit_metropt3_calendar() -> tuple[pd.DataFrame, dict]:
             }
         )
     coverage = pd.DataFrame(rows)
-    RESULT_ROOT.mkdir(parents=True, exist_ok=True)
-    coverage_path = RESULT_ROOT / "metropt3_calendar_coverage.csv"
+    METADATA_ROOT.mkdir(parents=True, exist_ok=True)
+    coverage_path = METADATA_ROOT / "metropt3_calendar_coverage.csv"
     coverage.to_csv(coverage_path, index=False)
 
     def first_match(column: str) -> str:
@@ -726,7 +726,7 @@ def audit_metropt3_calendar() -> tuple[pd.DataFrame, dict]:
         "first_month_definition_c": first_match("definition_c_every_theoretical_sample"),
         "coverage_path": str(coverage_path.relative_to(PROJECT_ROOT)),
     }
-    audit_path = RESULT_ROOT / "METROPT3_SPLIT_AUDIT.md"
+    audit_path = METADATA_ROOT / "METROPT3_SPLIT_AUDIT.md"
     audit_text = f"""# MetroPT-3 Split Audit
 
 ## Official Source

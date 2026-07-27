@@ -1,57 +1,52 @@
-# MSD-CATCH / BHD-MSD-CATCH
+# APD-CATCH
 
-本项目在原版 CATCH 的基础上，研究面向异常检测的结构分解与联合建模。当前代码和结果围绕 CATCH、MSD-CATCH 与 BHD-MSD-CATCH 三个模型组织。
+This working tree is rebuilt from the original CATCH project. It contains no
+custom research model. The added tasks retain original CATCH commands and the
+standard upstream baseline commands that were run for those tasks.
 
-## 当前模型
+## Data
 
-- **CATCH**：固定基线；已有结果只读复用，不作为当前改造对象。
-- **MSD-CATCH**：当前主性能模型，使用独立分量建模。
-- **BHD-MSD-CATCH**：当前轻量共享编码版本。
+The original anomaly-detection data remains under `dataset/anomaly_detect`.
+The added external tasks are registered in
+`dataset/external_validation/EXTERNAL_DETECT_META.csv`:
 
-RSA、SDD 与旧 APD-CATCH 均为历史研究路线，不进入当前全数据集主实验。
+- HAI 20.07
+- BATADAL
+- MetroPT-3
+- mTSBench OPPORTUNITY (13 tasks)
+- mTSBench Occupancy (2 tasks)
+- mTSBench Metro
+- mTSBench SWAN-SF
 
-## 正式评价
+Prepared external CSV files contain a timestamp, numeric feature columns, and
+a binary label. The downloader and preparation commands are in
+`scripts/data_preparation/external_validation`.
 
-当前主实验仅使用：
+## Run CATCH
 
-- `detect_score`
-- `total_score`
-- AUC-PR 与 AUC-ROC
-
-## 正式真实数据集范围与 ASD 汇总
-
-ASD 必须展开为 12 个独立训练和评价任务：
-
-```text
-ASD_dataset_1–ASD_dataset_12
-```
-
-每个子数据集分别保留 CATCH、MSD-CATCH 与 BHD-MSD-CATCH 的原始 AUC-PR 和 AUC-ROC。当前每个 ASD 子数据集均有 MSD-CATCH 与 BHD-MSD-CATCH 的 `detect_score` 报告，已有结果只读复用。
-
-完整结果或附录必须保留 12 个 ASD 子数据集的逐项行。论文主表将 ASD 视为 1 个真实数据集，只显示一行 `ASD`：对每个模型，`ASD` 的 AUC-PR 和 AUC-ROC 分别是 12 个子数据集对应指标的等权算术平均。不得拼接 score/label 后重新计算 pooled/micro AUC，也不得按子数据集长度、异常点数量或窗口数量加权。
-
-因此，论文真实数据集总数统计中 ASD 计为 1；训练、评价与任务完成度统计中必须说明 ASD 包含 12 个独立序列任务。
-
-## 运行单个数据集
-
-例如运行 MSL 的 `detect_score`：
+Run an original bundled CATCH task, for example:
 
 ```bash
-sh ./scripts/multivariate_detection/detect_score/MSL_script/MSDCATCH.sh
-sh ./scripts/multivariate_detection/detect_score/MSL_script/BHDMSDCATCH.sh
+sh ./scripts/multivariate_detection/detect_score/SMD_script/CATCH.sh
 ```
 
-## 结果位置
+Run CATCH for an added external task, for example:
 
-```text
-result/score/by_dataset/<DATASET>/<MODEL>/
-result/msd_catch_total_screen/
-result/bhd_msd_catch_screen/
+```bash
+sh ./scripts/multivariate_detection/detect_score/HAI20_07_script/CATCH.sh
 ```
 
-## 相关文档与测试
+Each added task has independent commands in
+`scripts/multivariate_detection/detect_score/<task>_script/`. They use the
+unchanged score configuration and the `external_detect` data source.
 
-- [方向 A 研究主文档](../tsad_direction_A_pattern_aware_scoring.md)
-- [APD-CATCH 旧路线状态](./docs/legacy/APD_CATCH_LEGACY_STATUS.md)
-- [MSD-CATCH smoke test](./tests/test_msd_catch_smoke.py)
-- [BHD-MSD-CATCH smoke test](./tests/test_bhd_msd_catch_smoke.py)
+## Retained Baselines
+
+The retained external reports and their original `tar.gz` artifacts are under
+`result/score/external_validation/<task>/<baseline>/`. They cover CATCH and
+the standard baseline runs that emitted valid metrics for the added tasks.
+Every retained report records a finite AUC-ROC value. The historical
+configuration reported AUC-ROC only, so no AUC-PR value is stored for these
+runs.
+
+Future model development starts from this clean CATCH baseline.
