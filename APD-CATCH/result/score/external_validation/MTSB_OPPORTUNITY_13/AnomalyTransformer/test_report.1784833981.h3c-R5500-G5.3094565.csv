@@ -1,0 +1,2 @@
+strategy_args,metric_name,"AnomalyTransformer;{""batch_size"": 128, ""lr"": 0.001, ""num_epochs"": 3, ""win_size"": 50}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.4935410220831324

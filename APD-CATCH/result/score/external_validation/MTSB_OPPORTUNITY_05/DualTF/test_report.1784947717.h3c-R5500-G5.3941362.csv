@@ -1,0 +1,2 @@
+strategy_args,metric_name,"DualTF;{""batch_size"": 8, ""fre_anormly_ratio"": 10, ""lr"": 0.001, ""num_epochs"": 3, ""seq_len"": 50}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.2350667310384445

@@ -1,0 +1,2 @@
+strategy_args,metric_name,"TimesNet;{""batch_size"": 128, ""d_ff"": 8, ""d_model"": 8, ""e_layers"": 3, ""horizon"": 0, ""norm"": true, ""num_epochs"": 3, ""seq_len"": 100}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.7895472285814646

@@ -1,0 +1,2 @@
+strategy_args,metric_name,"DLinear;{""batch_size"": 128, ""d_ff"": 16, ""d_model"": 8, ""e_layers"": 1, ""horizon"": 0, ""norm"": true, ""num_epochs"": 1, ""seq_len"": 100}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.705675672639761

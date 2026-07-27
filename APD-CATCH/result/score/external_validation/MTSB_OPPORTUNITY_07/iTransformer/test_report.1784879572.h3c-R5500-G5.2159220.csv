@@ -1,0 +1,2 @@
+strategy_args,metric_name,"iTransformer;{""batch_size"": 64, ""d_ff"": 512, ""d_model"": 256, ""e_layers"": 1, ""horizon"": 0, ""lr"": 0.0001, ""norm"": true, ""num_epochs"": 5, ""seq_len"": 100}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.4125439154284334

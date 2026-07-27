@@ -1,0 +1,2 @@
+strategy_args,metric_name,"ModernTCN;{""anomaly_ratio"": 1, ""batch_size"": 128, ""dims"": [8], ""dropout"": 0.1, ""ffn_ratio"": 1, ""head_dropout"": 0.0, ""itr"": 1, ""large_size"": [51], ""lr"": 0.0005, ""num_blocks"": [1], ""num_epochs"": 2, ""patch_size"": 8, ""patch_stride"": 4, ""patience"": 10, ""small_kernel_merged"": false, ""small_size"": [5], ""use_multi_scale"": false}"
+"{""seed"": 2021, ""strategy_name"": ""unfixed_detect_score""}",auc_roc,0.1697508512663507
