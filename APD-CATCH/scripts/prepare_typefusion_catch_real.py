@@ -586,43 +586,6 @@ def write_commands_document(rows: List[Mapping[str, Any]]) -> None:
     )
 
 
-def write_baseline_document(rows: List[Mapping[str, Any]], catch_commit: str) -> None:
-    lines = [
-        "# TypeFusion-CATCH CATCH Baseline Reference",
-        "",
-        f"CATCH-master commit: `{catch_commit}`. This reference is read-only; no CATCH task was rerun.",
-        "GECCO's archived score baseline uses `seq_len=96`, so it is not directly comparable",
-        "with the prepared TypeFusion `seq_len=192` script until the prepared paired CATCH fair rerun exists.",
-        "A future TypeFusion batch-size reduction likewise requires a paired CATCH rerun before comparison.",
-        "ASD_dataset_1 is the sole TypeFusion construction compatibility mapping: its archived",
-        "CATCH `cf_dim=4, n_heads=16` is represented as TypeFusion `n_heads=4` because the",
-        "TypeFusion multi-head attention requires divisibility; its sequence, patch and batch settings are unchanged.",
-        "",
-        "| Task | Source | Successful report | Metric | CATCH score | seq_len | Batch | Seed | Direct comparison | GECCO fair rerun | Future paired batch rerun |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
-    ]
-    for row in rows:
-        direct = "yes" if bool(row["direct_baseline_comparable"]) else "no"
-        gecco = "required" if bool(row["baseline_requires_fair_rerun"]) else "no"
-        lines.append(
-            "| {task} | `{source}` | `{report}` | {metric} | {score} | {seq_len} | {batch} | {seed} | {direct} | {gecco} | only after a real OOM |".format(
-                task=row["task"],
-                source=row["official_source_script"],
-                report=row["baseline_report"],
-                metric=row["baseline_metric_name"],
-                score=row["baseline_metric_value"],
-                seq_len=row["seq_len"],
-                batch=row["original_batch_size"],
-                seed=row["seed"],
-                direct=direct,
-                gecco=gecco,
-            )
-        )
-    (ROOT / "TYPEFUSION_CATCH_BASELINE_REFERENCE.md").write_text(
-        "\n".join(lines) + "\n", encoding="utf-8"
-    )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catch-root", type=Path, default=DEFAULT_CATCH_ROOT)
@@ -676,7 +639,6 @@ def main() -> None:
     if bool(gecco["baseline_requires_fair_rerun"]):
         write_gecco_fair_script(gecco, audit_date)
     write_commands_document(source_rows)
-    write_baseline_document(source_rows, catch_commit)
 
     unresolved = [row["task"] for row in source_rows if bool(row["source_conflict"])]
     print(f"catch_commit={catch_commit}")

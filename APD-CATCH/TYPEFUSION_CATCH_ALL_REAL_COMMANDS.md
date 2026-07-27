@@ -11,7 +11,7 @@ Complete AUC-PR, AUC-ROC, R-AUC, VUS and timing metrics are registered from the
 result archive, while `test_report` is only checked for run state and its
 leaderboard metric. GECCO must wait for the paired CATCH `seq_len=192` fairness
 baseline. `ASD_dataset_1` has the preregistered `n_heads=4` architecture
-compatibility override, and all historical CATCH archives are code-hash audited.
+compatibility override. Archive metadata is checked before comparison.
 The result selector records every rejected run and will retain an earlier valid
 run if a newer one is damaged. These commands remain prepared only: no formal
 TypeFusion task has been run.

@@ -205,11 +205,10 @@ substitute missing archive metrics. `TypeFusion-CATCH.*.csv.tar.gz` is accepted
 only as a legacy archive filename; the formal loader output name is
 `TypeFusionCATCH`.
 
-The baseline archive registry records archive SHA-256 values, checks that the
-archive and report are from one run, and audits the CATCH source tree at every
-archive commit.  A source-report/archive AUC-ROC conflict or an unavailable or
-different historical CATCH code group excludes that task from a formal macro
-comparison.  GECCO remains excluded until a registered paired CATCH
+The baseline archive registry records archive SHA-256 values and checks that
+the archive and report are from one run. A source-report/archive AUC-ROC
+conflict excludes that task from a formal macro comparison. GECCO remains
+excluded until a registered paired CATCH
 `seq_len=192, patch_size=16, patch_stride=8` baseline exists.  The
 `ASD_dataset_1` compatibility mapping is explicitly marked
 `architecture_compatibility_override` and is reported separately from exact
@@ -284,3 +283,13 @@ shared CATCH stem is intentionally shared before branching.
 - The present adapter supports score-based benchmark strategies through
   `detect_score`; it deliberately does not introduce a new label thresholding
   interface.
+
+## Verification
+
+```bash
+python -m compileall ts_benchmark/baselines/typefusion_catch
+python -m unittest discover -s ts_benchmark/baselines/typefusion_catch/tests -p 'test_*.py'
+python -m unittest tests.test_typefusion_all_real_scripts
+python -m unittest tests.test_typefusion_benchmark_output_name
+git diff --check
+```

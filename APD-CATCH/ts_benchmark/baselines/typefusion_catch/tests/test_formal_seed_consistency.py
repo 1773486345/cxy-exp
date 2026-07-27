@@ -86,8 +86,7 @@ class FormalSeedConsistencyTests(unittest.TestCase):
             repository / "ts_benchmark/baselines/typefusion_catch/TypeFusionCATCH.py",
             repository / "ts_benchmark/baselines/typefusion_catch/smoke.py",
             repository / "TYPEFUSION_CATCH_MODEL.md",
-            repository / "TYPEFUSION_CATCH_SMOKE_COMMANDS.md",
-            repository / "TYPEFUSION_CATCH_EXPERIMENT_COMMANDS.md",
+            repository / "TYPEFUSION_CATCH_ALL_REAL_COMMANDS.md",
         )
         for path in formal_files:
             self.assertNotRegex(path.read_text(encoding="utf-8"), r"(?i)seed\s*[:=]\s*42\b")

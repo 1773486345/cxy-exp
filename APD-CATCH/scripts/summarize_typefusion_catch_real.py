@@ -54,7 +54,6 @@ COMPARISON_CONFIG_STATUSES = {
     "architecture_compatibility_override",
     "fairness_rerun_required",
     "batch_paired_rerun_required",
-    "historical_code_mismatch",
     "source_metric_conflict",
     "missing_valid_baseline",
     "missing_valid_typefusion_result",
@@ -357,7 +356,6 @@ def _baseline(source: Mapping[str, str], gecco_fair: Mapping[str, str] | None) -
         return {
             "valid": True,
             "archive_commit": gecco_fair.get("fair_source_code_version", ""),
-            "code_group": "fair_baseline_pending_code_audit",
             "auc_roc": value_or_na(gecco_fair.get("fair_auc_roc")),
             "auc_pr": value_or_na(gecco_fair.get("fair_auc_pr")),
             "r_auc_roc": value_or_na(gecco_fair.get("fair_r_auc_roc")),
@@ -370,14 +368,12 @@ def _baseline(source: Mapping[str, str], gecco_fair: Mapping[str, str] | None) -
             "patch_size": gecco_fair.get("fair_patch_size", ""),
             "patch_stride": gecco_fair.get("fair_patch_stride", ""),
             "batch_size": gecco_fair.get("fair_batch_size", ""),
-            "historical_code_comparable": True,
             "report_conflict": False,
             "is_fair_baseline": True,
         }
     return {
         "valid": as_bool(source.get("baseline_archive_valid")),
         "archive_commit": source.get("source_catch_master_commit", ""),
-        "code_group": source.get("historical_code_group", ""),
         "auc_roc": value_or_na(source.get("baseline_auc_roc")),
         "auc_pr": value_or_na(source.get("baseline_auc_pr")),
         "r_auc_roc": value_or_na(source.get("baseline_r_auc_roc")),
@@ -390,7 +386,6 @@ def _baseline(source: Mapping[str, str], gecco_fair: Mapping[str, str] | None) -
         "patch_size": source.get("patch_size", ""),
         "patch_stride": source.get("patch_stride", ""),
         "batch_size": source.get("baseline_batch_size", source.get("batch_size", "")),
-        "historical_code_comparable": as_bool(source.get("historical_code_comparable")),
         "report_conflict": as_bool(source.get("report_archive_metric_conflict")),
         "is_fair_baseline": False,
     }
@@ -412,8 +407,6 @@ def comparison_status(source: Mapping[str, str], baseline: Mapping[str, Any], se
         return "fairness_rerun_required"
     if baseline["report_conflict"]:
         return "source_metric_conflict"
-    if not baseline["historical_code_comparable"]:
-        return "historical_code_mismatch"
     if str(selected["batch_size"]) != str(baseline["batch_size"]):
         return "batch_paired_rerun_required"
     if source["task"] == "ASD_dataset_1":
@@ -457,10 +450,9 @@ def task_metric_row(source: Mapping[str, str], selected: Mapping[str, Any] | Non
         "comparison_config_reason": (
             "CATCH source uses cf_dim=4 and n_heads=16, while TypeFusion MultiheadAttention requires num_heads not exceeding and dividing the embedding dimension; the preregistered compatibility mapping uses n_heads=4."
             if status == "architecture_compatibility_override"
-            else source.get("historical_code_difference", "") if status == "historical_code_mismatch" else ""
+            else ""
         ),
         "catch_archive_commit": baseline["archive_commit"],
-        "catch_code_group": baseline["code_group"],
         "catch_auc_pr": baseline["auc_pr"],
         "catch_auc_roc": baseline["auc_roc"],
         "typefusion_auc_pr": typefusion.get("typefusion_auc_pr", "N/A"),

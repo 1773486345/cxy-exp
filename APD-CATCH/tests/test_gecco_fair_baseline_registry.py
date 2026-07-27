@@ -17,8 +17,8 @@ from tests.typefusion_result_fixture import write_archive, write_report  # noqa:
 
 class GeccoFairBaselineRegistryTests(unittest.TestCase):
     def test_current_registry_is_explicitly_unavailable(self) -> None:
-        content = (ROOT / "result/typefusion_catch_main/gecco_fair_baseline_registry.csv").read_text()
-        self.assertIn("GECCO,False,not_run_or_no_valid_result", content)
+        registry = ROOT / "result/typefusion_catch_main/gecco_fair_baseline_registry.csv"
+        self.assertFalse(registry.exists())
 
     def test_candidate_geometry_and_full_contract_validation(self) -> None:
         contract = fair_script_contract()
