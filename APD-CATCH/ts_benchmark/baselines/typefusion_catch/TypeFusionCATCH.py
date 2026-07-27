@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 import random
+import time
 from pathlib import Path
 from typing import Dict, Mapping, Optional, Tuple
 
@@ -23,6 +25,7 @@ from ts_benchmark.baselines.utils import anomaly_detection_data_provider, train_
 
 
 _STAGE_ORDER = ("branch_pretrain", "fusion_train", "joint_finetune")
+LOGGER = logging.getLogger(__name__)
 
 
 class TypeFusionCATCH:
@@ -108,8 +111,35 @@ class TypeFusionCATCH:
         )
         return train_loader, valid_loader
 
-    def _validation_loss(self, loader, compute_joint: bool) -> float:
+    @staticmethod
+    def _profile_timing_enabled() -> bool:
+        return os.environ.get("TYPEFUSION_PROFILE_TIMING") == "1"
+
+    def _synchronize_for_profile(self) -> None:
+        if self._profile_timing_enabled() and self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+
+    def _cuda_memory_mib(self) -> Tuple[Optional[float], Optional[float]]:
+        if self.device.type != "cuda":
+            return None, None
+        return (
+            torch.cuda.memory_allocated(self.device) / (1024 * 1024),
+            torch.cuda.memory_reserved(self.device) / (1024 * 1024),
+        )
+
+    def _validation_loss(
+        self,
+        loader,
+        compute_joint: bool,
+        training_stage: str,
+    ) -> float:
         assert self.model is not None
+        validation_started = time.perf_counter()
+        LOGGER.info(
+            "TypeFusion-CATCH validation start: stage=%s batches=%d",
+            training_stage,
+            len(loader),
+        )
         self.model.eval()
         losses = []
         with torch.no_grad():
@@ -117,7 +147,15 @@ class TypeFusionCATCH:
                 output = self.model(batch.float().to(self.device), compute_joint=compute_joint)
                 losses.append(float(output["losses"]["total"].detach().cpu()))
         self.model.train()
-        return float(np.mean(losses)) if losses else float("inf")
+        validation_loss = float(np.mean(losses)) if losses else float("inf")
+        LOGGER.info(
+            "TypeFusion-CATCH validation end: stage=%s batches=%d seconds=%.3f loss=%.8f",
+            training_stage,
+            len(loader),
+            time.perf_counter() - validation_started,
+            validation_loss,
+        )
+        return validation_loss
 
     def _stage_learning_rate(self, training_stage: str) -> float:
         if training_stage == "joint_finetune":
@@ -210,27 +248,106 @@ class TypeFusionCATCH:
         stage_lr = self._stage_learning_rate(training_stage)
         optimizer = torch.optim.Adam(parameters, lr=stage_lr)
         self.stage_optimizer_lrs[training_stage] = stage_lr
+        compute_joint = training_stage != "branch_pretrain"
+        planned_steps = (
+            max_optimizer_steps
+            if max_optimizer_steps is not None
+            else self.config.epochs_for_stage(training_stage) * len(train_loader)
+        )
+        trainable_parameter_count = sum(parameter.numel() for parameter in parameters)
+        LOGGER.info(
+            "TypeFusion-CATCH stage start: stage=%s trainable_parameters=%d lr=%.10g "
+            "planned_optimizer_steps=%d compute_joint=%s profile_timing=%s",
+            training_stage,
+            trainable_parameter_count,
+            stage_lr,
+            planned_steps,
+            compute_joint,
+            self._profile_timing_enabled(),
+        )
         stage_best = self._clone_state_dict(self.model.state_dict())
         best_loss = float("inf")
         stale_epochs = 0
         optimizer_steps = 0
         completed_epochs = 0
-        compute_joint = training_stage != "branch_pretrain"
+        step_durations = []
         while max_optimizer_steps is None or optimizer_steps < max_optimizer_steps:
             if max_optimizer_steps is None and completed_epochs >= self.config.epochs_for_stage(training_stage):
                 break
             completed_epochs += 1
             self.model.train()
-            for batch, _ in train_loader:
+            iterator = iter(train_loader)
+            while True:
+                data_wait_started = time.perf_counter()
+                try:
+                    batch, _ = next(iterator)
+                except StopIteration:
+                    break
+                data_wait_seconds = time.perf_counter() - data_wait_started
+                step_started = data_wait_started
                 optimizer.zero_grad(set_to_none=True)
-                output = self.model(batch.float().to(self.device), compute_joint=compute_joint)
+                self._synchronize_for_profile()
+                transfer_started = time.perf_counter()
+                batch = batch.float().to(self.device)
+                self._synchronize_for_profile()
+                host_to_device_seconds = time.perf_counter() - transfer_started
+                self._synchronize_for_profile()
+                forward_started = time.perf_counter()
+                output = self.model(batch, compute_joint=compute_joint)
+                self._synchronize_for_profile()
+                forward_seconds = time.perf_counter() - forward_started
                 loss = output["losses"]["total"]
+                self._synchronize_for_profile()
+                backward_started = time.perf_counter()
                 loss.backward()
+                self._synchronize_for_profile()
+                backward_seconds = time.perf_counter() - backward_started
+                self._synchronize_for_profile()
+                optimizer_started = time.perf_counter()
                 optimizer.step()
+                self._synchronize_for_profile()
+                optimizer_seconds = time.perf_counter() - optimizer_started
                 optimizer_steps += 1
+                total_step_seconds = time.perf_counter() - step_started
+                step_durations.append(total_step_seconds)
+                if optimizer_steps == 1:
+                    allocated_mib, reserved_mib = self._cuda_memory_mib()
+                    LOGGER.info(
+                        "TypeFusion-CATCH first batch: stage=%s data_wait_seconds=%.6f "
+                        "host_to_device_seconds=%.6f forward_seconds=%.6f backward_seconds=%.6f "
+                        "optimizer_seconds=%.6f total_loss=%.8f batch_shape=%s "
+                        "cuda_allocated_mib=%s cuda_reserved_mib=%s",
+                        training_stage,
+                        data_wait_seconds,
+                        host_to_device_seconds,
+                        forward_seconds,
+                        backward_seconds,
+                        optimizer_seconds,
+                        float(loss.detach().cpu()),
+                        tuple(batch.shape),
+                        "n/a" if allocated_mib is None else f"{allocated_mib:.2f}",
+                        "n/a" if reserved_mib is None else f"{reserved_mib:.2f}",
+                    )
+                if optimizer_steps % 10 == 0:
+                    average_step_seconds = float(np.mean(step_durations))
+                    remaining_steps = max(0, planned_steps - optimizer_steps)
+                    LOGGER.info(
+                        "TypeFusion-CATCH progress: stage=%s optimizer_steps=%d/%d loss=%.8f "
+                        "average_step_seconds=%.3f estimated_remaining_seconds=%.1f",
+                        training_stage,
+                        optimizer_steps,
+                        planned_steps,
+                        float(loss.detach().cpu()),
+                        average_step_seconds,
+                        remaining_steps * average_step_seconds,
+                    )
                 if max_optimizer_steps is not None and optimizer_steps >= max_optimizer_steps:
                     break
-            validation_loss = self._validation_loss(valid_loader, compute_joint=compute_joint)
+            validation_loss = self._validation_loss(
+                valid_loader,
+                compute_joint=compute_joint,
+                training_stage=training_stage,
+            )
             if validation_loss < best_loss:
                 best_loss = validation_loss
                 stale_epochs = 0
@@ -243,6 +360,12 @@ class TypeFusionCATCH:
         self.stage_best_states[training_stage] = self._clone_state_dict(stage_best)
         self.stage_validation_losses[training_stage] = best_loss
         self.stage_optimizer_steps[training_stage] = optimizer_steps
+        LOGGER.info(
+            "TypeFusion-CATCH stage end: stage=%s optimizer_steps=%d best_validation_loss=%.8f",
+            training_stage,
+            optimizer_steps,
+            best_loss,
+        )
 
     def detect_fit(
         self,
@@ -261,6 +384,15 @@ class TypeFusionCATCH:
 
         self._seed_everything(self.config.seed)
         self.detect_hyper_param_tune(train_data)
+        LOGGER.info(
+            "TypeFusion-CATCH detect_fit start: device=%s train_rows=%d channel_count=%d "
+            "seq_len=%d batch_size=%d",
+            self.device,
+            len(train_data),
+            train_data.shape[1],
+            self.config.seq_len,
+            self.config.batch_size,
+        )
         if previous_scaler is not None:
             if not hasattr(previous_scaler, "mean_"):
                 raise ValueError("previous_scaler must already be fitted")
@@ -276,8 +408,24 @@ class TypeFusionCATCH:
             self.stage_optimizer_lrs = {}
             self.stage_optimizer_steps = {}
             self.model = TypeFusionCATCHModel(self.config).to(self.device)
+            loader_started = time.perf_counter()
             train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=True)
+            LOGGER.info(
+                "TypeFusion-CATCH loaders ready: train_batches=%d validation_batches=%d "
+                "loader_prepare_seconds=%.3f",
+                len(train_loader),
+                len(valid_loader),
+                time.perf_counter() - loader_started,
+            )
             stage_budget = self._build_training_budget(train_loader)
+            LOGGER.info(
+                "TypeFusion-CATCH training budget: reference_total_steps=%d "
+                "branch_pretrain_steps=%d fusion_train_steps=%d joint_finetune_steps=%d",
+                self.training_budget_summary["reference_total_steps"],
+                self.training_budget_summary["branch_pretrain_steps"],
+                self.training_budget_summary["fusion_train_steps"],
+                self.training_budget_summary["joint_finetune_steps"],
+            )
             for training_stage in _STAGE_ORDER:
                 self._train_stage(
                     training_stage,
@@ -289,6 +437,10 @@ class TypeFusionCATCH:
             self.best_state = self._clone_state_dict(self.stage_best_states["joint_finetune"])
             self.model.load_state_dict(self.best_state)
             self._write_result_audit_metadata()
+            LOGGER.info(
+                "TypeFusion-CATCH detect_fit complete: total_optimizer_steps=%d",
+                self.training_budget_summary["actual_total_steps"],
+            )
             return
 
         if self.config.training_budget_mode != "debug_stage_epochs":
@@ -306,6 +458,7 @@ class TypeFusionCATCH:
             self.stage_optimizer_lrs = {}
             self.stage_optimizer_steps = {}
             self.model = TypeFusionCATCHModel(self.config).to(self.device)
+            loader_started = time.perf_counter()
             train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=True)
         else:
             if checkpoint is None:
@@ -319,14 +472,35 @@ class TypeFusionCATCH:
             if self.model is None:
                 self.model = TypeFusionCATCHModel(self.config).to(self.device)
             self.model.load_state_dict(checkpoint)
+            loader_started = time.perf_counter()
             train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=False)
 
+        LOGGER.info(
+            "TypeFusion-CATCH loaders ready: train_batches=%d validation_batches=%d "
+            "loader_prepare_seconds=%.3f",
+            len(train_loader),
+            len(valid_loader),
+            time.perf_counter() - loader_started,
+        )
+
         self._build_training_budget(train_loader)
+        LOGGER.info(
+            "TypeFusion-CATCH training budget: reference_total_steps=%d "
+            "branch_pretrain_steps=%d fusion_train_steps=%d joint_finetune_steps=%d",
+            self.training_budget_summary["reference_total_steps"],
+            self.training_budget_summary["branch_pretrain_steps"],
+            self.training_budget_summary["fusion_train_steps"],
+            self.training_budget_summary["joint_finetune_steps"],
+        )
         self._train_stage(training_stage, train_loader, valid_loader)
         self._refresh_actual_budget_summary()
         self.best_state = self._clone_state_dict(self.stage_best_states[training_stage])
         self.model.load_state_dict(self.best_state)
         self._write_result_audit_metadata()
+        LOGGER.info(
+            "TypeFusion-CATCH detect_fit complete: total_optimizer_steps=%d",
+            self.training_budget_summary["actual_total_steps"],
+        )
 
     def detect_score(self, test: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
         """Return only the joint normal reconstruction's pointwise error."""

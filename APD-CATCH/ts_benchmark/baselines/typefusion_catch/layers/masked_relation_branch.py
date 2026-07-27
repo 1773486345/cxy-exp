@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -64,22 +64,51 @@ class MaskedRelationBranch(nn.Module):
 
         return max(1, MAX_RELATION_ATTENTION_ROWS // time)
 
-    def _condition_forward(self, masked_input: Tensor) -> Tuple[Tensor, Tensor]:
+    def _condition_forward(
+        self,
+        masked_input: Tensor,
+        debug_callback: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[Tensor, Tensor]:
         """Run one group/batch condition without materialising other groups."""
 
         chunk_batch, time, channels = masked_input.shape
+        if debug_callback is not None:
+            debug_callback("value_projection_start")
         hidden = self.value_projection(masked_input.unsqueeze(-1))
+        if debug_callback is not None:
+            debug_callback("value_projection_end")
         hidden = hidden + self.channel_embedding
+        if debug_callback is not None:
+            debug_callback("channel_fusion_start")
         hidden = self.channel_fusion(hidden.reshape(chunk_batch * time, channels, -1))
+        if debug_callback is not None:
+            debug_callback("channel_fusion_end")
         hidden = hidden.view(chunk_batch, time, channels, -1)
 
         temporal = hidden.permute(0, 2, 3, 1).reshape(chunk_batch * channels, -1, time)
+        if debug_callback is not None:
+            debug_callback("temporal_mixer_start")
         temporal = self.temporal_mixer(temporal)
+        if debug_callback is not None:
+            debug_callback("temporal_mixer_end")
         temporal = temporal.view(chunk_batch, channels, -1, time).permute(0, 3, 1, 2)
+        if debug_callback is not None:
+            debug_callback("token_projection_start")
         temporal = self.token_projection(temporal)
-        return self.output_head(temporal).squeeze(-1), temporal
+        if debug_callback is not None:
+            debug_callback("token_projection_end")
+            debug_callback("output_head_start")
+        prediction = self.output_head(temporal).squeeze(-1)
+        if debug_callback is not None:
+            debug_callback("output_head_end")
+        return prediction, temporal
 
-    def forward(self, normalized_input: Tensor, randomize_groups: bool) -> Dict[str, Tensor]:
+    def forward(
+        self,
+        normalized_input: Tensor,
+        randomize_groups: bool,
+        debug_callback: Optional[Callable[[str], None]] = None,
+    ) -> Dict[str, Tensor]:
         batch, time, channels = normalized_input.shape
         masks, group_index = self._group_masks(normalized_input.device, randomize_groups)
         groups = masks.size(0)
@@ -96,7 +125,10 @@ class MaskedRelationBranch(nn.Module):
                 batch_end = min(batch, batch_start + condition_batch_chunk)
                 input_chunk = normalized_input[batch_start:batch_end]
                 masked_chunk = input_chunk.masked_fill(group_mask.view(1, 1, channels), 0.0)
-                prediction_chunk, hidden_chunk = self._condition_forward(masked_chunk)
+                prediction_chunk, hidden_chunk = self._condition_forward(
+                    masked_chunk,
+                    debug_callback=debug_callback,
+                )
                 prediction_chunks.append(prediction_chunk.index_select(dim=2, index=target_channels))
                 hidden_sum_chunks.append(
                     hidden_chunk.index_select(dim=2, index=target_channels).sum(dim=2)
@@ -114,9 +146,13 @@ class MaskedRelationBranch(nn.Module):
 
         if selected_hidden_sum is None or any(channel is None for channel in selected_channels):
             raise RuntimeError("relation masking failed to select every channel")
+        if debug_callback is not None:
+            debug_callback("selected_prediction_start")
         selected_prediction = torch.stack(
             [channel for channel in selected_channels if channel is not None], dim=2
         )
+        if debug_callback is not None:
+            debug_callback("selected_prediction_end")
         selected_hidden_mean = selected_hidden_sum / channels
         z = patchify_time(
             selected_hidden_mean, self.config.patch_size, self.config.patch_stride
