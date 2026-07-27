@@ -14,7 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 from summarize_typefusion_catch_real import FIXED_TYPEFUSION_KEYS, select_latest_valid_run  # noqa: E402
-from tests.typefusion_result_fixture import write_archive, write_report  # noqa: E402
+from tests.typefusion_result_fixture import (  # noqa: E402
+    FORMAL_TYPEFUSION_OUTPUT_NAME,
+    write_archive,
+    write_report,
+)
 from ts_benchmark.baselines.typefusion_catch.TypeFusionCATCH import TypeFusionCATCH  # noqa: E402
 
 
@@ -42,11 +46,25 @@ def source_row() -> dict:
     return {"task": "PSM", "data_name": "PSM.csv", "typefusion_hyper_params_json": json.dumps(expected_params())}
 
 
-def write_valid_run(path: Path, *, seed: int = 2021, params: dict | None = None) -> None:
+def write_valid_run(
+    path: Path,
+    *,
+    seed: int = 2021,
+    params: dict | None = None,
+    archive_prefix: str = FORMAL_TYPEFUSION_OUTPUT_NAME,
+    archive_model_name: str = FORMAL_TYPEFUSION_OUTPUT_NAME,
+    report_model_name: str = FORMAL_TYPEFUSION_OUTPUT_NAME,
+) -> None:
     params = params or expected_params()
     path.mkdir(parents=True)
-    write_archive(path / "TypeFusion-CATCH.result.csv.tar.gz", "TypeFusion-CATCH", "PSM.csv", params, seed=seed)
-    write_report(path / "test_report.result.csv", "TypeFusion-CATCH", params, seed=seed)
+    write_archive(
+        path / f"{archive_prefix}.result.csv.tar.gz",
+        archive_model_name,
+        "PSM.csv",
+        params,
+        seed=seed,
+    )
+    write_report(path / "test_report.result.csv", report_model_name, params, seed=seed)
     (path / "typefusion_run_config.json").write_text(
         json.dumps(
             {
@@ -127,8 +145,8 @@ class TypeFusionRunSelectionTests(unittest.TestCase):
                 lambda run: (
                     write_valid_run(run),
                     write_archive(
-                        run / "TypeFusion-CATCH.result.csv.tar.gz",
-                        "TypeFusion-CATCH",
+                        run / "TypeFusionCATCH.result.csv.tar.gz",
+                        "TypeFusionCATCH",
                         "PSM.csv",
                         expected_params(),
                         auc_roc=float("nan"),
@@ -148,6 +166,51 @@ class TypeFusionRunSelectionTests(unittest.TestCase):
                 selected, audit = select_latest_valid_run("PSM", source_row(), root)
                 self.assertIsNone(selected)
                 self.assertIn(expected_reason, audit[0]["rejection_reason"])
+
+    def test_legacy_archive_name_is_accepted_but_duplicate_candidates_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "PSM" / "run-20260101T000000Z-1"
+            write_valid_run(
+                legacy,
+                archive_prefix="TypeFusion-CATCH",
+                archive_model_name="TypeFusion-CATCH",
+                report_model_name="TypeFusion-CATCH",
+            )
+            selected, audit = select_latest_valid_run("PSM", source_row(), root)
+            self.assertEqual(selected["archive_path"], str(legacy / "TypeFusion-CATCH.result.csv.tar.gz"))
+            self.assertTrue(audit[0]["selected"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            duplicate = root / "PSM" / "run-20260101T000000Z-1"
+            write_valid_run(duplicate)
+            write_archive(
+                duplicate / "TypeFusion-CATCH.legacy.csv.tar.gz",
+                FORMAL_TYPEFUSION_OUTPUT_NAME,
+                "PSM.csv",
+                expected_params(),
+            )
+            selected, audit = select_latest_valid_run("PSM", source_row(), root)
+            self.assertIsNone(selected)
+            self.assertIn("multiple_typefusion_archives_conflict", audit[0]["rejection_reason"])
+
+    def test_wrong_result_display_name_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run = root / "PSM" / "run-20260101T000000Z-1"
+            write_valid_run(run, archive_model_name="WrongModel", report_model_name="WrongModel")
+            selected, audit = select_latest_valid_run("PSM", source_row(), root)
+            self.assertIsNone(selected)
+            self.assertIn("archive_model_name_mismatch:WrongModel", audit[0]["rejection_reason"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run = root / "PSM" / "run-20260101T000000Z-1"
+            write_valid_run(run, report_model_name="WrongModel")
+            selected, audit = select_latest_valid_run("PSM", source_row(), root)
+            self.assertIsNone(selected)
+            self.assertEqual(audit[0]["rejection_reason"], "test_report_model_name_mismatch")
 
 
 if __name__ == "__main__":

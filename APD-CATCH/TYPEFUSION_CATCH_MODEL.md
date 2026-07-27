@@ -198,10 +198,12 @@ speed, generalisation or successful lightweight design.
 
 The formal main metrics are AUC-PR and AUC-ROC.  The complete metric set is
 read only from each completed `CATCH.*.csv.tar.gz` or
-`TypeFusion-CATCH.*.csv.tar.gz` archive: AUC-PR, AUC-ROC, R-AUC-PR,
+`TypeFusionCATCH.*.csv.tar.gz` archive: AUC-PR, AUC-ROC, R-AUC-PR,
 R-AUC-ROC, VUS-PR, VUS-ROC, fit time and inference time.  A `test_report` is
 only a run-status and leaderboard-metric cross-check; it is not used to
-substitute missing archive metrics.
+substitute missing archive metrics. `TypeFusion-CATCH.*.csv.tar.gz` is accepted
+only as a legacy archive filename; the formal loader output name is
+`TypeFusionCATCH`.
 
 The baseline archive registry records archive SHA-256 values, checks that the
 archive and report are from one run, and audits the CATCH source tree at every

@@ -11,6 +11,9 @@ from typing import Any, Mapping
 import pandas as pd
 
 
+FORMAL_TYPEFUSION_OUTPUT_NAME = "TypeFusionCATCH"
+
+
 def write_archive(
     path: Path,
     model_name: str,

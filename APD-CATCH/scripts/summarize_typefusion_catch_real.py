@@ -28,6 +28,12 @@ from typefusion_catch_result_utils import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCORE_ROOT = ROOT / "result/score/TypeFusion-CATCH"
+FORMAL_OUTPUT_MODEL_NAME = "TypeFusionCATCH"
+LEGACY_OUTPUT_MODEL_NAME = "TypeFusion-CATCH"
+TYPEFUSION_ARCHIVE_PATTERNS = (
+    f"{FORMAL_OUTPUT_MODEL_NAME}.*.csv.tar.gz",
+    f"{LEGACY_OUTPUT_MODEL_NAME}.*.csv.tar.gz",
+)
 ASD_TASKS = tuple(f"ASD_dataset_{index}" for index in range(1, 13))
 PAPER_DATASETS = (
     "ASD",
@@ -103,6 +109,48 @@ def _single(run_dir: Path, pattern: str, reason: str) -> Path:
     return matches[0]
 
 
+def _parse_typefusion_archive(path: Path, data_name: str):
+    """Parse a formal archive, with a narrowly scoped legacy-name fallback."""
+
+    try:
+        return parse_metric_archive(path, data_name, FORMAL_OUTPUT_MODEL_NAME)
+    except ValueError as formal_error:
+        if path.name.startswith(LEGACY_OUTPUT_MODEL_NAME + "."):
+            try:
+                return parse_metric_archive(path, data_name, LEGACY_OUTPUT_MODEL_NAME)
+            except ValueError:
+                pass
+        raise formal_error
+
+
+def _select_typefusion_archive(run_dir: Path, data_name: str):
+    """Return one archive or make every duplicate candidate an explicit conflict."""
+
+    candidates = sorted(
+        {
+            path
+            for pattern in TYPEFUSION_ARCHIVE_PATTERNS
+            for path in run_dir.glob(pattern)
+            if path.is_file()
+        }
+    )
+    if not candidates:
+        raise ValueError("expected_one_typefusion_archive:0")
+    if len(candidates) > 1:
+        inspections = []
+        for path in candidates:
+            try:
+                parsed = _parse_typefusion_archive(path, data_name)
+                inspections.append(
+                    f"{path.name}:valid:{parsed.model_name}:{parsed.archive_sha256}"
+                )
+            except ValueError as exc:
+                inspections.append(f"{path.name}:invalid:{exc}")
+        raise ValueError("multiple_typefusion_archives_conflict:" + "|".join(inspections))
+    path = candidates[0]
+    return path, _parse_typefusion_archive(path, data_name)
+
+
 def _load_run_config(run_dir: Path) -> Dict[str, Any]:
     candidates = (run_dir / "typefusion_run_config.json", run_dir / "run_config.json")
     for path in candidates:
@@ -171,13 +219,19 @@ def validate_typefusion_run(run_dir: Path, source: Mapping[str, str]) -> Dict[st
         raise ValueError("run_directory_missing")
     run_config = _load_run_config(run_dir)
     report_path = _single(run_dir, "test_report*.csv", "expected_one_test_report")
-    archive_path = _single(run_dir, "TypeFusion-CATCH.*.csv.tar.gz", "expected_one_typefusion_archive")
+    archive_path, archive = _select_typefusion_archive(run_dir, source["data_name"])
     marker = failure_marker([*run_dir.glob("*.log"), *run_dir.glob("*.txt")])
     if marker:
         raise ValueError(marker)
-    archive = parse_metric_archive(archive_path, source["data_name"], "TypeFusion-CATCH")
     report = parse_leaderboard_report(report_path)
-    if report["model_name"] != "TypeFusion-CATCH":
+    legacy_archive = (
+        archive_path.name.startswith(LEGACY_OUTPUT_MODEL_NAME + ".")
+        and archive.model_name == LEGACY_OUTPUT_MODEL_NAME
+    )
+    accepted_report_names = {FORMAL_OUTPUT_MODEL_NAME}
+    if legacy_archive:
+        accepted_report_names.add(LEGACY_OUTPUT_MODEL_NAME)
+    if report["model_name"] not in accepted_report_names:
         raise ValueError("test_report_model_name_mismatch")
     if report["strategy"].get("strategy_name") != "unfixed_detect_score":
         raise ValueError("test_report_strategy_mismatch")
@@ -185,7 +239,7 @@ def validate_typefusion_run(run_dir: Path, source: Mapping[str, str]) -> Dict[st
         raise ValueError("test_report_seed_mismatch")
     if run_config.get("data_name") != source["data_name"]:
         raise ValueError("run_config_data_name_mismatch")
-    if run_config.get("model_name") not in {"TypeFusion-CATCH", "typefusion_catch.TypeFusionCATCH"}:
+    if run_config.get("model_name") != "typefusion_catch.TypeFusionCATCH":
         raise ValueError("run_config_model_name_mismatch")
     if int(run_config.get("seed", -1)) != 2021:
         raise ValueError("run_config_seed_mismatch")
