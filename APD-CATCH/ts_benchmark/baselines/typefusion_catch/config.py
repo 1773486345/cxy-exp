@@ -7,10 +7,11 @@ protocol.  New fields are explicit rather than data-set dependent.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 _STAGES = {"branch_pretrain", "fusion_train", "joint_finetune"}
+_FIT_MODES = {"three_stage", "single_stage"}
 
 
 @dataclass
@@ -25,7 +26,6 @@ class TypeFusionConfig:
     head_dim: int = 64
     dropout: float = 0.2
     batch_size: int = 128
-    num_epochs: int = 3
     patience: int = 3
     seq_len: int = 192
     patch_size: int = 16
@@ -49,6 +49,10 @@ class TypeFusionConfig:
     relation_mask_groups: int = 4
     pattern_mask_ratio: float = 0.25
     training_stage: str = "branch_pretrain"
+    fit_mode: str = "three_stage"
+    branch_pretrain_epochs: int = 3
+    fusion_train_epochs: int = 3
+    joint_finetune_epochs: int = 3
     lambda_freq: float = 0.1
     lambda_mask: float = 0.1
 
@@ -94,7 +98,10 @@ class TypeFusionConfig:
             "branch_dim": self.branch_dim,
             "relation_mask_groups": self.relation_mask_groups,
             "batch_size": self.batch_size,
-            "num_epochs": self.num_epochs,
+            "patience": self.patience,
+            "branch_pretrain_epochs": self.branch_pretrain_epochs,
+            "fusion_train_epochs": self.fusion_train_epochs,
+            "joint_finetune_epochs": self.joint_finetune_epochs,
         }
         for name, value in integer_fields.items():
             if not isinstance(value, int) or value <= 0:
@@ -125,6 +132,17 @@ class TypeFusionConfig:
             raise ValueError("memory_topk cannot exceed memory_size")
         if self.training_stage not in _STAGES:
             raise ValueError(f"training_stage must be one of {sorted(_STAGES)}")
+        if self.fit_mode not in _FIT_MODES:
+            raise ValueError(f"fit_mode must be one of {sorted(_FIT_MODES)}")
+
+    def epochs_for_stage(self, training_stage: str) -> int:
+        if training_stage not in _STAGES:
+            raise ValueError(f"Unsupported training stage: {training_stage}")
+        return {
+            "branch_pretrain": self.branch_pretrain_epochs,
+            "fusion_train": self.fusion_train_epochs,
+            "joint_finetune": self.joint_finetune_epochs,
+        }[training_stage]
 
 
 DEFAULT_TYPEFUSION_HYPER_PARAMS: Dict[str, Any] = {

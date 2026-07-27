@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import random
-from typing import Optional, Tuple
+from typing import Dict, Mapping, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -28,6 +28,10 @@ class TypeFusionCATCH:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model: Optional[TypeFusionCATCHModel] = None
         self.best_state = None
+        self.stage_best_states: Dict[str, Dict[str, torch.Tensor]] = {}
+        self.stage_start_states: Dict[str, Dict[str, torch.Tensor]] = {}
+        self.stage_validation_losses: Dict[str, float] = {}
+        self._scaler_fitted = False
         self.model_name = "TypeFusion-CATCH"
 
     @staticmethod
@@ -55,6 +59,43 @@ class TypeFusionCATCH:
             scaler.transform(frame.values), columns=frame.columns, index=frame.index
         )
 
+    @staticmethod
+    def _clone_state_dict(state_dict: Mapping[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        return copy.deepcopy(dict(state_dict))
+
+    def load_stage_checkpoint(
+        self,
+        state_dict: Mapping[str, torch.Tensor],
+        scaler: Optional[StandardScaler] = None,
+    ) -> None:
+        """Provide a complete prior-stage checkpoint for debug single-stage runs."""
+
+        self.best_state = self._clone_state_dict(state_dict)
+        if scaler is not None:
+            if not hasattr(scaler, "mean_"):
+                raise ValueError("The supplied scaler must already be fitted")
+            self.scaler = copy.deepcopy(scaler)
+            self._scaler_fitted = True
+
+    def _prepare_loaders(self, train_data: pd.DataFrame, fit_scaler: bool):
+        train_frame, valid_frame = train_val_split(train_data, 0.8, None)
+        if fit_scaler:
+            self.scaler.fit(train_frame.values)
+            self._scaler_fitted = True
+        elif not self._scaler_fitted:
+            raise ValueError(
+                "single_stage fusion_train/joint_finetune requires the prior fitted scaler"
+            )
+        train_frame = self._scaled_frame(self.scaler, train_frame)
+        valid_frame = self._scaled_frame(self.scaler, valid_frame)
+        train_loader = anomaly_detection_data_provider(
+            train_frame, self.config.batch_size, self.config.seq_len, mode="train"
+        )
+        valid_loader = anomaly_detection_data_provider(
+            valid_frame, self.config.batch_size, self.config.seq_len, mode="val"
+        )
+        return train_loader, valid_loader
+
     def _validation_loss(self, loader) -> float:
         assert self.model is not None
         self.model.eval()
@@ -66,29 +107,18 @@ class TypeFusionCATCH:
         self.model.train()
         return float(np.mean(losses)) if losses else float("inf")
 
-    def detect_fit(self, train_data: pd.DataFrame, test_data: Optional[pd.DataFrame] = None) -> None:
-        """Train exactly the selected stage; orchestration across stages is explicit."""
-
-        self._seed_everything(self.config.seed)
-        self.detect_hyper_param_tune(train_data)
-        train_frame, valid_frame = train_val_split(train_data, 0.8, None)
-        self.scaler.fit(train_frame.values)
-        train_frame = self._scaled_frame(self.scaler, train_frame)
-        valid_frame = self._scaled_frame(self.scaler, valid_frame)
-        self.model = TypeFusionCATCHModel(self.config).to(self.device)
-        train_loader = anomaly_detection_data_provider(
-            train_frame, self.config.batch_size, self.config.seq_len, mode="train"
-        )
-        valid_loader = anomaly_detection_data_provider(
-            valid_frame, self.config.batch_size, self.config.seq_len, mode="val"
-        )
+    def _train_stage(self, training_stage: str, train_loader, valid_loader) -> None:
+        assert self.model is not None
+        self.model.set_training_stage(training_stage)
+        self.stage_start_states[training_stage] = self._clone_state_dict(self.model.state_dict())
         parameters = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
         if not parameters:
-            raise RuntimeError("Selected training stage has no trainable parameters")
+            raise RuntimeError(f"{training_stage} has no trainable parameters")
         optimizer = torch.optim.Adam(parameters, lr=self.config.lr)
+        stage_best = self._clone_state_dict(self.model.state_dict())
         best_loss = float("inf")
         stale_epochs = 0
-        for _ in range(self.config.num_epochs):
+        for _ in range(self.config.epochs_for_stage(training_stage)):
             self.model.train()
             for batch, _ in train_loader:
                 optimizer.zero_grad(set_to_none=True)
@@ -100,13 +130,79 @@ class TypeFusionCATCH:
             if validation_loss < best_loss:
                 best_loss = validation_loss
                 stale_epochs = 0
-                self.best_state = copy.deepcopy(self.model.state_dict())
+                stage_best = self._clone_state_dict(self.model.state_dict())
             else:
                 stale_epochs += 1
                 if stale_epochs >= self.config.patience:
                     break
-        if self.best_state is None:
-            self.best_state = copy.deepcopy(self.model.state_dict())
+        self.model.load_state_dict(stage_best)
+        self.stage_best_states[training_stage] = self._clone_state_dict(stage_best)
+        self.stage_validation_losses[training_stage] = best_loss
+
+    def detect_fit(
+        self,
+        train_data: pd.DataFrame,
+        test_data: Optional[pd.DataFrame] = None,
+        previous_checkpoint: Optional[Mapping[str, torch.Tensor]] = None,
+        previous_scaler: Optional[StandardScaler] = None,
+    ) -> None:
+        """Fit the default complete stage chain or one explicitly resumed stage.
+
+        ``three_stage`` builds one model instance and runs branch pretraining,
+        fusion training and joint fine-tuning consecutively.  ``single_stage``
+        is a debugging mode: Fusion/Finetune require a prior full checkpoint
+        and its fitted scaler, so frozen random branches are never permitted.
+        """
+
+        self._seed_everything(self.config.seed)
+        self.detect_hyper_param_tune(train_data)
+        if previous_scaler is not None:
+            if not hasattr(previous_scaler, "mean_"):
+                raise ValueError("previous_scaler must already be fitted")
+            self.scaler = copy.deepcopy(previous_scaler)
+            self._scaler_fitted = True
+
+        if self.config.fit_mode == "three_stage":
+            self.scaler = StandardScaler()
+            self._scaler_fitted = False
+            self.stage_best_states = {}
+            self.stage_start_states = {}
+            self.stage_validation_losses = {}
+            self.model = TypeFusionCATCHModel(self.config).to(self.device)
+            train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=True)
+            for training_stage in ("branch_pretrain", "fusion_train", "joint_finetune"):
+                self._train_stage(training_stage, train_loader, valid_loader)
+            self.best_state = self._clone_state_dict(self.stage_best_states["joint_finetune"])
+            self.model.load_state_dict(self.best_state)
+            return
+
+        training_stage = self.config.training_stage
+        checkpoint = previous_checkpoint if previous_checkpoint is not None else self.best_state
+        if training_stage == "branch_pretrain":
+            self.scaler = StandardScaler()
+            self._scaler_fitted = False
+            self.stage_best_states = {}
+            self.stage_start_states = {}
+            self.stage_validation_losses = {}
+            self.model = TypeFusionCATCHModel(self.config).to(self.device)
+            train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=True)
+        else:
+            if checkpoint is None:
+                raise ValueError(
+                    "single_stage fusion_train/joint_finetune requires an explicit prior checkpoint"
+                )
+            if not self._scaler_fitted:
+                raise ValueError(
+                    "single_stage fusion_train/joint_finetune requires the prior fitted scaler"
+                )
+            if self.model is None:
+                self.model = TypeFusionCATCHModel(self.config).to(self.device)
+            self.model.load_state_dict(checkpoint)
+            train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=False)
+
+        self._train_stage(training_stage, train_loader, valid_loader)
+        self.best_state = self._clone_state_dict(self.stage_best_states[training_stage])
+        self.model.load_state_dict(self.best_state)
 
     def detect_score(self, test: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
         """Return only the joint normal reconstruction's pointwise error."""

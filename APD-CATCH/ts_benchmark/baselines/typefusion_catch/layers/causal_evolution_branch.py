@@ -51,24 +51,24 @@ class CausalEvolutionBranch(nn.Module):
             for index in range(config.temporal_layers)
         )
         self.token_projection = nn.Linear(hidden, config.d_model)
-        self.prediction_head = nn.Conv1d(hidden, config.c_in, kernel_size=1)
+        self.prediction_head = nn.Conv1d(config.d_model, config.c_in, kernel_size=1)
 
-    def forward(self, normalized_input: Tensor) -> Dict[str, Tensor]:
+    def forward(self, standardized_input: Tensor) -> Dict[str, Tensor]:
         # shift right once before the first causal operation; no target value is
         # ever supplied to the predictor for its own output position.
-        history = F.pad(normalized_input[:, :-1, :], (0, 0, 1, 0))
+        history = F.pad(standardized_input[:, :-1, :], (0, 0, 1, 0))
         hidden = self.input_projection(history.transpose(1, 2))
         for block in self.blocks:
             hidden = block(hidden)
-        prediction = self.prediction_head(hidden).transpose(1, 2)
+        token_sequence = self.token_projection(hidden.transpose(1, 2))
+        prediction = self.prediction_head(token_sequence.transpose(1, 2)).transpose(1, 2)
         token_hidden = patchify_time(
-            hidden.transpose(1, 2), self.config.patch_size, self.config.patch_stride
+            token_sequence, self.config.patch_size, self.config.patch_stride
         ).mean(dim=2)
-        z = self.token_projection(token_hidden)
         return {
-            "z": z,
+            "z": token_hidden,
             "x_hat": prediction,
-            "e": (normalized_input - prediction).abs(),
+            "e": (standardized_input - prediction).abs(),
         }
 
     def unfreeze_tail(self) -> None:

@@ -17,8 +17,10 @@ def huber(prediction: Tensor, target: Tensor) -> Tensor:
 
 def compute_losses(output: Dict[str, object], config: TypeFusionConfig) -> Dict[str, Tensor]:
     normalized_input = output["normalized_input"]
+    evolution_input = output["evolution_input"]
     branches = output["branches"]
     assert isinstance(normalized_input, Tensor)
+    assert isinstance(evolution_input, Tensor)
     assert isinstance(branches, dict)
     state = branches["state"]
     evolution = branches["evolution"]
@@ -27,7 +29,7 @@ def compute_losses(output: Dict[str, object], config: TypeFusionConfig) -> Dict[
 
     losses = {
         "state": huber(state["x_hat"], normalized_input),
-        "evolution": huber(evolution["x_hat"], normalized_input),
+        "evolution": huber(evolution["x_hat"], evolution_input),
         "pattern_time": huber(pattern["x_hat"], normalized_input),
         "relation": huber(relation["x_hat"], normalized_input),
         "pattern_freq": F.mse_loss(pattern["predicted_spectrum"].real, output["spectrum"].real)

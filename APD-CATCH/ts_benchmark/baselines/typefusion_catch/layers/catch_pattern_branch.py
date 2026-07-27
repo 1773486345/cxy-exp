@@ -59,7 +59,8 @@ class CATCHPatternBranch(nn.Module):
 
         sequence = masked.permute(0, 2, 1, 3).reshape(batch * channels, patches, hidden)
         encoded = self.frequency_transformer(sequence).view(batch, channels, patches, hidden).permute(0, 2, 1, 3)
-        z = self.token_norm(encoded.mean(dim=2))
+        encoded = self.token_norm(encoded)
+        z = encoded.mean(dim=2)
         decoded = self.channel_decoder(encoded).view(
             batch, patches, channels, self.config.patch_size, 2
         )

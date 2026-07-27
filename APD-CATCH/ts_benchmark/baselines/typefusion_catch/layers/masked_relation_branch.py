@@ -71,6 +71,7 @@ class MaskedRelationBranch(nn.Module):
         # Temporal mixing occurs independently for each channel after masking.
         temporal = hidden.permute(0, 2, 3, 1).reshape(batch * groups * channels, -1, time)
         temporal = self.temporal_mixer(temporal).view(batch * groups, channels, -1, time).permute(0, 3, 1, 2)
+        temporal = self.token_projection(temporal)
         prediction_all = self.output_head(temporal).squeeze(-1).view(batch, groups, time, channels)
         hidden_all = temporal.view(batch, groups, time, channels, -1)
 
@@ -84,9 +85,9 @@ class MaskedRelationBranch(nn.Module):
             2,
             group_index.view(1, 1, 1, channels, 1).expand(batch, time, 1, channels, hidden_all.size(-1)),
         ).squeeze(2)
-        z = self.token_projection(
-            patchify_time(selected_hidden.mean(dim=2), self.config.patch_size, self.config.patch_stride).mean(dim=2)
-        )
+        z = patchify_time(
+            selected_hidden.mean(dim=2), self.config.patch_size, self.config.patch_stride
+        ).mean(dim=2)
         return {
             "z": z,
             "x_hat": selected_prediction,

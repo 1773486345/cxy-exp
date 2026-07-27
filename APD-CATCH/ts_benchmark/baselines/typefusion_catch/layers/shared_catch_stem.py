@@ -120,9 +120,7 @@ class SharedCatchStem(nn.Module):
             config.temporal_layers,
             config.dropout,
         )
-        self.frequency_projection = nn.Linear(config.d_model, config.d_model)
         self.temporal_projection = nn.Linear(config.temporal_hidden_dim, config.d_model)
-        self.output_norm = nn.LayerNorm(config.d_model)
 
     def forward(self, x: Tensor) -> Dict[str, Tensor | RevINStatistics]:
         if x.ndim != 3:
@@ -151,22 +149,16 @@ class SharedCatchStem(nn.Module):
         frequency_channels = self.channel_fusion(channel_inputs).view(
             batch, patches, self.config.c_in, self.config.d_model
         )
-        frequency_latent = self.frequency_projection(frequency_channels.mean(dim=2))
-
         temporal_sequence = self.local_temporal(normalized)
         temporal_latent = self.temporal_projection(
             patchify_time(
                 temporal_sequence, self.config.patch_size, self.config.patch_stride
             ).mean(dim=2)
         )
-        shared_latent = self.output_norm(frequency_latent + temporal_latent)
         return {
             "normalized_input": normalized,
             "revin_statistics": statistics,
             "spectrum": spectrum,
-            "frequency_patches": frequency_patches,
             "frequency_channels": frequency_channels,
-            "frequency_latent": frequency_latent,
             "temporal_latent": temporal_latent,
-            "shared_latent": shared_latent,
         }

@@ -77,9 +77,7 @@ class TypeFusionCATCHModel(nn.Module):
                 self._set_module_trainable(module, True)
             # Only late shared projections and branch output layers are unfrozen.
             for module in (
-                self.shared_stem.frequency_projection,
                 self.shared_stem.temporal_projection,
-                self.shared_stem.output_norm,
                 self.shared_stem.channel_fusion.output_projection,
             ):
                 self._set_module_trainable(module, True)
@@ -125,7 +123,10 @@ class TypeFusionCATCHModel(nn.Module):
         normalized_input = shared["normalized_input"]
         branches = {
             "state": self.state_branch(normalized_input, shared["temporal_latent"]),
-            "evolution": self.evolution_branch(normalized_input),
+            # x has already passed the train-data StandardScaler in the adapter.
+            # It intentionally bypasses full-window RevIN statistics so the
+            # causal branch has no target/future normalisation leakage.
+            "evolution": self.evolution_branch(x),
             "pattern": self.pattern_branch(
                 normalized_input,
                 shared["frequency_channels"],
@@ -137,14 +138,17 @@ class TypeFusionCATCHModel(nn.Module):
             ),
         }
         q = self._adapt_evidence(branches)
+        leave_one_out = self.branch_fusion.leave_one_out(q)
         if self.training and self.config.training_stage != "branch_pretrain":
             mask_prediction = self.branch_fusion.masked_branch_prediction(q)
             branch_mask_loss = mask_prediction["loss"]
+        elif not self.training and self.config.training_stage != "branch_pretrain":
+            mask_prediction = None
+            branch_mask_loss = self.branch_fusion.leave_one_out_mask_loss(q, leave_one_out)
         else:
             mask_prediction = None
             branch_mask_loss = q.new_zeros(())
 
-        leave_one_out = self.branch_fusion.leave_one_out(q)
         q_normal = leave_one_out["q_normal"]
         x_hat_joint_normalized = self.joint_decoder(q_normal)
         x_hat_joint = self.shared_stem.revin.denormalize(
@@ -152,6 +156,7 @@ class TypeFusionCATCHModel(nn.Module):
         )
         output: Dict[str, object] = {
             "normalized_input": normalized_input,
+            "evolution_input": x,
             "spectrum": shared["spectrum"],
             "branches": branches,
             "q": q,

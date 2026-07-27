@@ -18,7 +18,7 @@ branches.
 
 ## Architecture
 
-`X -> RevIN -> FFT/frequency patching/Trans_C channel fusion + local temporal
+`X_standardized -> RevIN -> FFT/frequency patching/Trans_C channel fusion + local temporal
 stem -> {State, Evolution, Pattern, Relation} -> EvidenceAdapter ->
 BranchFusionTransformer -> leave-one-branch-out normal tokens ->
 JointNormalDecoder -> X_hat_joint`
@@ -34,9 +34,10 @@ The four branch tasks are deliberately different:
 - State: combines local temporal patches with shared temporal tokens, reads a
   top-k sparse set of learnable normal-state prototypes, then decodes only from
   that normal memory.  It targets spikes, bounds and level/state shifts.
-- Evolution: right-shifts the normalised input before a causal TCN.  Its output
-  at time `t` has no path from `X[t]` or later inputs, so it predicts normal
-  evolution, changes, timing shifts and transitions from history alone.
+- Evolution: directly right-shifts the adapter's train-data-StandardScaler
+  input before a causal TCN.  It never reads full-window RevIN mean or variance.
+  Its output at time `t` has no path from `X[t]` or later inputs, so it predicts
+  normal evolution, changes, timing shifts and transitions from history alone.
 - Pattern: uses shared CATCH-style channel-frequency tokens, randomly masks
   frequency patches during branch training, applies a frequency Transformer,
   decodes complex spectral patches, overlap-adds them and applies IFFT.  It
@@ -47,7 +48,9 @@ The four branch tasks are deliberately different:
   and their context.  It targets conditional dependence and synchrony changes.
 
 Each branch returns a normal representation `z_k`, a normal reconstruction or
-prediction `x_hat_k`, and its dense evidence map `e_k = |X_norm - x_hat_k|`.
+prediction `x_hat_k`, and a dense evidence map.  State, Pattern and Relation
+operate in RevIN space; Evolution uses the train-data StandardScaler space for
+its target, prediction and evidence to preserve the causal boundary.
 
 ## Conflict-Aware Fusion
 
@@ -60,6 +63,12 @@ During fusion training, one or two branch types are replaced by a learned mask
 token.  The branch-axis Transformer predicts the held-out normal token from
 the remaining branch tokens and shallow temporal context.  The target token is
 stop-gradient normal training evidence.
+
+During validation, the same batched four-way LOO forward used for inference is
+also the deterministic mask objective: only each view's masked branch token is
+compared with its stop-gradient observed token.  Therefore Fusion/Finetune
+validation includes a real `lambda_mask * L_branch_mask` term rather than a
+zero placeholder caused by `model.eval()`.
 
 At inference, four leave-one-branch-out views are concatenated as a `B*4`
 batch.  A single BranchFusionTransformer pass predicts state from the other
@@ -82,7 +91,8 @@ learned score weighting, voting, threshold calibration, or post-hoc gate.
 
 ## Loss And Training
 
-All losses use the RevIN-normalised training space:
+State, Pattern, Relation and Joint losses use the RevIN-normalised training
+space.  Evolution loss uses the train-data StandardScaler space by design:
 
 `L = L_state + L_evolution + L_pattern_time + L_relation + 0.1 L_pattern_freq + 0.1 L_branch_mask + L_joint`
 
@@ -94,9 +104,19 @@ The actual stage objective is explicit:
 - `joint_finetune`: the full fixed loss, with fusion components plus only the
   late shared projections and final branch layers unfrozen.
 
-`training_stage` is a required explicit configuration value.  The adapter runs
-only its selected stage; it does not automatically launch a long three-stage
-experiment.
+`detect_fit` defaults to `fit_mode="three_stage"` and creates one model instance
+for `branch_pretrain -> fusion_train -> joint_finetune`.  Every stage creates an
+optimizer from only its currently trainable parameters, saves its best complete
+`state_dict`, restores that state, then starts the next stage from it.  The
+StandardScaler is fitted once before Stage 1 and reused thereafter.  Explicit
+`branch_pretrain_epochs`, `fusion_train_epochs`, and `joint_finetune_epochs`
+default to three each and are never data-set or test-result dependent.
+
+`fit_mode="single_stage"` is retained for debugging only.  Its Fusion/Finetune
+calls require a prior complete checkpoint and the already fitted scaler via
+`detect_fit(..., previous_checkpoint=..., previous_scaler=...)` or
+`load_stage_checkpoint`; otherwise the adapter raises instead of freezing
+random branches.
 
 ## CATCH Relationship
 
@@ -119,8 +139,8 @@ addition, and its score-time threshold procedure.  The original
 
 The parameter count depends on the observed variable count `c_in`, which the
 benchmark sets from the train frame.  With the CATCH-compatible default
-configuration and `c_in=4`, TypeFusion-CATCH has `1,515,557` parameters:
-shared stem `246,400`; State `70,592`; Evolution `69,508`; Pattern `402,208`;
+configuration and `c_in=4`, TypeFusion-CATCH has `1,498,789` parameters:
+shared stem `229,632`; State `70,592`; Evolution `69,508`; Pattern `402,208`;
 Relation `150,657`; four evidence adapters `83,456`; BranchFusionTransformer
 `282,752`; JointNormalDecoder `209,984`.  Under the same `c_in=4` CATCH default
 configuration, original CATCH has `210,879,520` parameters.  These counts are
@@ -131,8 +151,12 @@ shared CATCH stem is intentionally shared before branching.
 
 ## Current Limitations
 
-- The model has implementation and random-tensor validation only; no training
-  or benchmark performance claim is made here.
+- The model has implementation, random-tensor and small-DataFrame continuity
+  validation only; no formal training or benchmark performance claim is made.
+- The original causal test covered only `CausalEvolutionBranch`.  The current
+  full-model test also traverses `TypeFusionCATCHModel` and `SharedCatchStem`,
+  verifying that target and future changes cannot alter the Evolution prediction
+  at the target position.
 - Frequency patches use right padding only when the configured CATCH grid does
   not exactly cover `seq_len`; the output is crop-restored to `seq_len`.
 - Relation reconstruction uses `relation_mask_groups` simultaneous group views;

@@ -96,3 +96,10 @@ class BranchFusionTransformer(nn.Module):
             "expanded_batch": torch.tensor(batch * self.branch_count, device=q.device),
             "loo_masks": flattened_masks,
         }
+
+    @staticmethod
+    def leave_one_out_mask_loss(q: Tensor, leave_one_out: Dict[str, Tensor]) -> Tensor:
+        """Deterministic validation loss on exactly the four masked tokens."""
+
+        prediction = leave_one_out["q_normal"]
+        return (prediction - q.detach()).square().mean()
