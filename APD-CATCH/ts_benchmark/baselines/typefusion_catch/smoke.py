@@ -9,7 +9,8 @@ from ts_benchmark.baselines.typefusion_catch.typefusion_catch import TypeFusionC
 
 
 def main() -> None:
-    torch.manual_seed(0)
+    seed = TypeFusionConfig().seed
+    torch.manual_seed(seed)
     config = TypeFusionConfig(
         seq_len=32,
         patch_size=8,
@@ -29,6 +30,7 @@ def main() -> None:
         fusion_heads=4,
         relation_mask_groups=2,
         dropout=0.0,
+        seed=seed,
         training_stage="joint_finetune",
     )
     model = TypeFusionCATCHModel(config).train()

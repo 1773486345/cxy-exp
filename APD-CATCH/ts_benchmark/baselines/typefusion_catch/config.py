@@ -34,7 +34,7 @@ class TypeFusionConfig:
     revin: int = 1
     affine: int = 0
     subtract_last: int = 0
-    seed: int = 42
+    seed: int = 2021
 
     # Set by the benchmark adapter after inspecting the training frame.
     c_in: int = 1

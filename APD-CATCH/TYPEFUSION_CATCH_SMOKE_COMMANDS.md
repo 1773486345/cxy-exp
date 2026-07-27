@@ -1,5 +1,7 @@
 /media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python -m compileall ts_benchmark/baselines/typefusion_catch
 
+/media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python -c "from ts_benchmark.baselines.typefusion_catch.config import TypeFusionConfig; assert TypeFusionConfig().seed == 2021"
+
 /media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python -m ts_benchmark.baselines.typefusion_catch.smoke
 
 /media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python -m unittest ts_benchmark.baselines.typefusion_catch.tests.test_three_stage_state_continuity

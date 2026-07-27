@@ -58,7 +58,7 @@ def tiny_fit_kwargs(**overrides):
         "branch_pretrain_epochs": 1,
         "fusion_train_epochs": 1,
         "joint_finetune_epochs": 1,
-        "seed": 123,
+        "seed": 2021,
     }
     kwargs.update(overrides)
     return kwargs

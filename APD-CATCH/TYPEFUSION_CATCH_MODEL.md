@@ -137,6 +137,25 @@ calls require a prior complete checkpoint and the already fitted scaler via
 `load_stage_checkpoint`; otherwise the adapter raises instead of freezing
 random branches.
 
+## Formal Reproducibility Protocol
+
+The formal TypeFusion-CATCH default is `seed=2021`, matching the CATCH benchmark
+protocol.  Every formal command also passes `--seed 2021`, and its TypeFusion
+model hyperparameters explicitly include `"seed": 2021`, because `detect_fit`
+resets the model-level Python, NumPy, PyTorch CPU and available CUDA random
+states.  cuDNN deterministic mode is enabled and cuDNN benchmarking is disabled
+when fitting.
+
+Formal runs use `fit_mode="three_stage"` with
+`training_budget_mode="equal_total_steps"`.  The total number of optimizer
+updates over the three stages equals the reference CATCH updates from the same
+train loader and `catch_train_epochs`; checkpoint restoration and validation do
+not add updates.  Stage 3 uses a fixed learning rate of `0.1 * lr`.  Repeated
+CPU runs with the same configuration are covered by a small-data deterministic
+test, but passing that test is a reproducibility property rather than evidence
+that the model is effective.  There is currently no real-data performance
+conclusion.
+
 ## CATCH Relationship
 
 Retained from CATCH: benchmark defaults for sequence length, patch size/stride,
