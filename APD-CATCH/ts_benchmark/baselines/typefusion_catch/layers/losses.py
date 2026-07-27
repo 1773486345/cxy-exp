@@ -35,7 +35,9 @@ def compute_losses(output: Dict[str, object], config: TypeFusionConfig) -> Dict[
         "pattern_freq": F.mse_loss(pattern["predicted_spectrum"].real, output["spectrum"].real)
         + F.mse_loss(pattern["predicted_spectrum"].imag, output["spectrum"].imag),
         "branch_mask": output["branch_mask_loss"],
-        "joint": huber(output["x_hat_joint_normalized"], normalized_input),
+        "joint": normalized_input.new_zeros(())
+        if output["x_hat_joint_normalized"] is None
+        else huber(output["x_hat_joint_normalized"], normalized_input),
     }
     branch_total = losses["state"] + losses["evolution"] + losses["pattern_time"] + losses["relation"]
     branch_total = branch_total + config.lambda_freq * losses["pattern_freq"]

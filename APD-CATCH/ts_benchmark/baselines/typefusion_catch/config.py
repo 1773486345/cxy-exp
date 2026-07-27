@@ -12,6 +12,7 @@ from typing import Any, Dict
 
 _STAGES = {"branch_pretrain", "fusion_train", "joint_finetune"}
 _FIT_MODES = {"three_stage", "single_stage"}
+_TRAINING_BUDGET_MODES = {"equal_total_steps", "debug_stage_epochs"}
 
 
 @dataclass
@@ -53,6 +54,9 @@ class TypeFusionConfig:
     branch_pretrain_epochs: int = 3
     fusion_train_epochs: int = 3
     joint_finetune_epochs: int = 3
+    joint_finetune_lr_scale: float = 0.1
+    training_budget_mode: str = "equal_total_steps"
+    catch_train_epochs: int = 3
     lambda_freq: float = 0.1
     lambda_mask: float = 0.1
 
@@ -102,6 +106,7 @@ class TypeFusionConfig:
             "branch_pretrain_epochs": self.branch_pretrain_epochs,
             "fusion_train_epochs": self.fusion_train_epochs,
             "joint_finetune_epochs": self.joint_finetune_epochs,
+            "catch_train_epochs": self.catch_train_epochs,
         }
         for name, value in integer_fields.items():
             if not isinstance(value, int) or value <= 0:
@@ -112,6 +117,7 @@ class TypeFusionConfig:
             "pattern_mask_ratio": self.pattern_mask_ratio,
             "lambda_freq": self.lambda_freq,
             "lambda_mask": self.lambda_mask,
+            "joint_finetune_lr_scale": self.joint_finetune_lr_scale,
         }
         for name, value in float_fields.items():
             if not isinstance(value, (int, float)):
@@ -128,12 +134,18 @@ class TypeFusionConfig:
             raise ValueError("dropout must be in [0, 1)")
         if not 0.0 <= float(self.pattern_mask_ratio) < 1.0:
             raise ValueError("pattern_mask_ratio must be in [0, 1)")
+        if not 0.0 < float(self.joint_finetune_lr_scale) <= 1.0:
+            raise ValueError("joint_finetune_lr_scale must be in (0, 1]")
         if self.memory_topk > self.memory_size:
             raise ValueError("memory_topk cannot exceed memory_size")
         if self.training_stage not in _STAGES:
             raise ValueError(f"training_stage must be one of {sorted(_STAGES)}")
         if self.fit_mode not in _FIT_MODES:
             raise ValueError(f"fit_mode must be one of {sorted(_FIT_MODES)}")
+        if self.training_budget_mode not in _TRAINING_BUDGET_MODES:
+            raise ValueError(
+                f"training_budget_mode must be one of {sorted(_TRAINING_BUDGET_MODES)}"
+            )
 
     def epochs_for_stage(self, training_stage: str) -> int:
         if training_stage not in _STAGES:

@@ -18,16 +18,21 @@ branches.
 
 ## Architecture
 
-`X_standardized -> RevIN -> FFT/frequency patching/Trans_C channel fusion + local temporal
+`X_standardized -> RevIN -> FFT/CATCH-style frequency patching/CATCH-style cross-channel Transformer + local temporal
 stem -> {State, Evolution, Pattern, Relation} -> EvidenceAdapter ->
 BranchFusionTransformer -> leave-one-branch-out normal tokens ->
 JointNormalDecoder -> X_hat_joint`
 
-The shared encoder is information-preserving only.  It retains CATCH's RevIN,
-full FFT, frequency patches and cross-channel Transformer idea.  Its compact
-depthwise-separable temporal path prevents short state and local evolution
-information from being discarded by frequency processing.  It is not a fifth
-expert and has no anomaly score.
+TypeFusion-CATCH is based on CATCH's frequency patching, cross-channel modelling
+ideas and anomaly-detection protocol, then reimplements the shared frequency
+representation, type-specialised branches, conflict fusion and joint normal
+reconstruction.  The shared encoder uses RevIN, full FFT, CATCH-style frequency
+patching and a CATCH-style cross-channel Transformer; it is not the original
+complete CATCH Trans_C/backbone, does not use its learned channel mask generator,
+and does not retain its large Flatten heads.  Its compact depthwise-separable
+temporal path prevents short state and local evolution information from being
+discarded by frequency processing.  It is not a fifth expert and has no anomaly
+score.
 
 The four branch tasks are deliberately different:
 
@@ -36,6 +41,8 @@ The four branch tasks are deliberately different:
   that normal memory.  It targets spikes, bounds and level/state shifts.
 - Evolution: directly right-shifts the adapter's train-data-StandardScaler
   input before a causal TCN.  It never reads full-window RevIN mean or variance.
+  Every causal block uses LayerNorm across the hidden dimension independently
+  at each time point, never BatchNorm or any time-aggregating normalisation.
   Its output at time `t` has no path from `X[t]` or later inputs, so it predicts
   normal evolution, changes, timing shifts and transitions from history alone.
 - Pattern: uses shared CATCH-style channel-frequency tokens, randomly masks
@@ -110,7 +117,19 @@ optimizer from only its currently trainable parameters, saves its best complete
 `state_dict`, restores that state, then starts the next stage from it.  The
 StandardScaler is fitted once before Stage 1 and reused thereafter.  Explicit
 `branch_pretrain_epochs`, `fusion_train_epochs`, and `joint_finetune_epochs`
-default to three each and are never data-set or test-result dependent.
+are debug-only controls.  The formal default is
+`training_budget_mode="equal_total_steps"`: with
+`catch_train_epochs=3`, TypeFusion allocates no more than the corresponding
+CATCH optimizer updates across all stages.  It assigns floor(total/3) updates
+to Stage 1 and Stage 2, with the remainder assigned to Stage 3; all stages need
+at least one update.  Validation and checkpoint restoration never count as
+optimizer updates.  `debug_stage_epochs` is an explicit non-formal smoke mode.
+
+Stage 1 skips EvidenceAdapter, BranchFusionTransformer and JointNormalDecoder
+entirely because its loss contains only specialised branch terms.  Fusion,
+Finetune and `detect_score` always execute the complete joint path.  Stage 3
+uses the fixed `joint_finetune_lr_scale=0.1`, so its Adam learning rate is
+`config.lr * 0.1`; the first two stages use `config.lr`.
 
 `fit_mode="single_stage"` is retained for debugging only.  Its Fusion/Finetune
 calls require a prior complete checkpoint and the already fitted scaler via
@@ -120,9 +139,9 @@ random branches.
 
 ## CATCH Relationship
 
-Retained from CATCH: defaults for sequence length, patch size/stride, model
-width/depth, batch size, epochs, Adam learning rate, RevIN, FFT, frequency
-patching, channel-fusion Transformer principles, and the point-level
+Retained from CATCH: benchmark defaults for sequence length, patch size/stride,
+batch size, Adam learning rate, RevIN/FFT principles, CATCH-style frequency
+patching and cross-channel Transformer principles, and the point-level
 `detect_score` window protocol.
 
 Modified: reconstruction heads are blockwise patch decoders and overlap-add,
@@ -144,7 +163,10 @@ shared stem `229,632`; State `70,592`; Evolution `69,508`; Pattern `402,208`;
 Relation `150,657`; four evidence adapters `83,456`; BranchFusionTransformer
 `282,752`; JointNormalDecoder `209,984`.  Under the same `c_in=4` CATCH default
 configuration, original CATCH has `210,879,520` parameters.  These counts are
-an architecture audit, not a performance comparison.  Branches are separate module instances:
+an architecture audit only.  The reduction is not evidence of performance,
+speed, generalisation, or successful lightweight design; prior work indicates
+that an extreme parameter reduction may severely damage performance, so real
+data results are required.  Branches are separate module instances:
 prototype memory/state decoder, causal TCN, frequency Transformer/decoder,
 and masked relation encoder/decoder have no shared parameter objects.  The
 shared CATCH stem is intentionally shared before branching.
@@ -154,9 +176,11 @@ shared CATCH stem is intentionally shared before branching.
 - The model has implementation, random-tensor and small-DataFrame continuity
   validation only; no formal training or benchmark performance claim is made.
 - The original causal test covered only `CausalEvolutionBranch`.  The current
-  full-model test also traverses `TypeFusionCATCHModel` and `SharedCatchStem`,
-  verifying that target and future changes cannot alter the Evolution prediction
-  at the target position.
+  full-model train/eval tests also traverse `TypeFusionCATCHModel` and
+  `SharedCatchStem`, verifying that target and future changes cannot alter the
+  Evolution prediction at the target position.  Full-model train/eval relation
+  masking tests likewise verify that a masked target value cannot affect its
+  selected relation reconstruction.
 - Frequency patches use right padding only when the configured CATCH grid does
   not exactly cover `seq_len`; the output is crop-restored to `seq_len`.
 - Relation reconstruction uses `relation_mask_groups` simultaneous group views;

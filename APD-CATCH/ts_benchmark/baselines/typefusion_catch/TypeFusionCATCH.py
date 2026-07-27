@@ -19,6 +19,9 @@ from ts_benchmark.baselines.typefusion_catch.typefusion_catch import TypeFusionC
 from ts_benchmark.baselines.utils import anomaly_detection_data_provider, train_val_split
 
 
+_STAGE_ORDER = ("branch_pretrain", "fusion_train", "joint_finetune")
+
+
 class TypeFusionCATCH:
     """CATCH-compatible anomaly-score adapter without score calibration."""
 
@@ -31,6 +34,9 @@ class TypeFusionCATCH:
         self.stage_best_states: Dict[str, Dict[str, torch.Tensor]] = {}
         self.stage_start_states: Dict[str, Dict[str, torch.Tensor]] = {}
         self.stage_validation_losses: Dict[str, float] = {}
+        self.stage_optimizer_lrs: Dict[str, float] = {}
+        self.stage_optimizer_steps: Dict[str, int] = {}
+        self.training_budget_summary: Dict[str, object] = {}
         self._scaler_fitted = False
         self.model_name = "TypeFusion-CATCH"
 
@@ -96,37 +102,105 @@ class TypeFusionCATCH:
         )
         return train_loader, valid_loader
 
-    def _validation_loss(self, loader) -> float:
+    def _validation_loss(self, loader, compute_joint: bool) -> float:
         assert self.model is not None
         self.model.eval()
         losses = []
         with torch.no_grad():
             for batch, _ in loader:
-                output = self.model(batch.float().to(self.device))
+                output = self.model(batch.float().to(self.device), compute_joint=compute_joint)
                 losses.append(float(output["losses"]["total"].detach().cpu()))
         self.model.train()
         return float(np.mean(losses)) if losses else float("inf")
 
-    def _train_stage(self, training_stage: str, train_loader, valid_loader) -> None:
+    def _stage_learning_rate(self, training_stage: str) -> float:
+        if training_stage == "joint_finetune":
+            return self.config.lr * self.config.joint_finetune_lr_scale
+        return self.config.lr
+
+    def _build_training_budget(self, train_loader) -> Dict[str, Optional[int]]:
+        reference_total_steps = self.config.catch_train_epochs * len(train_loader)
+        if self.config.training_budget_mode == "equal_total_steps":
+            if reference_total_steps < len(_STAGE_ORDER):
+                raise ValueError(
+                    "equal_total_steps requires at least 3 reference optimizer steps "
+                    "so every stage receives one step"
+                )
+            branch_steps = reference_total_steps // 3
+            fusion_steps = reference_total_steps // 3
+            joint_steps = reference_total_steps - branch_steps - fusion_steps
+            allocation: Dict[str, Optional[int]] = {
+                "branch_pretrain": branch_steps,
+                "fusion_train": fusion_steps,
+                "joint_finetune": joint_steps,
+            }
+        else:
+            allocation = {stage: None for stage in _STAGE_ORDER}
+            branch_steps = self.config.branch_pretrain_epochs * len(train_loader)
+            fusion_steps = self.config.fusion_train_epochs * len(train_loader)
+            joint_steps = self.config.joint_finetune_epochs * len(train_loader)
+
+        self.training_budget_summary = {
+            "mode": self.config.training_budget_mode,
+            "reference_catch_epochs": self.config.catch_train_epochs,
+            "reference_total_steps": reference_total_steps,
+            "branch_pretrain_steps": branch_steps,
+            "fusion_train_steps": fusion_steps,
+            "joint_finetune_steps": joint_steps,
+            "actual_branch_pretrain_steps": 0,
+            "actual_fusion_train_steps": 0,
+            "actual_joint_finetune_steps": 0,
+            "actual_total_steps": 0,
+        }
+        return allocation
+
+    def _refresh_actual_budget_summary(self) -> None:
+        actual_total = 0
+        for stage in _STAGE_ORDER:
+            actual = self.stage_optimizer_steps.get(stage, 0)
+            self.training_budget_summary[f"actual_{stage}_steps"] = actual
+            actual_total += actual
+        self.training_budget_summary["actual_total_steps"] = actual_total
+
+    def _train_stage(
+        self,
+        training_stage: str,
+        train_loader,
+        valid_loader,
+        max_optimizer_steps: Optional[int] = None,
+    ) -> None:
         assert self.model is not None
+        if len(train_loader) == 0:
+            raise ValueError("Training loader has no windows for the configured seq_len")
         self.model.set_training_stage(training_stage)
         self.stage_start_states[training_stage] = self._clone_state_dict(self.model.state_dict())
         parameters = [parameter for parameter in self.model.parameters() if parameter.requires_grad]
         if not parameters:
             raise RuntimeError(f"{training_stage} has no trainable parameters")
-        optimizer = torch.optim.Adam(parameters, lr=self.config.lr)
+        stage_lr = self._stage_learning_rate(training_stage)
+        optimizer = torch.optim.Adam(parameters, lr=stage_lr)
+        self.stage_optimizer_lrs[training_stage] = stage_lr
         stage_best = self._clone_state_dict(self.model.state_dict())
         best_loss = float("inf")
         stale_epochs = 0
-        for _ in range(self.config.epochs_for_stage(training_stage)):
+        optimizer_steps = 0
+        completed_epochs = 0
+        compute_joint = training_stage != "branch_pretrain"
+        while max_optimizer_steps is None or optimizer_steps < max_optimizer_steps:
+            if max_optimizer_steps is None and completed_epochs >= self.config.epochs_for_stage(training_stage):
+                break
+            completed_epochs += 1
             self.model.train()
             for batch, _ in train_loader:
                 optimizer.zero_grad(set_to_none=True)
-                output = self.model(batch.float().to(self.device))
+                output = self.model(batch.float().to(self.device), compute_joint=compute_joint)
                 loss = output["losses"]["total"]
                 loss.backward()
                 optimizer.step()
-            validation_loss = self._validation_loss(valid_loader)
+                optimizer_steps += 1
+                if max_optimizer_steps is not None and optimizer_steps >= max_optimizer_steps:
+                    break
+            validation_loss = self._validation_loss(valid_loader, compute_joint=compute_joint)
             if validation_loss < best_loss:
                 best_loss = validation_loss
                 stale_epochs = 0
@@ -138,6 +212,7 @@ class TypeFusionCATCH:
         self.model.load_state_dict(stage_best)
         self.stage_best_states[training_stage] = self._clone_state_dict(stage_best)
         self.stage_validation_losses[training_stage] = best_loss
+        self.stage_optimizer_steps[training_stage] = optimizer_steps
 
     def detect_fit(
         self,
@@ -168,14 +243,27 @@ class TypeFusionCATCH:
             self.stage_best_states = {}
             self.stage_start_states = {}
             self.stage_validation_losses = {}
+            self.stage_optimizer_lrs = {}
+            self.stage_optimizer_steps = {}
             self.model = TypeFusionCATCHModel(self.config).to(self.device)
             train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=True)
-            for training_stage in ("branch_pretrain", "fusion_train", "joint_finetune"):
-                self._train_stage(training_stage, train_loader, valid_loader)
+            stage_budget = self._build_training_budget(train_loader)
+            for training_stage in _STAGE_ORDER:
+                self._train_stage(
+                    training_stage,
+                    train_loader,
+                    valid_loader,
+                    max_optimizer_steps=stage_budget[training_stage],
+                )
+            self._refresh_actual_budget_summary()
             self.best_state = self._clone_state_dict(self.stage_best_states["joint_finetune"])
             self.model.load_state_dict(self.best_state)
             return
 
+        if self.config.training_budget_mode != "debug_stage_epochs":
+            raise ValueError(
+                "single_stage is a debug workflow and requires training_budget_mode='debug_stage_epochs'"
+            )
         training_stage = self.config.training_stage
         checkpoint = previous_checkpoint if previous_checkpoint is not None else self.best_state
         if training_stage == "branch_pretrain":
@@ -184,6 +272,8 @@ class TypeFusionCATCH:
             self.stage_best_states = {}
             self.stage_start_states = {}
             self.stage_validation_losses = {}
+            self.stage_optimizer_lrs = {}
+            self.stage_optimizer_steps = {}
             self.model = TypeFusionCATCHModel(self.config).to(self.device)
             train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=True)
         else:
@@ -200,7 +290,9 @@ class TypeFusionCATCH:
             self.model.load_state_dict(checkpoint)
             train_loader, valid_loader = self._prepare_loaders(train_data, fit_scaler=False)
 
+        self._build_training_budget(train_loader)
         self._train_stage(training_stage, train_loader, valid_loader)
+        self._refresh_actual_budget_summary()
         self.best_state = self._clone_state_dict(self.stage_best_states[training_stage])
         self.model.load_state_dict(self.best_state)
 
@@ -218,7 +310,7 @@ class TypeFusionCATCH:
         point_scores = []
         with torch.no_grad():
             for batch, _ in loader:
-                output = self.model(batch.float().to(self.device))
+                output = self.model(batch.float().to(self.device), compute_joint=True)
                 # Same window/point flattening contract as CATCH, but no
                 # frequency side score or post-hoc branch-score operation.
                 point_scores.append(output["total_score"].mean(dim=-1).cpu().numpy())

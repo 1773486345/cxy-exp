@@ -25,13 +25,17 @@ class CausalSeparableBlock(nn.Module):
             padding=0,
         )
         self.pointwise = nn.Conv1d(hidden_dim, hidden_dim, kernel_size=1)
-        self.norm = nn.BatchNorm1d(hidden_dim)
+        self.norm = nn.LayerNorm(hidden_dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: Tensor) -> Tensor:
         update = self.depthwise(F.pad(x, (self.left_padding, 0)))
         update = self.pointwise(update)
-        return x + self.dropout(F.gelu(self.norm(update)))
+        update = update.transpose(1, 2)
+        update = self.norm(update)
+        update = update.transpose(1, 2)
+        update = self.dropout(F.gelu(update))
+        return x + update
 
 
 class CausalEvolutionBranch(nn.Module):

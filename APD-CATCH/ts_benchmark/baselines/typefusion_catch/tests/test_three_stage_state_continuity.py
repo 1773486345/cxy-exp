@@ -48,13 +48,21 @@ class ThreeStageStateContinuityTests(unittest.TestCase):
         self.assertTrue((score == duplicate).all())
 
         no_checkpoint = TypeFusionCATCH(
-            **tiny_fit_kwargs(fit_mode="single_stage", training_stage="fusion_train")
+            **tiny_fit_kwargs(
+                fit_mode="single_stage",
+                training_stage="fusion_train",
+                training_budget_mode="debug_stage_epochs",
+            )
         )
         with self.assertRaisesRegex(ValueError, "requires an explicit prior checkpoint"):
             no_checkpoint.detect_fit(frame)
 
         resumed = TypeFusionCATCH(
-            **tiny_fit_kwargs(fit_mode="single_stage", training_stage="fusion_train")
+            **tiny_fit_kwargs(
+                fit_mode="single_stage",
+                training_stage="fusion_train",
+                training_budget_mode="debug_stage_epochs",
+            )
         )
         resumed.detect_fit(
             frame,

@@ -22,6 +22,32 @@ class NoUnusedTrainableParametersTests(unittest.TestCase):
             }
             self.assertTrue(trainable)
             self.assertFalse(any("frequency_projection" in name or "shared_latent" in name for name in trainable))
+            if stage == "branch_pretrain":
+                self.assertFalse(any(name.startswith("evidence_adapters.") for name in trainable))
+                self.assertFalse(any(name.startswith("branch_fusion.") for name in trainable))
+                self.assertFalse(any(name.startswith("joint_decoder.") for name in trainable))
+            elif stage == "fusion_train":
+                self.assertTrue(all(
+                    name.startswith(("evidence_adapters.", "branch_fusion.", "joint_decoder."))
+                    for name in trainable
+                ))
+            else:
+                allowed_prefixes = (
+                    "evidence_adapters.",
+                    "branch_fusion.",
+                    "joint_decoder.",
+                    "shared_stem.temporal_projection.",
+                    "shared_stem.channel_fusion.output_projection.",
+                    "state_branch.output_norm.",
+                    "state_branch.patch_decoder.",
+                    "evolution_branch.token_projection.",
+                    "evolution_branch.prediction_head.",
+                    "pattern_branch.channel_decoder.",
+                    "pattern_branch.token_norm.",
+                    "relation_branch.output_head.",
+                    "relation_branch.token_projection.",
+                )
+                self.assertTrue(all(name.startswith(allowed_prefixes) for name in trainable))
             missing_gradients = [name for name, parameter in trainable.items() if parameter.grad is None]
             self.assertEqual(missing_gradients, [], msg=f"{stage} unused trainable parameters: {missing_gradients}")
             self.assertTrue(all(torch.isfinite(parameter.grad).all() for parameter in trainable.values()))

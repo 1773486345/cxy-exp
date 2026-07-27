@@ -118,7 +118,11 @@ class TypeFusionCATCHModel(nn.Module):
         ]
         return torch.stack(branch_tokens, dim=2)
 
-    def forward(self, x: Tensor) -> Dict[str, object]:
+    def forward(self, x: Tensor, compute_joint: bool | None = None) -> Dict[str, object]:
+        if compute_joint is None:
+            compute_joint = self.config.training_stage != "branch_pretrain"
+        if not compute_joint and self.config.training_stage != "branch_pretrain":
+            raise ValueError("compute_joint=False is only valid during branch_pretrain")
         shared = self.shared_stem(x)
         normalized_input = shared["normalized_input"]
         branches = {
@@ -137,6 +141,25 @@ class TypeFusionCATCHModel(nn.Module):
                 randomize_groups=self.training and self.config.training_stage != "fusion_train",
             ),
         }
+        if not compute_joint:
+            output: Dict[str, object] = {
+                "normalized_input": normalized_input,
+                "evolution_input": x,
+                "spectrum": shared["spectrum"],
+                "branches": branches,
+                "q": None,
+                "q_normal": None,
+                "branch_mask_prediction": None,
+                "branch_mask_loss": normalized_input.new_zeros(()),
+                "leave_one_out": None,
+                "x_hat_joint_normalized": None,
+                "x_hat_joint": None,
+                "total_score": None,
+                "branch_conflict_map": None,
+            }
+            output["losses"] = compute_losses(output, self.config)
+            return output
+
         q = self._adapt_evidence(branches)
         leave_one_out = self.branch_fusion.leave_one_out(q)
         if self.training and self.config.training_stage != "branch_pretrain":

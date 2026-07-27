@@ -68,7 +68,7 @@ class BranchFusionTransformer(nn.Module):
         selected_ranks = torch.arange(self.branch_count, device=q.device).unsqueeze(0) < counts.unsqueeze(1)
         branch_mask = torch.zeros(batch, self.branch_count, dtype=torch.bool, device=q.device)
         branch_mask.scatter_(dim=1, index=random_order, src=selected_ranks)
-        prediction = self.forward(q, branch_mask)
+        prediction = self(q, branch_mask)
         mask = branch_mask[:, None, :, None].expand_as(prediction)
         target = q.detach()
         loss = (prediction[mask] - target[mask]).square().mean()
@@ -84,7 +84,7 @@ class BranchFusionTransformer(nn.Module):
         expanded_q = q[:, None, :, :, :].expand(batch, self.branch_count, patches, branches, hidden)
         flattened_q = expanded_q.reshape(batch * self.branch_count, patches, branches, hidden)
         flattened_masks = loo_masks[None, :, :].expand(batch, -1, -1).reshape(batch * self.branch_count, branches)
-        prediction = self.forward(flattened_q, flattened_masks)
+        prediction = self(flattened_q, flattened_masks)
         prediction = prediction.view(batch, self.branch_count, patches, branches, hidden)
         branch_indices = torch.arange(self.branch_count, device=q.device)
         selector = branch_indices.view(1, self.branch_count, 1, 1, 1).expand(
