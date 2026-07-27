@@ -202,6 +202,9 @@ def main() -> None:
     device = torch.device("cuda")
     config = swat_config(args.batch_size, args.stage)
     model = TypeFusionCATCHModel(config).to(device).train()
+    optimizer = torch.optim.Adam(
+        [parameter for parameter in model.parameters() if parameter.requires_grad], lr=config.lr
+    )
     x = torch.randn(args.batch_size, config.seq_len, config.c_in, device=device)
     relation = model.relation_branch
     condition_batch_chunk = relation._condition_batch_chunk(config.seq_len)
@@ -216,25 +219,39 @@ def main() -> None:
     torch.cuda.reset_peak_memory_stats(device)
     profile_branches = args.profile_branches or os.environ.get("TYPEFUSION_PROFILE_TIMING") == "1"
     tracer = CudaTracer(device, enabled=profile_branches)
+    optimizer.zero_grad(set_to_none=True)
+    tracer.mark("forward_start")
+    forward_started = time.perf_counter()
     if args.profile_branches:
         output = _profiled_forward(model, x, tracer)
     else:
         output = tracer.run(
             "model_forward", lambda: model(x, compute_joint=args.stage != "branch_pretrain")
         )
+    tracer.mark("forward_end")
+    forward_seconds = time.perf_counter() - forward_started
     assert_finite(output["branches"], "branches")
     assert_finite(output["losses"], "losses")
     tracer.mark("backward_start")
     tracer.mark("relation_backward_start")
+    backward_started = time.perf_counter()
     output["losses"]["total"].backward()
+    backward_seconds = time.perf_counter() - backward_started
     tracer.mark("relation_backward_end")
     tracer.mark("backward_end")
     for name, parameter in model.named_parameters():
         if parameter.requires_grad and (parameter.grad is None or not torch.isfinite(parameter.grad).all()):
             raise RuntimeError(f"missing_or_nonfinite_gradient:{name}")
+    tracer.mark("optimizer_start")
+    optimizer_started = time.perf_counter()
+    optimizer.step()
+    optimizer_seconds = time.perf_counter() - optimizer_started
+    tracer.mark("optimizer_end")
     print(
         "SWAT CUDA smoke passed: "
         f"batch_size={args.batch_size} stage={args.stage} "
+        f"forward_seconds={forward_seconds:.6f} backward_seconds={backward_seconds:.6f} "
+        f"optimizer_seconds={optimizer_seconds:.6f} "
         f"peak_memory_mib={torch.cuda.max_memory_allocated(device) / (1024 * 1024):.2f}",
         flush=True,
     )

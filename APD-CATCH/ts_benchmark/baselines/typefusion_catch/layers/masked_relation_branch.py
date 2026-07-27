@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
+from torch.utils.checkpoint import checkpoint
 
 from ts_benchmark.baselines.typefusion_catch.config import TypeFusionConfig
 from ts_benchmark.baselines.typefusion_catch.layers.shared_catch_stem import patchify_time
@@ -44,6 +45,9 @@ class MaskedRelationBranch(nn.Module):
         self.temporal_mixer = nn.Conv1d(hidden, hidden, kernel_size=3, padding=1, groups=hidden)
         self.output_head = nn.Sequential(nn.LayerNorm(hidden), nn.Linear(hidden, 1))
         self.token_projection = nn.Linear(hidden, hidden)
+        # Implementation-only memory control. It is deliberately not a public
+        # benchmark hyperparameter and remains enabled for all formal tasks.
+        self.use_activation_checkpoint = True
 
     def _group_masks(self, device: torch.device, randomize: bool) -> Tuple[Tensor, Tensor]:
         channels = self.config.c_in
@@ -64,12 +68,17 @@ class MaskedRelationBranch(nn.Module):
 
         return max(1, MAX_RELATION_ATTENTION_ROWS // time)
 
-    def _condition_forward(
+    def _condition_forward_selected(
         self,
         masked_input: Tensor,
+        target_channels: Tensor,
         debug_callback: Optional[Callable[[str], None]] = None,
     ) -> Tuple[Tensor, Tensor]:
-        """Run one group/batch condition without materialising other groups."""
+        """Run one condition and retain only its masked-channel outputs.
+
+        The full channel tensor is required while applying the shared channel
+        Transformer and temporal mixer, but it never leaves this condition.
+        """
 
         chunk_batch, time, channels = masked_input.shape
         if debug_callback is not None:
@@ -101,7 +110,55 @@ class MaskedRelationBranch(nn.Module):
         prediction = self.output_head(temporal).squeeze(-1)
         if debug_callback is not None:
             debug_callback("output_head_end")
-        return prediction, temporal
+            debug_callback("selected_prediction_start")
+        selected_prediction = prediction.index_select(dim=2, index=target_channels)
+        selected_hidden_sum = temporal.index_select(dim=2, index=target_channels).sum(dim=2)
+        if debug_callback is not None:
+            debug_callback("selected_prediction_end")
+        return selected_prediction, selected_hidden_sum
+
+    def _should_checkpoint_condition(
+        self,
+        masked_input: Tensor,
+        debug_callback: Optional[Callable[[str], None]],
+    ) -> bool:
+        """Checkpoint only the normal training path, never synchronized debug runs."""
+
+        if (
+            not self.use_activation_checkpoint
+            or debug_callback is not None
+            or not self.training
+            or not torch.is_grad_enabled()
+        ):
+            return False
+        return masked_input.requires_grad or any(
+            parameter.requires_grad for parameter in self.parameters()
+        )
+
+    def _run_condition_selected(
+        self,
+        masked_input: Tensor,
+        target_channels: Tensor,
+        debug_callback: Optional[Callable[[str], None]],
+    ) -> Tuple[Tensor, Tensor]:
+        if not self._should_checkpoint_condition(masked_input, debug_callback):
+            return self._condition_forward_selected(
+                masked_input,
+                target_channels,
+                debug_callback=debug_callback,
+            )
+
+        # target_channels is a deterministic group mask selected before the
+        # checkpoint. It is captured, not regenerated during backward replay.
+        return checkpoint(
+            lambda condition_input: self._condition_forward_selected(
+                condition_input,
+                target_channels,
+            ),
+            masked_input,
+            use_reentrant=False,
+            preserve_rng_state=True,
+        )
 
     def forward(
         self,
@@ -125,14 +182,13 @@ class MaskedRelationBranch(nn.Module):
                 batch_end = min(batch, batch_start + condition_batch_chunk)
                 input_chunk = normalized_input[batch_start:batch_end]
                 masked_chunk = input_chunk.masked_fill(group_mask.view(1, 1, channels), 0.0)
-                prediction_chunk, hidden_chunk = self._condition_forward(
+                prediction_chunk, hidden_sum_chunk = self._run_condition_selected(
                     masked_chunk,
+                    target_channels,
                     debug_callback=debug_callback,
                 )
-                prediction_chunks.append(prediction_chunk.index_select(dim=2, index=target_channels))
-                hidden_sum_chunks.append(
-                    hidden_chunk.index_select(dim=2, index=target_channels).sum(dim=2)
-                )
+                prediction_chunks.append(prediction_chunk)
+                hidden_sum_chunks.append(hidden_sum_chunk)
 
             group_prediction = torch.cat(prediction_chunks, dim=0)
             group_hidden_sum = torch.cat(hidden_sum_chunks, dim=0)
@@ -146,13 +202,9 @@ class MaskedRelationBranch(nn.Module):
 
         if selected_hidden_sum is None or any(channel is None for channel in selected_channels):
             raise RuntimeError("relation masking failed to select every channel")
-        if debug_callback is not None:
-            debug_callback("selected_prediction_start")
         selected_prediction = torch.stack(
             [channel for channel in selected_channels if channel is not None], dim=2
         )
-        if debug_callback is not None:
-            debug_callback("selected_prediction_end")
         selected_hidden_mean = selected_hidden_sum / channels
         z = patchify_time(
             selected_hidden_mean, self.config.patch_size, self.config.patch_stride
