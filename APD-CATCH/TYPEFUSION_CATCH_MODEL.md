@@ -194,6 +194,41 @@ Prepared scripts and registries are not completed experiments.  The parameter
 count difference remains an architecture fact only, not evidence of performance,
 speed, generalisation or successful lightweight design.
 
+## Result Registration And Comparison
+
+The formal main metrics are AUC-PR and AUC-ROC.  The complete metric set is
+read only from each completed `CATCH.*.csv.tar.gz` or
+`TypeFusion-CATCH.*.csv.tar.gz` archive: AUC-PR, AUC-ROC, R-AUC-PR,
+R-AUC-ROC, VUS-PR, VUS-ROC, fit time and inference time.  A `test_report` is
+only a run-status and leaderboard-metric cross-check; it is not used to
+substitute missing archive metrics.
+
+The baseline archive registry records archive SHA-256 values, checks that the
+archive and report are from one run, and audits the CATCH source tree at every
+archive commit.  A source-report/archive AUC-ROC conflict or an unavailable or
+different historical CATCH code group excludes that task from a formal macro
+comparison.  GECCO remains excluded until a registered paired CATCH
+`seq_len=192, patch_size=16, patch_stride=8` baseline exists.  The
+`ASD_dataset_1` compatibility mapping is explicitly marked
+`architecture_compatibility_override` and is reported separately from exact
+shared-configuration results.
+
+For TypeFusion results, the selector audits candidates in descending UTC run
+time and chooses the newest valid complete run.  A newer corrupt, OOM, NaN,
+wrong-seed, wrong-config, incomplete-stage, or over-budget run is retained in
+`typefusion_run_selection_audit.csv` with its rejection reason; it cannot
+replace an earlier valid result.  The task registry has 23 physical rows; ASD
+is a twelve-task equal macro only when all twelve are comparable.  The formal
+overall is an equal macro over all twelve complete paper-level datasets, while
+any available-paper diagnostic is clearly labelled as incomplete.  No
+TypeFusion formal task has been run at this point.
+
+Each prepared task script creates `typefusion_run_config.json` in its own
+result directory and opts in to recording the adapter's already-computed stage
+budget summary, actual optimizer-step counts and completed stages after fit.
+This is result-audit metadata only: it changes none of the model structure,
+losses, random seed or training-budget rules.
+
 ## CATCH Relationship
 
 Retained from CATCH: benchmark defaults for sequence length, patch size/stride,

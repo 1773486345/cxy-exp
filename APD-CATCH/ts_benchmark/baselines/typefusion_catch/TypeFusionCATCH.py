@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import os
 import random
+from pathlib import Path
 from typing import Dict, Mapping, Optional, Tuple
 
 import numpy as np
@@ -165,6 +168,30 @@ class TypeFusionCATCH:
             actual_total += actual
         self.training_budget_summary["actual_total_steps"] = actual_total
 
+    def _write_result_audit_metadata(self) -> None:
+        """Persist existing stage accounting only when a task script opts in."""
+
+        config_path = os.environ.get("TYPEFUSION_RUN_CONFIG_PATH")
+        if not config_path:
+            return
+        path = Path(config_path)
+        if not path.is_file():
+            return
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["training_budget_summary"] = self.training_budget_summary
+            payload["stage_optimizer_steps"] = self.stage_optimizer_steps
+            payload["stage_validation_losses"] = self.stage_validation_losses
+            payload["completed_stages"] = [
+                stage for stage in _STAGE_ORDER if stage in self.stage_best_states
+            ]
+            temporary = path.with_name(path.name + ".tmp")
+            temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            temporary.replace(path)
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            # Result accounting must never alter model fitting or evaluation.
+            return
+
     def _train_stage(
         self,
         training_stage: str,
@@ -261,6 +288,7 @@ class TypeFusionCATCH:
             self._refresh_actual_budget_summary()
             self.best_state = self._clone_state_dict(self.stage_best_states["joint_finetune"])
             self.model.load_state_dict(self.best_state)
+            self._write_result_audit_metadata()
             return
 
         if self.config.training_budget_mode != "debug_stage_epochs":
@@ -298,6 +326,7 @@ class TypeFusionCATCH:
         self._refresh_actual_budget_summary()
         self.best_state = self._clone_state_dict(self.stage_best_states[training_stage])
         self.model.load_state_dict(self.best_state)
+        self._write_result_audit_metadata()
 
     def detect_score(self, test: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
         """Return only the joint normal reconstruction's pointwise error."""

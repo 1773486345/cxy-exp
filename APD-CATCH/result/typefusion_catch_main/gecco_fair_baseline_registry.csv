@@ -1,0 +1,2 @@
+task,fair_baseline_available,fair_baseline_reason,fair_run_directory,fair_test_report,fair_archive_path,fair_archive_sha256,fair_auc_roc,fair_auc_pr,fair_rejected_candidates
+GECCO,False,not_run_or_no_valid_result,,,,,N/A,N/A,

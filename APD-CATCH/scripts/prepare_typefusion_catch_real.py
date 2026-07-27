@@ -483,9 +483,12 @@ def json_template(params: Mapping[str, Any]) -> str:
 def write_typefusion_script(row: Mapping[str, Any], audit_date: str) -> Path:
     task = str(row["task"])
     script_path = ROOT / "scripts/multivariate_detection/detect_score" / f"{task}_script/TypeFusionCATCH.sh"
-    if bool(row["source_conflict"]):
+    if str(row["source_conflict"]).strip().lower() == "true":
         return script_path
     params = json.loads(str(row["typefusion_hyper_params_json"]))
+    data_name = str(row["data_name"])
+    config_path = str(row["config_path"])
+    gecco_fairness_override = str(row["gecco_fairness_override"]).strip().lower() == "true"
     body = f'''#!/usr/bin/env bash
 set -euo pipefail
 
@@ -493,7 +496,7 @@ set -euo pipefail
 # Source CATCH test report: {row["baseline_report"]}
 # Source CATCH archive commit: {row["source_catch_master_commit"]}
 # Configuration audit date (UTC): {audit_date}
-# GECCO fairness override: {str(bool(row["gecco_fairness_override"])).lower()}
+# GECCO fairness override: {str(gecco_fairness_override).lower()}
 # TypeFusion compatibility override: {row["typefusion_compatibility_override"] or 'none'}
 
 ROOT_DIR="$(
@@ -507,8 +510,12 @@ BATCH_SIZE="${{BATCH_SIZE:-{int(params["batch_size"])}}}"
 SAVE_PATH="${{TYPEFUSION_SAVE_PATH:-score/TypeFusion-CATCH/{task}/run-$(date -u +%Y%m%dT%H%M%SZ)-$$}}"
 MODEL_HYPER_PARAMS='{json_template(params)}'
 MODEL_HYPER_PARAMS="${{MODEL_HYPER_PARAMS/__BATCH_SIZE__/${{BATCH_SIZE}}}}"
+RUN_CONFIG_PATH="$ROOT_DIR/result/$SAVE_PATH/typefusion_run_config.json"
+mkdir -p "$(dirname "$RUN_CONFIG_PATH")"
+printf '{{"data_name":"{data_name}","model_name":"typefusion_catch.TypeFusionCATCH","seed":2021,"model_hyper_params":%s}}\\n' "$MODEL_HYPER_PARAMS" > "$RUN_CONFIG_PATH"
+export TYPEFUSION_RUN_CONFIG_PATH="$RUN_CONFIG_PATH"
 
-exec python ./scripts/run_benchmark.py --config-path "{row["config_path"]}" --data-name-list "{row["data_name"]}" --model-name "typefusion_catch.TypeFusionCATCH" --model-hyper-params "$MODEL_HYPER_PARAMS" --seed 2021 --gpus "$GPU_ID" --num-workers 1 --timeout 60000 --save-path "$SAVE_PATH"
+exec python ./scripts/run_benchmark.py --config-path "{config_path}" --data-name-list "{data_name}" --model-name "typefusion_catch.TypeFusionCATCH" --model-hyper-params "$MODEL_HYPER_PARAMS" --seed 2021 --gpus "$GPU_ID" --num-workers 1 --timeout 60000 --save-path "$SAVE_PATH"
 '''
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(body, encoding="utf-8")
