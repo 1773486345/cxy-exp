@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -11,12 +11,17 @@ from ts_benchmark.baselines.typefusion_catch.config import TypeFusionConfig
 from ts_benchmark.baselines.typefusion_catch.layers.shared_catch_stem import patchify_time
 
 
+MAX_RELATION_ATTENTION_ROWS = 2048
+
+
 class MaskedRelationBranch(nn.Module):
     """Reconstructs each channel only in a forward pass where that channel is masked.
 
-    All deterministic inference groups are expanded along the batch axis and
-    evaluated in one vectorised invocation.  Selecting an output for a target
-    channel always selects the group where that target was zero-masked.
+    Each deterministic masking condition uses the same channel Transformer.
+    Conditions are evaluated group-by-group and batch-chunk-by-batch-chunk so
+    the channel-attention batch never scales as ``B * G * T``. Selecting an
+    output for a target channel always selects the group where that target was
+    zero-masked.
     """
 
     def __init__(self, config: TypeFusionConfig) -> None:
@@ -53,40 +58,68 @@ class MaskedRelationBranch(nn.Module):
         masks[group_index, torch.arange(channels, device=device)] = True
         return masks, group_index
 
+    @staticmethod
+    def _condition_batch_chunk(time: int) -> int:
+        """Limit each channel-attention call to a fixed implementation bound."""
+
+        return max(1, MAX_RELATION_ATTENTION_ROWS // time)
+
+    def _condition_forward(self, masked_input: Tensor) -> Tuple[Tensor, Tensor]:
+        """Run one group/batch condition without materialising other groups."""
+
+        chunk_batch, time, channels = masked_input.shape
+        hidden = self.value_projection(masked_input.unsqueeze(-1))
+        hidden = hidden + self.channel_embedding
+        hidden = self.channel_fusion(hidden.reshape(chunk_batch * time, channels, -1))
+        hidden = hidden.view(chunk_batch, time, channels, -1)
+
+        temporal = hidden.permute(0, 2, 3, 1).reshape(chunk_batch * channels, -1, time)
+        temporal = self.temporal_mixer(temporal)
+        temporal = temporal.view(chunk_batch, channels, -1, time).permute(0, 3, 1, 2)
+        temporal = self.token_projection(temporal)
+        return self.output_head(temporal).squeeze(-1), temporal
+
     def forward(self, normalized_input: Tensor, randomize_groups: bool) -> Dict[str, Tensor]:
         batch, time, channels = normalized_input.shape
         masks, group_index = self._group_masks(normalized_input.device, randomize_groups)
         groups = masks.size(0)
 
-        # [B, G, T, C] contains all channel-masking conditions at once.  The
-        # only tensor supplied to value_projection has target entries set to 0.
-        masked_input = normalized_input[:, None, :, :].expand(batch, groups, time, channels)
-        masked_input = masked_input.masked_fill(masks[None, :, None, :], 0.0)
-        flat_input = masked_input.reshape(batch * groups, time, channels)
-        hidden = self.value_projection(flat_input.unsqueeze(-1))
-        hidden = hidden + self.channel_embedding
-        hidden = self.channel_fusion(hidden.reshape(batch * groups * time, channels, -1))
-        hidden = hidden.view(batch * groups, time, channels, -1)
+        condition_batch_chunk = self._condition_batch_chunk(time)
+        selected_channels: List[Optional[Tensor]] = [None] * channels
+        selected_hidden_sum: Optional[Tensor] = None
+        for group in range(groups):
+            group_mask = masks[group]
+            target_channels = group_mask.nonzero(as_tuple=False).flatten()
+            prediction_chunks: List[Tensor] = []
+            hidden_sum_chunks: List[Tensor] = []
+            for batch_start in range(0, batch, condition_batch_chunk):
+                batch_end = min(batch, batch_start + condition_batch_chunk)
+                input_chunk = normalized_input[batch_start:batch_end]
+                masked_chunk = input_chunk.masked_fill(group_mask.view(1, 1, channels), 0.0)
+                prediction_chunk, hidden_chunk = self._condition_forward(masked_chunk)
+                prediction_chunks.append(prediction_chunk.index_select(dim=2, index=target_channels))
+                hidden_sum_chunks.append(
+                    hidden_chunk.index_select(dim=2, index=target_channels).sum(dim=2)
+                )
 
-        # Temporal mixing occurs independently for each channel after masking.
-        temporal = hidden.permute(0, 2, 3, 1).reshape(batch * groups * channels, -1, time)
-        temporal = self.temporal_mixer(temporal).view(batch * groups, channels, -1, time).permute(0, 3, 1, 2)
-        temporal = self.token_projection(temporal)
-        prediction_all = self.output_head(temporal).squeeze(-1).view(batch, groups, time, channels)
-        hidden_all = temporal.view(batch, groups, time, channels, -1)
+            group_prediction = torch.cat(prediction_chunks, dim=0)
+            group_hidden_sum = torch.cat(hidden_sum_chunks, dim=0)
+            for local_index, channel_index in enumerate(target_channels.tolist()):
+                selected_channels[channel_index] = group_prediction[:, :, local_index]
+            selected_hidden_sum = (
+                group_hidden_sum
+                if selected_hidden_sum is None
+                else selected_hidden_sum + group_hidden_sum
+            )
 
-        # A channel's selected prediction comes exclusively from the group where
-        # that channel is masked.  No residual or concat path sees its value.
-        selected_prediction = prediction_all.permute(0, 2, 1, 3).gather(
-            2,
-            group_index.view(1, 1, 1, channels).expand(batch, time, 1, channels),
-        ).squeeze(2)
-        selected_hidden = hidden_all.permute(0, 2, 1, 3, 4).gather(
-            2,
-            group_index.view(1, 1, 1, channels, 1).expand(batch, time, 1, channels, hidden_all.size(-1)),
-        ).squeeze(2)
+        if selected_hidden_sum is None or any(channel is None for channel in selected_channels):
+            raise RuntimeError("relation masking failed to select every channel")
+        selected_prediction = torch.stack(
+            [channel for channel in selected_channels if channel is not None], dim=2
+        )
+        selected_hidden_mean = selected_hidden_sum / channels
         z = patchify_time(
-            selected_hidden.mean(dim=2), self.config.patch_size, self.config.patch_stride
+            selected_hidden_mean, self.config.patch_size, self.config.patch_stride
         ).mean(dim=2)
         return {
             "z": z,
