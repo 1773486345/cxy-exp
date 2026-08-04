@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict
 
 import torch
 from torch import Tensor, nn
@@ -43,7 +43,7 @@ class EvolutionNormalityBranch(nn.Module):
         self.prediction_head = nn.Linear(branch_dim, c_in)
         self.evidence_head = nn.Linear(branch_dim, 1)
 
-    def forward(self, x: Tensor, anchor_context: Optional[Tensor] = None) -> Dict[str, Tensor]:
+    def forward(self, x: Tensor) -> Dict[str, Tensor]:
         if x.ndim != 3 or x.shape[-1] != self.c_in:
             raise ValueError("x must have shape [B,T,c_in]")
         # The right shift is outside the stack, so even the first point has a
@@ -55,9 +55,10 @@ class EvolutionNormalityBranch(nn.Module):
         z = self.token_projection(hidden.transpose(1, 2))
         prediction = self.prediction_head(z)
         raw_error = (x - prediction).abs().mean(dim=-1)
-        evidence_logit = self.evidence_head(z).squeeze(-1) + raw_error
         valid = torch.ones_like(raw_error)
         valid[:, 0] = 0.0
+        raw_error = raw_error * valid
+        evidence_logit = (self.evidence_head(z).squeeze(-1) + raw_error) * valid
         task_loss = ((x - prediction).abs().mean(dim=-1) * valid).sum() / valid.sum().clamp_min(1.0)
         return {
             "z": z,

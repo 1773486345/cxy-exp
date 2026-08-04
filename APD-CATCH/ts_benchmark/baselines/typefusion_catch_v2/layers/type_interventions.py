@@ -1,4 +1,4 @@
-"""Deterministic, label-free normal-window interventions for Phase B."""
+"""Persistent, label-free interventions for single-stage v2 training."""
 
 from __future__ import annotations
 
@@ -14,9 +14,7 @@ PAIR_TYPES = tuple(itertools.combinations(range(4), 2))
 
 
 def _randint(generator: torch.Generator, low: int, high: int, device: torch.device) -> int:
-    if high <= low:
-        return int(low)
-    return int(torch.randint(low, high, (), generator=generator, device=device).item())
+    return int(torch.randint(low, max(low + 1, high), (), generator=generator, device=device).item())
 
 
 def _uniform(generator: torch.Generator, low: float, high: float, device: torch.device) -> float:
@@ -24,22 +22,23 @@ def _uniform(generator: torch.Generator, low: float, high: float, device: torch.
 
 
 class TypeInterventionGenerator(nn.Module):
-    """Generate clean/single/compound views using only a torch Generator.
-
-    ``validation=True`` derives one local generator from ``seed + sample_index``
-    for each item, making validation interventions independent of batch order.
-    """
-
     def __init__(self, seed: int = 2021) -> None:
         super().__init__()
-        self.seed = int(getattr(seed, "seed", seed))
+        if not isinstance(seed, int):
+            seed = int(getattr(seed, "seed", 2021))
+        self.seed = int(seed)
+        self._training_generators: Dict[str, torch.Generator] = {}
 
-    def _generator(self, seed: Optional[int], device: torch.device) -> torch.Generator:
-        # A CPU generator is accepted for CPU and CUDA random draws and avoids
-        # dependence on the process-global RNG state.
+    def _new_generator(self, seed: int, device: torch.device) -> torch.Generator:
         generator = torch.Generator(device=device if device.type == "cuda" else "cpu")
-        generator.manual_seed(self.seed if seed is None else int(seed))
+        generator.manual_seed(int(seed))
         return generator
+
+    def _training_generator(self, device: torch.device) -> torch.Generator:
+        key = str(device)
+        if key not in self._training_generators:
+            self._training_generators[key] = self._new_generator(self.seed, device)
+        return self._training_generators[key]
 
     @staticmethod
     def _interval(length: int, low: float, high: float, generator: torch.Generator, device: torch.device) -> Tuple[int, int]:
@@ -50,105 +49,79 @@ class TypeInterventionGenerator(nn.Module):
         return start, min(length, start + span)
 
     @staticmethod
-    def _channel_subset(channels: int, low: float, high: float, generator: torch.Generator, device: torch.device) -> Tensor:
-        count_low = max(1, int(round(channels * low)))
-        count_high = max(count_low + 1, int(round(channels * high)) + 1)
-        count = min(channels, _randint(generator, count_low, count_high, device))
-        return torch.randperm(channels, generator=generator, device=device)[:count]
+    def _channels(count: int, low: float, high: float, generator: torch.Generator, device: torch.device) -> Tensor:
+        lower = max(1, int(round(count * low)))
+        upper = max(lower + 1, int(round(count * high)) + 1)
+        return torch.randperm(count, generator=generator, device=device)[:min(count, _randint(generator, lower, upper, device))]
 
-    def _state(self, original: Tensor, generator: torch.Generator, weak: bool) -> Tuple[Tensor, Tensor]:
-        t, c = original.shape
-        shared = getattr(self, "_weak_interval", None) if weak else None
-        start, end = shared or self._interval(t, 0.10, 0.30, generator, original.device)
-        channels = self._channel_subset(c, 0.20, 0.50, generator, original.device)
-        amount = _uniform(generator, 0.15 if weak else 0.75, 0.35 if weak else 1.50, original.device)
-        amount *= -1.0 if _randint(generator, 0, 2, original.device) == 0 else 1.0
-        result = original.clone()
-        result[start:end, channels] += amount
-        mask = torch.zeros((t, c), dtype=torch.bool, device=original.device)
-        mask[start:end, channels] = True
-        return result, mask
-
-    def _evolution(self, original: Tensor, donor: Tensor, generator: torch.Generator, weak: bool) -> Tuple[Tensor, Tensor]:
-        t, _ = original.shape
-        shared = getattr(self, "_weak_interval", None) if weak else None
-        start, end = shared or self._interval(t, 0.15, 0.35, generator, original.device)
-        # Preserve continuity at the transition by shifting donor's first point.
-        aligned = donor[start:end].clone()
-        if start > 0 and aligned.shape[0] > 0:
-            aligned = aligned + (original[start - 1] - aligned[0]).unsqueeze(0)
-        result = original.clone()
-        if weak:
-            alpha = _uniform(generator, 0.20, 0.40, original.device)
-            result[start:end] = (1.0 - alpha) * result[start:end] + alpha * aligned
-        else:
-            result[start:end] = aligned
-        mask = torch.zeros((t, original.shape[-1]), dtype=torch.bool, device=original.device)
-        mask[start:end] = True
-        return result, mask
-
-    def _pattern(self, original: Tensor, generator: torch.Generator, weak: bool) -> Tuple[Tensor, Tensor]:
-        t, c = original.shape
-        shared = getattr(self, "_weak_interval", None) if weak else None
-        start, end = shared or self._interval(t, 0.25, 0.50, generator, original.device)
-        length = end - start
-        n_parts = 3 if _randint(generator, 0, 2, original.device) == 0 else 4
-        n_parts = min(n_parts, max(1, length))
-        bounds = torch.linspace(0, length, n_parts + 1, dtype=torch.long, device=original.device)
-        # Draw until a non-identity permutation (for n_parts >= 2).
-        perm = torch.randperm(n_parts, generator=generator, device=original.device)
-        if n_parts > 1 and torch.equal(perm, torch.arange(n_parts, device=original.device)):
-            perm = torch.roll(perm, 1, 0)
-        chunks = [original[start + int(bounds[i].item()): start + int(bounds[i + 1].item())] for i in range(n_parts)]
-        permuted = torch.cat([chunks[int(i)] for i in perm], dim=0) if chunks else original[start:end]
-        result = original.clone()
-        if weak:
-            alpha = _uniform(generator, 0.20, 0.40, original.device)
-            result[start:end] = (1.0 - alpha) * result[start:end] + alpha * permuted
-        else:
-            result[start:end] = permuted
-        mask = torch.zeros((t, c), dtype=torch.bool, device=original.device)
-        mask[start:end] = True
-        return result, mask
-
-    def _relation(self, original: Tensor, donor: Tensor, generator: torch.Generator, weak: bool) -> Tuple[Tensor, Tensor]:
-        t, c = original.shape
-        shared = getattr(self, "_weak_interval", None) if weak else None
-        start, end = shared or self._interval(t, 0.15, 0.35, generator, original.device)
-        channels = self._channel_subset(c, 0.10, 0.35, generator, original.device)
-        result = original.clone()
-        selected = donor[start:end, channels]
-        target = original[start:end, channels]
-        mean = selected.mean(dim=0, keepdim=True)
-        std = selected.std(dim=0, keepdim=True, unbiased=False).clamp_min(1e-4)
-        target_std = target.std(dim=0, keepdim=True, unbiased=False).clamp_min(1e-4)
-        matched = (selected - mean) / std * target_std + target.mean(dim=0, keepdim=True)
-        if weak:
-            alpha = _uniform(generator, 0.20, 0.40, original.device)
-            matched = (1.0 - alpha) * target + alpha * matched
-        result[start:end, channels] = matched
-        mask = torch.zeros((t, c), dtype=torch.bool, device=original.device)
-        mask[start:end, channels] = True
-        return result, mask
-
-    def _one_type(self, original: Tensor, donor: Tensor, kind: int, generator: torch.Generator, weak: bool) -> Tuple[Tensor, Tensor]:
+    def _sample_params(self, original: Tensor, donor: Tensor, kind: int, generator: torch.Generator, weak: bool, interval: Optional[Tuple[int, int]] = None) -> Dict[str, object]:
+        time, channels = original.shape
+        params: Dict[str, object] = {"kind": kind, "weak": weak}
         if kind == 0:
-            return self._state(original, generator, weak)
-        if kind == 1:
-            return self._evolution(original, donor, generator, weak)
-        if kind == 2:
-            return self._pattern(original, generator, weak)
-        return self._relation(original, donor, generator, weak)
+            params["interval"] = interval or self._interval(time, 0.10, 0.30, generator, original.device)
+            params["channels"] = self._channels(channels, 0.20, 0.50, generator, original.device)
+            params["amount"] = _uniform(generator, 0.15 if weak else 0.75, 0.35 if weak else 1.50, original.device) * (-1 if _randint(generator, 0, 2, original.device) == 0 else 1)
+        elif kind == 1:
+            params["interval"] = interval or self._interval(time, 0.15, 0.35, generator, original.device)
+            params["alpha"] = _uniform(generator, 0.20, 0.40, original.device) if weak else 1.0
+        elif kind == 2:
+            params["interval"] = interval or self._interval(time, 0.25, 0.50, generator, original.device)
+            start, end = params["interval"]
+            parts = min(3 if _randint(generator, 0, 2, original.device) == 0 else 4, max(1, end - start))
+            permutation = torch.randperm(parts, generator=generator, device=original.device)
+            identity = torch.arange(parts, device=original.device)
+            if parts > 1 and torch.equal(permutation, identity):
+                permutation = torch.roll(permutation, 1)
+            params["parts"] = parts
+            params["permutation"] = permutation
+            params["alpha"] = _uniform(generator, 0.20, 0.40, original.device) if weak else 1.0
+        else:
+            params["interval"] = interval or self._interval(time, 0.15, 0.35, generator, original.device)
+            params["channels"] = self._channels(channels, 0.10, 0.35, generator, original.device)
+            params["alpha"] = _uniform(generator, 0.20, 0.40, original.device) if weak else 1.0
+        return params
 
-    def generate(
-        self,
-        x: Tensor,
-        *,
-        seed: Optional[int] = None,
-        sample_indices: Optional[Iterable[int]] = None,
-        validation: bool = False,
-        generator: Optional[torch.Generator] = None,
-    ) -> Dict[str, Tensor]:
+    def _apply(self, original: Tensor, donor: Tensor, params: Dict[str, object]) -> Tuple[Tensor, Tensor]:
+        result = original.clone()
+        time, channels = original.shape
+        start, end = params["interval"]
+        kind = int(params["kind"])
+        mask = torch.zeros(time, channels, dtype=torch.bool, device=original.device)
+        if kind == 0:
+            selected = params["channels"]
+            result[start:end, selected] += float(params["amount"])
+            mask[start:end, selected] = True
+        elif kind == 1:
+            aligned = donor[start:end].clone()
+            if start > 0 and aligned.numel():
+                aligned = aligned + (original[start - 1] - aligned[0]).unsqueeze(0)
+            alpha = float(params["alpha"])
+            result[start:end] = (1.0 - alpha) * result[start:end] + alpha * aligned
+            mask[start:end] = True
+        elif kind == 2:
+            parts = int(params["parts"])
+            permutation = params["permutation"]
+            length = end - start
+            bounds = torch.linspace(0, length, parts + 1, dtype=torch.long, device=original.device)
+            chunks = [original[start + int(bounds[i]):start + int(bounds[i + 1])] for i in range(parts)]
+            permuted = torch.cat([chunks[int(index)] for index in permutation], dim=0)
+            alpha = float(params["alpha"])
+            result[start:end] = (1.0 - alpha) * result[start:end] + alpha * permuted
+            mask[start:end] = True
+        else:
+            selected_channels = params["channels"]
+            source = donor[start:end, selected_channels]
+            target = original[start:end, selected_channels]
+            source_mean = source.mean(dim=0, keepdim=True)
+            source_std = source.std(dim=0, keepdim=True, unbiased=False).clamp_min(1e-4)
+            target_std = target.std(dim=0, keepdim=True, unbiased=False).clamp_min(1e-4)
+            matched = (source - source_mean) / source_std * target_std + target.mean(dim=0, keepdim=True)
+            alpha = float(params["alpha"])
+            result[start:end, selected_channels] = (1.0 - alpha) * target + alpha * matched
+            mask[start:end, selected_channels] = True
+        return result, mask
+
+    def generate(self, x: Tensor, *, seed: Optional[int] = None, sample_indices: Optional[Iterable[int]] = None, validation: bool = False, generator: Optional[torch.Generator] = None) -> Dict[str, Tensor]:
         if x.ndim != 3:
             raise ValueError("x must have shape [B,T,C]")
         batch, time, channels = x.shape
@@ -156,64 +129,68 @@ class TypeInterventionGenerator(nn.Module):
         if len(indices) != batch:
             raise ValueError("sample_indices must contain one index per batch item")
         out = x.clone()
-        targets = torch.zeros((batch, 4), dtype=x.dtype, device=x.device)
-        masks = torch.zeros((batch, 4, time, channels), dtype=torch.bool, device=x.device)
+        targets = torch.zeros(batch, 4, dtype=x.dtype, device=x.device)
+        masks = torch.zeros(batch, 4, time, channels, dtype=torch.bool, device=x.device)
         scenario = torch.zeros(batch, dtype=torch.long, device=x.device)
-        weak_views = {"weak_view_i": torch.zeros_like(x), "weak_view_j": torch.zeros_like(x), "weak_compound_view": torch.zeros_like(x)}
-        shared_generator = None
-        if not validation and generator is None:
-            shared_generator = self._generator(seed, x.device)
+        weak_i = torch.zeros_like(x)
+        weak_j = torch.zeros_like(x)
+        weak_compound = torch.zeros_like(x)
+        weak_mask_i = torch.zeros(batch, time, dtype=torch.bool, device=x.device)
+        weak_mask_j = torch.zeros_like(weak_mask_i)
         for b in range(batch):
-            local_seed = (self.seed if seed is None else int(seed)) + int(indices[b]) if validation else seed
             if validation:
-                gen = self._generator(local_seed, x.device)
+                local_seed = (self.seed if seed is None else int(seed)) + int(indices[b])
+                gen = self._new_generator(local_seed, x.device)
             else:
-                gen = generator if generator is not None else shared_generator
+                gen = generator or self._training_generator(x.device)
             draw = _uniform(gen, 0.0, 1.0, x.device)
             if draw < 0.25:
-                scenario[b] = 0  # clean
                 continue
             if draw < 0.75:
-                scenario[b] = 1  # single strong
+                scenario[b] = 1
                 kinds = (_randint(gen, 0, 4, x.device),)
+                weak = False
             elif draw < 0.875:
-                scenario[b] = 2  # compound strong
+                scenario[b] = 2
                 kinds = PAIR_TYPES[_randint(gen, 0, len(PAIR_TYPES), x.device)]
+                weak = False
             else:
-                scenario[b] = 3  # compound weak
+                scenario[b] = 3
                 kinds = PAIR_TYPES[_randint(gen, 0, len(PAIR_TYPES), x.device)]
-            donor_index = _randint(gen, 0, batch, x.device)
-            if batch > 1 and donor_index == b:
-                donor_index = (donor_index + 1) % batch
-            donor = x[donor_index]
+                weak = True
+            donor = torch.roll(x[b], shifts=1, dims=0) if batch == 1 else x[(_randint(gen, 0, batch, x.device) + b + 1) % batch]
+            shared_interval = self._interval(time, 0.15, 0.35, gen, x.device) if weak else None
             base = x[b]
-            if scenario[b].item() == 3:
-                self._weak_interval = self._interval(time, 0.15, 0.35, gen, x.device)
+            sampled = []
             for kind in kinds:
-                view, mask = self._one_type(base, donor, int(kind), gen, weak=(scenario[b].item() == 3))
-                # Compound interventions compose on the same working view.
-                base = view
-                out[b] = view
+                params = self._sample_params(base, donor, kind, gen, weak, shared_interval)
+                sampled.append(params)
+                base, mask = self._apply(base, donor, params)
                 targets[b, kind] = 1.0
-                masks[b, kind] |= mask
-            if scenario[b].item() == 3 and len(kinds) == 2:
-                # Auxiliary views are only materialized for weak compounds.
-                i, j = kinds
-                weak_views["weak_view_i"][b], _ = self._one_type(x[b], donor, i, gen, weak=True)
-                weak_views["weak_view_j"][b], _ = self._one_type(x[b], donor, j, gen, weak=True)
-                weak_views["weak_compound_view"][b] = out[b]
-            if scenario[b].item() == 3:
-                self._weak_interval = None
+                masks[b, kind] = mask
+            out[b] = base
+            if weak:
+                first, second = sampled
+                weak_i_value, weak_i_value_mask = self._apply(x[b], donor, first)
+                weak_j_value, weak_j_value_mask = self._apply(x[b], donor, second)
+                weak_i[b] = weak_i_value
+                weak_j[b] = weak_j_value
+                weak_mask_i[b] = weak_i_value_mask.any(dim=-1)
+                weak_mask_j[b] = weak_j_value_mask.any(dim=-1)
+                weak_compound[b], _ = self._apply(weak_i[b], donor, second)
         union = masks.any(dim=1).any(dim=-1)
-        result: Dict[str, Tensor] = {
+        return {
             "corrupted_x": out,
             "type_targets": targets,
             "type_masks": masks,
             "union_mask": union,
             "scenario_kind": scenario,
+            "weak_view_i": weak_i,
+            "weak_view_j": weak_j,
+            "weak_compound_view": weak_compound,
+            "weak_mask_i": weak_mask_i,
+            "weak_mask_j": weak_mask_j,
         }
-        result.update(weak_views)
-        return result
 
     forward = generate
     sample = generate
