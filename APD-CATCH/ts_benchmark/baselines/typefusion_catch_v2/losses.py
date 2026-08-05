@@ -102,9 +102,8 @@ def compute_losses(clean: Mapping[str, object], intervention: Optional[Mapping[s
             negative = 1.0 - union
             negative_mean = (joint_score * negative).sum(dim=1) / negative.sum(dim=1).clamp_min(1.0)
             score_rank = F.relu(config.score_margin - positive_mean + negative_mean)[valid_regions].mean()
-        weak_mask = intervention.get("scenario_kind", torch.zeros(targets.size(0), device=targets.device)).eq(3)
         weak_views = intervention.get("weak_views")
-        if weak_views is not None and weak_mask.any():
+        if weak_views is not None and weak_views["logit_i"].size(0) > 0:
             component_i = F.softplus(weak_views["logit_i"])
             component_j = F.softplus(weak_views["logit_j"])
             compound = F.softplus(weak_views["compound_logit"])
@@ -117,7 +116,11 @@ def compute_losses(clean: Mapping[str, object], intervention: Optional[Mapping[s
             score_i = (component_i * mask_i).sum(dim=1) / count_i
             score_j = (component_j * mask_j).sum(dim=1) / count_j
             score_compound = (compound * mask_union).sum(dim=1) / count_union
-            valid_weak = weak_mask & (mask_i.sum(dim=1) > 0) & (mask_j.sum(dim=1) > 0) & (mask_union.sum(dim=1) > 0)
+            valid_weak = (
+                (mask_i.sum(dim=1) > 0)
+                & (mask_j.sum(dim=1) > 0)
+                & (mask_union.sum(dim=1) > 0)
+            )
             synergy_values = F.relu(config.synergy_margin - score_compound + torch.maximum(score_i, score_j))
             synergy = synergy_values[valid_weak].mean() if valid_weak.any() else synergy_values.sum() * 0.0
 

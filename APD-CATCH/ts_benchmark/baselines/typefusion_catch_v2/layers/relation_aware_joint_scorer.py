@@ -8,6 +8,7 @@ from typing import Dict, Optional, Sequence, Union
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 class RelationAwareJointScorer(nn.Module):
@@ -79,10 +80,24 @@ class RelationAwareJointScorer(nn.Module):
         relation_tokens_tensor = torch.stack(relation_tokens, dim=2)
         all_tokens = torch.cat((branch_relation_tokens, relation_tokens_tensor), dim=2)
         relation_token_valid_mask = torch.cat((branch_valid_mask, pair_valid_mask), dim=2)
-        encoded = self.relation_transformer(
-            all_tokens.reshape(batch * time, 10, dim),
-            src_key_padding_mask=~relation_token_valid_mask.reshape(batch * time, 10),
-        ).reshape(batch, time, 10, dim)
+        transformer_input = all_tokens.reshape(batch * time, 10, dim)
+        transformer_padding = ~relation_token_valid_mask.reshape(batch * time, 10)
+        if transformer_input.is_cuda:
+            # PyTorch 2.4's efficient SDPA kernel fails with the large
+            # flattened batch (B*T=65536) used by SWAT.  Math SDPA is a local,
+            # deterministic fallback for this Transformer only; it preserves
+            # the same attention formula, dimensions, and parameters.
+            with sdpa_kernel(backends=[SDPBackend.MATH]):
+                encoded = self.relation_transformer(
+                    transformer_input,
+                    src_key_padding_mask=transformer_padding,
+                )
+        else:
+            encoded = self.relation_transformer(
+                transformer_input,
+                src_key_padding_mask=transformer_padding,
+            )
+        encoded = encoded.reshape(batch, time, 10, dim)
         valid_weights = relation_token_valid_mask.unsqueeze(-1).to(encoded.dtype)
         summary = (encoded * valid_weights).sum(dim=2) / valid_weights.sum(dim=2).clamp_min(1.0)
         temporal = self.temporal_depthwise(summary.transpose(1, 2))

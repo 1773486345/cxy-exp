@@ -96,16 +96,27 @@ class TypeFusionCATCHV2Model(nn.Module):
             for debug_key in ("donor_indices", "debug_donor_indices", "debug_intervals", "debug_channels", "debug_strengths"):
                 if debug_key in intervention:
                     intervention_output[debug_key] = intervention[debug_key]
-            if intervention["scenario_kind"].eq(3).any():
-                weak_i = self._run_views(intervention["weak_view_i"])
-                weak_j = self._run_views(intervention["weak_view_j"])
+            weak_indices = torch.nonzero(
+                intervention["scenario_kind"].eq(3), as_tuple=False
+            ).flatten()
+            if weak_indices.numel() > 0:
+                # Weak views are only defined for compound interventions.  Keep
+                # their autograd graphs compact instead of recomputing two
+                # expensive full-batch views when most samples are ordinary.
+                weak_i = self._run_views(
+                    intervention["weak_view_i"].index_select(0, weak_indices)
+                )
+                weak_j = self._run_views(
+                    intervention["weak_view_j"].index_select(0, weak_indices)
+                )
                 intervention_output["weak_views"] = {
                     "logit_i": weak_i["joint_logit"],
                     "logit_j": weak_j["joint_logit"],
-                    "compound_logit": corrupted["joint_logit"],
-                    "mask_i": intervention["weak_mask_i"],
-                    "mask_j": intervention["weak_mask_j"],
-                    "union_mask": intervention["union_mask"],
+                    "compound_logit": corrupted["joint_logit"].index_select(0, weak_indices),
+                    "mask_i": intervention["weak_mask_i"].index_select(0, weak_indices),
+                    "mask_j": intervention["weak_mask_j"].index_select(0, weak_indices),
+                    "union_mask": intervention["union_mask"].index_select(0, weak_indices),
+                    "sample_indices": weak_indices,
                 }
             output["intervention_output"] = intervention_output
         if compute_loss:

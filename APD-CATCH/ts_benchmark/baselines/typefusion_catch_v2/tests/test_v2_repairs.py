@@ -98,6 +98,184 @@ class InterventionAndValidationTests(unittest.TestCase):
                 self.assertTrue(torch.equal(left_value, right_value))
 
 
+class CompactWeakViewTests(unittest.TestCase):
+    @staticmethod
+    def _forced_intervention(model, x, weak_indices):
+        """Create deterministic intervention metadata with selected weak rows."""
+        batch, time, channels = x.shape
+        intervention = model.intervention_generator.generate(
+            x.detach(), validation=True, sample_indices=list(range(batch))
+        )
+        weak_indices = torch.as_tensor(weak_indices, dtype=torch.long)
+        scenario = torch.zeros(batch, dtype=torch.long)
+        scenario[weak_indices] = 3
+        intervention["scenario_kind"] = scenario
+        intervention["corrupted_x"] = x.detach().clone()
+        intervention["weak_view_i"] = x.detach().clone()
+        intervention["weak_view_j"] = x.detach().clone()
+        intervention["type_targets"].zero_()
+        intervention["type_targets"][weak_indices, 0] = 1.0
+        intervention["type_targets"][weak_indices, 1] = 1.0
+        intervention["type_masks"].zero_()
+        intervention["weak_mask_i"].zero_()
+        intervention["weak_mask_j"].zero_()
+        for index in weak_indices.tolist():
+            interval = slice(1, min(time, 4))
+            intervention["corrupted_x"][index, interval, 0] += 2.0
+            intervention["weak_view_i"][index, interval, 0] += 0.75
+            intervention["weak_view_j"][index, interval, 1 % channels] -= 0.75
+            intervention["type_masks"][index, 0, interval, 0] = True
+            intervention["type_masks"][index, 1, interval, 0] = True
+            intervention["weak_mask_i"][index, interval] = True
+            intervention["weak_mask_j"][index, interval] = True
+        intervention["union_mask"] = intervention["type_masks"].any(dim=1).any(dim=-1)
+        return intervention
+
+    def test_one_weak_compound_uses_compact_views(self):
+        model = make_model()
+        model.eval()
+        x = torch.randn(8, model.config.seq_len, model.config.c_in)
+        intervention = self._forced_intervention(model, x, [3])
+        calls = []
+        original = model._run_views
+
+        def counted(view):
+            calls.append(view.size(0))
+            return original(view)
+
+        model._run_views = counted
+        output = model(x, intervention=intervention, compute_loss=False)
+        self.assertEqual(calls[-2:], [1, 1])
+        weak = output["intervention_output"]["weak_views"]
+        self.assertEqual(tuple(weak["sample_indices"].tolist()), (3,))
+        self.assertEqual(weak["logit_i"].size(0), 1)
+        self.assertEqual(weak["logit_j"].size(0), 1)
+
+    def test_no_weak_compound_skips_views_and_synergy_is_zero(self):
+        model = make_model()
+        model.eval()
+        x = torch.randn(8, model.config.seq_len, model.config.c_in)
+        intervention = self._forced_intervention(model, x, [])
+        calls = []
+        original = model._run_views
+
+        def counted(view):
+            calls.append(view.size(0))
+            return original(view)
+
+        model._run_views = counted
+        output = model(x, intervention=intervention, compute_loss=True)
+        self.assertEqual(calls, [8, 8])
+        self.assertNotIn("weak_views", output["intervention_output"])
+        self.assertTrue(torch.isfinite(output["losses"]["synergy"]))
+        self.assertEqual(float(output["losses"]["synergy"]), 0.0)
+
+    def test_multiple_weak_samples_have_compact_indices_and_masks(self):
+        model = make_model()
+        model.eval()
+        x = torch.randn(8, model.config.seq_len, model.config.c_in)
+        intervention = self._forced_intervention(model, x, [1, 4, 7])
+        output = model(x, intervention=intervention, compute_loss=False)
+        weak = output["intervention_output"]["weak_views"]
+        self.assertTrue(torch.equal(weak["sample_indices"], torch.tensor([1, 4, 7])))
+        for key in ("logit_i", "logit_j", "compound_logit", "mask_i", "mask_j", "union_mask"):
+            self.assertEqual(weak[key].size(0), 3)
+
+    def test_compact_synergy_matches_direct_per_sample_reference(self):
+        config = tiny_config(
+            lambda_task=0.0, lambda_evidence=0.0, lambda_responsibility=0.0,
+            lambda_score=0.0, lambda_score_rank=0.0, lambda_clean_score=0.0,
+            lambda_synergy=1.0,
+        )
+        clean = {
+            "branches": {name: {"task_loss": torch.zeros(()), "evidence_logit": torch.zeros(2, 4)} for name in ("state", "evolution", "pattern", "relation")},
+            "joint_logit": torch.zeros(2, 4), "joint_score": torch.zeros(2, 4),
+        }
+        mask_i = torch.tensor([[1, 1, 0, 0], [0, 1, 1, 0]], dtype=torch.bool)
+        mask_j = torch.tensor([[0, 1, 1, 0], [1, 0, 1, 0]], dtype=torch.bool)
+        union = mask_i | mask_j
+        weak_views = {
+            "logit_i": torch.tensor([[0.2, 0.4, 0.0, 0.0], [0.1, 0.3, 0.5, 0.0]], requires_grad=True),
+            "logit_j": torch.tensor([[0.3, 0.1, 0.6, 0.0], [0.4, 0.2, 0.2, 0.0]], requires_grad=True),
+            "compound_logit": torch.tensor([[0.5, 0.6, 0.2, 0.0], [0.5, 0.7, 0.4, 0.0]], requires_grad=True),
+            "mask_i": mask_i, "mask_j": mask_j, "union_mask": union,
+            "sample_indices": torch.tensor([2, 6]),
+        }
+        intervention = {
+            "branches": {name: {"evidence_logit": torch.zeros(2, 4)} for name in ("state", "evolution", "pattern", "relation")},
+            "joint_logit": torch.zeros(2, 4),
+            "type_targets": torch.zeros(2, 4), "type_masks": torch.zeros(2, 4, 4, 1),
+            "union_mask": union, "weak_views": weak_views,
+        }
+        actual = compute_losses(clean, intervention, config)["synergy"]
+        score_i = (torch.nn.functional.softplus(weak_views["logit_i"]) * mask_i).sum(dim=1) / mask_i.sum(dim=1)
+        score_j = (torch.nn.functional.softplus(weak_views["logit_j"]) * mask_j).sum(dim=1) / mask_j.sum(dim=1)
+        score_c = (torch.nn.functional.softplus(weak_views["compound_logit"]) * union).sum(dim=1) / union.sum(dim=1)
+        expected = torch.relu(config.synergy_margin - score_c + torch.maximum(score_i, score_j)).mean()
+        self.assertTrue(torch.allclose(actual, expected, atol=1e-7, rtol=1e-7))
+        actual.backward()
+        for key in ("logit_i", "logit_j", "compound_logit"):
+            self.assertTrue(torch.isfinite(weak_views[key].grad).all())
+
+    def test_compact_and_full_reference_have_equal_loss_and_gradients(self):
+        previous_threads = torch.get_num_threads()
+        self.addCleanup(torch.set_num_threads, previous_threads)
+        torch.set_num_threads(1)
+        config = tiny_config(batch_size=8)
+        model_compact = make_model(batch_size=8)
+        model_reference = make_model(batch_size=8)
+        model_reference.load_state_dict(model_compact.state_dict())
+        model_compact.eval()
+        model_reference.eval()
+        base = torch.randn(8, config.seq_len, config.c_in)
+        x_compact = base.clone().requires_grad_(True)
+        x_reference = base.clone().requires_grad_(True)
+        intervention_compact = self._forced_intervention(model_compact, x_compact, [3])
+        intervention_reference = self._forced_intervention(model_reference, x_reference, [3])
+
+        compact_output = model_compact(x_compact, intervention=intervention_compact, compute_loss=True)
+        compact_loss = compact_output["losses"]["total"]
+        compact_loss.backward()
+
+        clean = model_reference._run_views(x_reference)
+        corrupted = model_reference._run_views(intervention_reference["corrupted_x"])
+        full_i = model_reference._run_views(intervention_reference["weak_view_i"])
+        full_j = model_reference._run_views(intervention_reference["weak_view_j"])
+        index = torch.tensor([3], dtype=torch.long)
+        reference_intervention = {
+            **corrupted,
+            "type_targets": intervention_reference["type_targets"],
+            "type_masks": intervention_reference["type_masks"],
+            "union_mask": intervention_reference["union_mask"],
+            "scenario_kind": intervention_reference["scenario_kind"],
+            "weak_views": {
+                "logit_i": full_i["joint_logit"].index_select(0, index),
+                "logit_j": full_j["joint_logit"].index_select(0, index),
+                "compound_logit": corrupted["joint_logit"].index_select(0, index),
+                "mask_i": intervention_reference["weak_mask_i"].index_select(0, index),
+                "mask_j": intervention_reference["weak_mask_j"].index_select(0, index),
+                "union_mask": intervention_reference["union_mask"].index_select(0, index),
+                "sample_indices": index,
+            },
+        }
+        reference_loss = compute_losses(clean, reference_intervention, config)["total"]
+        reference_loss.backward()
+
+        self.assertTrue(torch.allclose(compact_loss, reference_loss, atol=1e-6, rtol=1e-6))
+        self.assertTrue(torch.allclose(x_compact.grad, x_reference.grad, atol=1e-5, rtol=1e-5))
+        for left_module, right_module in (
+            (model_compact.pattern_branch, model_reference.pattern_branch),
+            (model_compact.relation_branch, model_reference.relation_branch),
+            (model_compact.joint_scorer, model_reference.joint_scorer),
+        ):
+            left_grads = [parameter.grad for parameter in left_module.parameters() if parameter.grad is not None]
+            right_grads = [parameter.grad for parameter in right_module.parameters() if parameter.grad is not None]
+            self.assertTrue(left_grads and right_grads)
+            self.assertEqual(len(left_grads), len(right_grads))
+            for left_grad, right_grad in zip(left_grads, right_grads):
+                self.assertTrue(torch.allclose(left_grad, right_grad, atol=1e-5, rtol=1e-5))
+
+
 class StateLossEvolutionTests(unittest.TestCase):
     def test_state_topk_changes_assignment(self):
         config = tiny_config(state_topk=1)
@@ -290,6 +468,20 @@ class StateLossEvolutionTests(unittest.TestCase):
         changed[:, 1] += 50.0
         updated = scorer(changed, logits)["joint_logit"]
         self.assertFalse(torch.allclose(original[:, 0], updated[:, 0]))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA unavailable")
+    def test_cuda_relation_scorer_math_fallback_is_finite(self):
+        config = tiny_config()
+        scorer = RelationAwareJointScorer(config).cuda().train()
+        tokens = torch.randn(2, config.seq_len, 4, config.joint_dim, device="cuda", requires_grad=True)
+        logits = torch.randn(2, config.seq_len, 4, device="cuda", requires_grad=True)
+        valid = torch.ones(2, config.seq_len, 4, dtype=torch.bool, device="cuda")
+        output = scorer(tokens, logits, valid)
+        loss = output["joint_score"].mean()
+        loss.backward()
+        self.assertTrue(torch.isfinite(loss))
+        self.assertTrue(torch.isfinite(tokens.grad).all())
+        self.assertTrue(all(p.grad is not None and torch.isfinite(p.grad).all() for p in scorer.parameters() if p.requires_grad))
 
 
 class AdapterAndScriptTests(unittest.TestCase):
