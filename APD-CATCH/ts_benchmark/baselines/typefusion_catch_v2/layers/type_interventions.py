@@ -81,7 +81,7 @@ class TypeInterventionGenerator(nn.Module):
             params["alpha"] = _uniform(generator, 0.20, 0.40, original.device) if weak else 1.0
         return params
 
-    def _apply(self, original: Tensor, donor: Tensor, params: Dict[str, object]) -> Tuple[Tensor, Tensor]:
+    def _apply_intervention(self, original: Tensor, donor: Tensor, params: Dict[str, object]) -> Tuple[Tensor, Tensor]:
         result = original.clone()
         time, channels = original.shape
         start, end = params["interval"]
@@ -137,12 +137,29 @@ class TypeInterventionGenerator(nn.Module):
         weak_compound = torch.zeros_like(x)
         weak_mask_i = torch.zeros(batch, time, dtype=torch.bool, device=x.device)
         weak_mask_j = torch.zeros_like(weak_mask_i)
+        donor_indices = torch.full((batch,), -1, dtype=torch.long, device=x.device)
+        debug_intervals = torch.full((batch, 4, 2), -1, dtype=torch.long, device=x.device)
+        debug_channels = torch.zeros(batch, 4, channels, dtype=torch.bool, device=x.device)
+        debug_strengths = torch.zeros(batch, 4, dtype=x.dtype, device=x.device)
         for b in range(batch):
             if validation:
                 local_seed = (self.seed if seed is None else int(seed)) + int(indices[b])
                 gen = self._new_generator(local_seed, x.device)
             else:
                 gen = generator or self._training_generator(x.device)
+            if batch == 1:
+                donor_indices[b] = b
+                donor = torch.roll(x[b], shifts=1, dims=0)
+            else:
+                # Draw an offset from [1, batch-1], then wrap the local sample
+                # index.  This makes self-donation impossible for every batch.
+                offset = _randint(gen, 1, batch, x.device)
+                sample_index = b
+                donor_index = (sample_index + offset) % batch
+                if donor_index == b:
+                    raise RuntimeError("intervention donor selection produced self-donation")
+                donor_indices[b] = donor_index
+                donor = x[donor_index]
             draw = _uniform(gen, 0.0, 1.0, x.device)
             if draw < 0.25:
                 continue
@@ -158,26 +175,34 @@ class TypeInterventionGenerator(nn.Module):
                 scenario[b] = 3
                 kinds = PAIR_TYPES[_randint(gen, 0, len(PAIR_TYPES), x.device)]
                 weak = True
-            donor = torch.roll(x[b], shifts=1, dims=0) if batch == 1 else x[(_randint(gen, 0, batch, x.device) + b + 1) % batch]
             shared_interval = self._interval(time, 0.15, 0.35, gen, x.device) if weak else None
             base = x[b]
             sampled = []
             for kind in kinds:
                 params = self._sample_params(base, donor, kind, gen, weak, shared_interval)
                 sampled.append(params)
-                base, mask = self._apply(base, donor, params)
+                base, mask = self._apply_intervention(base, donor, params)
                 targets[b, kind] = 1.0
                 masks[b, kind] = mask
+                start, end = params["interval"]
+                debug_intervals[b, kind] = torch.tensor((start, end), dtype=torch.long, device=x.device)
+                debug_channels[b, kind] = mask.any(dim=0)
+                if kind == 0:
+                    debug_strengths[b, kind] = abs(float(params["amount"]))
+                elif "alpha" in params:
+                    debug_strengths[b, kind] = abs(float(params["alpha"]))
+                else:
+                    debug_strengths[b, kind] = 1.0
             out[b] = base
             if weak:
                 first, second = sampled
-                weak_i_value, weak_i_value_mask = self._apply(x[b], donor, first)
-                weak_j_value, weak_j_value_mask = self._apply(x[b], donor, second)
+                weak_i_value, weak_i_value_mask = self._apply_intervention(x[b], donor, first)
+                weak_j_value, weak_j_value_mask = self._apply_intervention(x[b], donor, second)
                 weak_i[b] = weak_i_value
                 weak_j[b] = weak_j_value
                 weak_mask_i[b] = weak_i_value_mask.any(dim=-1)
                 weak_mask_j[b] = weak_j_value_mask.any(dim=-1)
-                weak_compound[b], _ = self._apply(weak_i[b], donor, second)
+                weak_compound[b], _ = self._apply_intervention(weak_i[b], donor, second)
         union = masks.any(dim=1).any(dim=-1)
         return {
             "corrupted_x": out,
@@ -190,6 +215,11 @@ class TypeInterventionGenerator(nn.Module):
             "weak_compound_view": weak_compound,
             "weak_mask_i": weak_mask_i,
             "weak_mask_j": weak_mask_j,
+            "donor_indices": donor_indices,
+            "debug_donor_indices": donor_indices,
+            "debug_intervals": debug_intervals,
+            "debug_channels": debug_channels,
+            "debug_strengths": debug_strengths,
         }
 
     forward = generate

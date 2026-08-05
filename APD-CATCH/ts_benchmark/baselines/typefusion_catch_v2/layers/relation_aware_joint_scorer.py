@@ -53,7 +53,13 @@ class RelationAwareJointScorer(nn.Module):
         if evidence_logits.shape != (batch, time, 4):
             raise ValueError("evidence_logits must have shape [B,T,4]")
         branch_logits = torch.stack([head(tokens[:, :, index]).squeeze(-1) for index, head in enumerate(self.branch_heads)], dim=-1)
-        sufficient = self.sufficient_temperature * torch.logsumexp(branch_logits / self.sufficient_temperature, dim=-1)
+        sufficient_inputs = branch_logits
+        if time:
+            # Evolution has no valid history at t=0.  Exclude only that branch
+            # from the sufficient normality path at the first point.
+            sufficient_inputs = branch_logits.clone()
+            sufficient_inputs[:, 0, 1] = torch.finfo(branch_logits.dtype).min
+        sufficient = self.sufficient_temperature * torch.logsumexp(sufficient_inputs / self.sufficient_temperature, dim=-1)
         relation_tokens = []
         for index, (left_index, right_index) in enumerate(itertools.combinations(range(4), 2)):
             left, right = tokens[:, :, left_index], tokens[:, :, right_index]
@@ -71,6 +77,7 @@ class RelationAwareJointScorer(nn.Module):
             "joint_logit": joint_logit,
             "joint_score": F.softplus(joint_logit),
             "sufficient_logit": sufficient,
+            "sufficient_branch_logits": sufficient_inputs,
             "branch_logits": branch_logits,
             "relation_delta_raw": relation_delta_raw,
             "relation_delta": relation_delta,

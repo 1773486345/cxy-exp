@@ -50,15 +50,25 @@ def compute_losses(clean: Mapping[str, object], intervention: Optional[Mapping[s
                 positive_terms.append(F.binary_cross_entropy_with_logits(logits[:, index][selected], masks[:, index][selected]))
         if positive_terms:
             target_positive = torch.stack(positive_terms).mean()
+        relation_terms = []
+        relation_valid = []
         for index in range(4):
             target_i = targets[:, index] > 0.5
+            target_mask = masks[:, index]
+            target_count = target_mask.sum(dim=1).clamp_min(1.0)
+            target_response = (responses[:, index] * target_mask).sum(dim=1) / target_count
             for other in range(4):
+                # A compound's two active types are both targets and therefore
+                # never form a responsibility comparison against each other.
                 target_other = targets[:, other] > 0.5
-                selected = target_i & ~target_other
-                if selected.any():
-                    target_response = _masked_mean(responses[:, index][selected], masks[:, index][selected])
-                    other_response = _masked_mean(responses[:, other][selected], masks[:, index][selected])
-                    responsibility = responsibility + F.relu(config.responsibility_margin - target_response + other_response)
+                valid_pair = target_i & ~target_other & (target_mask.sum(dim=1) > 0)
+                other_response = (responses[:, other] * target_mask).sum(dim=1) / target_count
+                relation_terms.append(F.relu(config.responsibility_margin - target_response + other_response))
+                relation_valid.append(valid_pair)
+        if relation_terms:
+            relation_values = torch.stack(relation_terms, dim=1)
+            relation_mask = torch.stack(relation_valid, dim=1)
+            responsibility = relation_values[relation_mask].mean() if relation_mask.any() else relation_values.sum() * 0.0
         joint_logit = intervention["joint_logit"]
         positive_weight = ((union.numel() - union.sum()) / union.sum().clamp_min(1.0)).clamp(1.0, 20.0).detach()
         score = F.binary_cross_entropy_with_logits(joint_logit, union, pos_weight=positive_weight)
@@ -75,10 +85,18 @@ def compute_losses(clean: Mapping[str, object], intervention: Optional[Mapping[s
             component_i = F.softplus(weak_views["logit_i"])
             component_j = F.softplus(weak_views["logit_j"])
             compound = F.softplus(weak_views["compound_logit"])
-            score_i = _masked_mean(component_i[weak_mask], weak_views["mask_i"][weak_mask])
-            score_j = _masked_mean(component_j[weak_mask], weak_views["mask_j"][weak_mask])
-            score_compound = _masked_mean(compound[weak_mask], weak_views["union_mask"][weak_mask])
-            synergy = F.relu(config.synergy_margin - score_compound + torch.maximum(score_i, score_j))
+            mask_i = weak_views["mask_i"].to(component_i.dtype)
+            mask_j = weak_views["mask_j"].to(component_j.dtype)
+            mask_union = weak_views["union_mask"].to(compound.dtype)
+            count_i = mask_i.sum(dim=1).clamp_min(1.0)
+            count_j = mask_j.sum(dim=1).clamp_min(1.0)
+            count_union = mask_union.sum(dim=1).clamp_min(1.0)
+            score_i = (component_i * mask_i).sum(dim=1) / count_i
+            score_j = (component_j * mask_j).sum(dim=1) / count_j
+            score_compound = (compound * mask_union).sum(dim=1) / count_union
+            valid_weak = weak_mask & (mask_i.sum(dim=1) > 0) & (mask_j.sum(dim=1) > 0) & (mask_union.sum(dim=1) > 0)
+            synergy_values = F.relu(config.synergy_margin - score_compound + torch.maximum(score_i, score_j))
+            synergy = synergy_values[valid_weak].mean() if valid_weak.any() else synergy_values.sum() * 0.0
 
     evidence = clean_evidence + target_positive
     components = {

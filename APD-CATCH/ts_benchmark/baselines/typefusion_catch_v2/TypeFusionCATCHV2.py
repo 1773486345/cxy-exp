@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader
 
-from ts_benchmark.baselines.utils import anomaly_detection_data_provider, train_val_split
+from ts_benchmark.baselines.utils import SegLoader, anomaly_detection_data_provider, train_val_split
 
 from .config import TypeFusionCATCHV2Config
 from .typefusion_catch_v2 import TypeFusionCATCHV2Model
@@ -68,7 +69,11 @@ class TypeFusionCATCHV2:
         train_scaled = self._scaled_frame(self.scaler, train_frame)
         valid_scaled = self._scaled_frame(self.scaler, valid_frame)
         train_loader = anomaly_detection_data_provider(train_scaled, self.config.batch_size, self.config.seq_len, mode="train")
-        valid_loader = anomaly_detection_data_provider(valid_scaled, self.config.batch_size, self.config.seq_len, mode="val")
+        # ``anomaly_detection_data_provider(..., mode="val")`` shuffles by
+        # design.  Validation interventions are indexed and deterministic, so
+        # their window order must also be deterministic.
+        valid_dataset = SegLoader(valid_scaled.values, self.config.seq_len, 1, mode="val")
+        valid_loader = DataLoader(valid_dataset, batch_size=self.config.batch_size, shuffle=False, num_workers=0, drop_last=False)
         return train_loader, valid_loader
 
     def _validation_loss(self, loader) -> float:

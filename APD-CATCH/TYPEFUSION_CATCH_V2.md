@@ -25,14 +25,17 @@ signal into additive components.
 `SharedRepresentationFrontend` has two shared parameter groups.
 
 The time path is Linear(C to d_model), depthwise temporal Conv1d(kernel 3),
-pointwise Conv1d, GELU, and per-time LayerNorm. It returns `h_time [B,T,D]`
-for the State branch only.
+pointwise Conv1d, GELU, and per-time LayerNorm. `encode_time(x)` is called
+once by the State branch and returns `h_time [B,T,D]`; it does not construct a
+frequency representation.
 
 The frequency path applies RevIN, FFT, real/imaginary channels, frequency
 patching, patch embedding, and a channel-aware Transformer independently inside
-each frequency patch. It returns `h_freq [B,P,C,D]`. There is no cross-patch
-global mixing, reconstruction head, Flatten Head, dc loss, mask optimizer, or
-standalone score.
+each frequency patch. `encode_frequency(x_masked)` returns
+`h_freq [B,P,C,D]`, where P uses the public configured frequency stride. Only
+Pattern's two masked views call this method. There is no unmasked frequency
+graph in the model output, reconstruction head, Flatten Head, dc loss, mask
+optimizer, or standalone score.
 
 Pattern masked views are created in the time domain before calling this same
 frequency frontend. A complete unmasked frequency representation is never
@@ -49,9 +52,13 @@ Evolution consumes only StandardScaler-space `x`. It right-shifts the input and
 uses causal depthwise/pointwise blocks with LayerNorm. Prediction at t reads
 `x[:t]`; t=0 raw error, evidence, and task contribution are zero.
 
-Pattern performs even-mask and odd-mask completion. Target points are zeroed
-before patch encoding, positional embeddings distinguish patches, and the two
-predictions are overlap-added. Time completion and a fixed 0.1 local frequency
+Pattern performs even-mask and odd-mask completion with non-overlapping time
+patches (`stride=patch_size`). Target token content is replaced by a learned
+mask token and positional embeddings are added after replacement, so target
+positions remain identifiable. Each masked view replaces its target points
+before calling `encode_frequency`; masked frequency tokens are used as
+cross-attention memory rather than added by patch index. Both passes retain at
+least one real visible patch. Time completion and a fixed 0.1 local frequency
 term form its raw error.
 
 Relation masks deterministic channel groups before channel mixing. It runs
@@ -66,7 +73,10 @@ Every branch returns `z [B,T,branch_dim]`, `raw_error [B,T]`,
 ## Interventions and Losses
 
 Training uses a persistent `torch.Generator`; it is not re-seeded on each
-batch. Validation uses `seed + global_sample_index`. Scenarios are fixed at
+batch. Validation uses `seed + global_sample_index` and a non-shuffled
+`SegLoader`/`DataLoader`, so repeated validation walks the same windows and
+intervention metadata. For batch size greater than one, donors use an offset
+in `[1,batch-1]` and can never be the source sample. Scenarios are fixed at
 25% clean, 50% single strong, 12.5% compound strong, and 12.5% compound weak.
 State, evolution, pattern, and relation interventions preserve their respective
 semantics. Weak compound views share the exact sampled interval and parameters
@@ -115,6 +125,9 @@ weights shown above. They are uniform across tasks.
 
 These are prepared only and have not been run. Run one task at a time, starting
 with PSM. Do not start them in the background, in parallel, or through a runner.
+GECCO uses the TypeFusion `seq_len=192` fairness configuration; it must only be
+compared with the frozen paired CATCH-192 fairness result, not the historical
+CATCH-96 report.
 Use `GPU_ID` explicitly; after a real OOM, set `BATCH_SIZE` manually and
 arrange a paired baseline rerun before comparing. No performance conclusion is
 made here.

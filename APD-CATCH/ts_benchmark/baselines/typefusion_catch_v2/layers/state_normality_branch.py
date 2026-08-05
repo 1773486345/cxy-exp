@@ -36,7 +36,12 @@ class StateNormalityBranch(nn.Module):
     def forward(self, h_time: Tensor) -> Dict[str, Tensor]:
         state_hidden = self.state_projection(h_time)
         distances = (state_hidden.unsqueeze(2) - self.prototypes.view(1, 1, self.memory_size, self.branch_dim)).pow(2).mean(dim=-1)
-        assignment = torch.softmax(-distances / self.temperature, dim=-1)
+        # Keep only the configured sparse normal prototypes.  Scatter restores
+        # the full memory axis, so prototype context, raw error, and usage all
+        # use the same differentiable top-k assignment.
+        top_values, top_indices = torch.topk(-distances, self.topk, dim=-1)
+        top_weights = torch.softmax(top_values / self.temperature, dim=-1)
+        assignment = torch.zeros_like(distances).scatter(-1, top_indices, top_weights)
         prototype_context = torch.einsum("btm,md->btd", assignment, self.prototypes)
         raw_error = (assignment * distances).sum(dim=-1)
         z = self.z_projection(torch.cat((state_hidden, prototype_context, state_hidden - prototype_context), dim=-1))
@@ -45,7 +50,6 @@ class StateNormalityBranch(nn.Module):
         usage_loss = (usage - 1.0 / self.memory_size).pow(2).mean()
         compactness = raw_error.mean()
         commitment = F.mse_loss(state_hidden, prototype_context.detach())
-        top_idx = assignment.topk(self.topk, dim=-1).indices
         return {
             "z": z,
             "raw_error": raw_error,
@@ -54,5 +58,5 @@ class StateNormalityBranch(nn.Module):
             "task_loss": compactness + commitment + self.usage_weight * usage_loss,
             "prototype_usage_loss": usage_loss,
             "prototype_assignment": assignment,
-            "prototype_indices": top_idx,
+            "prototype_indices": top_indices,
         }

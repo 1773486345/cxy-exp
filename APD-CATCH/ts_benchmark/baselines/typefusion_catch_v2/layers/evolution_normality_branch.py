@@ -55,9 +55,13 @@ class EvolutionNormalityBranch(nn.Module):
         z = self.token_projection(hidden.transpose(1, 2))
         prediction = self.prediction_head(z)
         raw_error = (x - prediction).abs().mean(dim=-1)
-        valid = torch.ones_like(raw_error)
-        valid[:, 0] = 0.0
+        valid_mask = torch.ones_like(raw_error, dtype=torch.bool)
+        valid_mask[:, 0] = False
+        valid = valid_mask.to(raw_error.dtype)
         raw_error = raw_error * valid
+        # There is no observed history at t=0.  Do not expose a fabricated
+        # evolution token to the adapter or scorer.
+        z = z.masked_fill(~valid_mask.unsqueeze(-1), 0.0)
         evidence_logit = (self.evidence_head(z).squeeze(-1) + raw_error) * valid
         task_loss = ((x - prediction).abs().mean(dim=-1) * valid).sum() / valid.sum().clamp_min(1.0)
         return {
@@ -67,4 +71,5 @@ class EvolutionNormalityBranch(nn.Module):
             "evidence_logit": evidence_logit.masked_fill(valid == 0, 0.0),
             "evidence": F.softplus(evidence_logit).masked_fill(valid == 0, 0.0),
             "task_loss": task_loss,
+            "valid_mask": valid_mask,
         }

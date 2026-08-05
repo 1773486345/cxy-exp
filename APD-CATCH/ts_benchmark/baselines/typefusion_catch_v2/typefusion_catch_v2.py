@@ -38,7 +38,9 @@ class TypeFusionCATCHV2Model(nn.Module):
         self.intervention_generator = TypeInterventionGenerator(config.seed)
 
     def _run_views(self, x: Tensor) -> Dict[str, object]:
-        shared = self.shared_frontend(x)
+        # The unmasked shared path is time-only.  Pattern explicitly owns two
+        # masked frequency encodings inside its branch call.
+        shared = self.shared_frontend.encode_time(x)
         branches = {
             "state": self.state_branch(shared["h_time"]),
             "evolution": self.evolution_branch(x),
@@ -73,6 +75,9 @@ class TypeFusionCATCHV2Model(nn.Module):
                 "union_mask": intervention["union_mask"],
                 "scenario_kind": intervention["scenario_kind"],
             }
+            for debug_key in ("donor_indices", "debug_donor_indices", "debug_intervals", "debug_channels", "debug_strengths"):
+                if debug_key in intervention:
+                    intervention_output[debug_key] = intervention[debug_key]
             if intervention["scenario_kind"].eq(3).any():
                 weak_i = self._run_views(intervention["weak_view_i"])
                 weak_j = self._run_views(intervention["weak_view_j"])
