@@ -119,5 +119,5 @@ class PatternNormalityBranch(nn.Module):
             "target_position": torch.stack((pos_even, pos_odd), dim=1).detach(),
             "masked_time_tokens": torch.stack((tokens_even, tokens_odd), dim=1),
             "masked_pass_tokens": torch.stack((tokens_even, tokens_odd), dim=1),
-            "masked_frequency_used": torch.tensor(True, device=x.device),
+            "masked_frequency_used": torch.tensor(frontend is not None, device=x.device, dtype=torch.bool),
         }

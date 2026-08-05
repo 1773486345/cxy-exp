@@ -102,6 +102,11 @@ class TypeFusionCATCHV2:
         patience_left = self.config.patience
         for epoch in range(self.config.num_epochs):
             self.model.train()
+            epoch_total_losses = []
+            epoch_component_losses = {
+                "task": [], "evidence": [], "responsibility": [], "score": [],
+                "score_rank": [], "clean_score": [], "synergy": [],
+            }
             for batch, _ in train_loader:
                 batch = batch.float().contiguous().to(self.device)
                 intervention = self.model.intervention_generator.generate(batch)
@@ -109,12 +114,29 @@ class TypeFusionCATCHV2:
                 loss = result["losses"]["total"]
                 if not torch.isfinite(loss):
                     raise FloatingPointError("non-finite loss: total")
+                epoch_total_losses.append(float(loss.detach().cpu()))
+                for name in epoch_component_losses:
+                    value = result["losses"][name]
+                    if not torch.isfinite(value):
+                        raise FloatingPointError(f"non-finite loss: {name}")
+                    epoch_component_losses[name].append(float(value.detach().cpu()))
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 optimizer.step()
                 self.optimizer_steps += 1
             validation_loss = self._validation_loss(valid_loader)
-            print(f">>>>>>> TypeFusion-CATCH v2 | Epoch: {epoch + 1} | Train Loss: {float(loss.detach().cpu()):.7f} Vali Loss: {validation_loss:.7f}", flush=True)
+            train_total_loss = float(np.mean(epoch_total_losses)) if epoch_total_losses else float("inf")
+            component_means = {
+                name: (float(np.mean(values)) if values else float("inf"))
+                for name, values in epoch_component_losses.items()
+            }
+            component_text = " ".join(f"{name}={value:.7f}" for name, value in component_means.items())
+            print(
+                f">>>>>>> TypeFusion-CATCH v2 | Epoch: {epoch + 1} | Steps: {self.optimizer_steps} | "
+                f"Train Loss: {train_total_loss:.7f} Vali Loss: {validation_loss:.7f}",
+                flush=True,
+            )
+            print(f">>>>>>> TypeFusion-CATCH v2 | Train Components: {component_text}", flush=True)
             if validation_loss < best_loss:
                 best_loss = validation_loss
                 best_state = self._clone_state(self.model.state_dict())

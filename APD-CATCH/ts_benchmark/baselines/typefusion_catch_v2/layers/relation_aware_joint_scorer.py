@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import itertools
-from typing import Dict, Sequence, Union
+from typing import Dict, Optional, Sequence, Union
 
 import torch
 from torch import Tensor, nn
@@ -47,26 +47,44 @@ class RelationAwareJointScorer(nn.Module):
             raise ValueError("tokens must have shape [B,T,4,joint_dim]")
         return tokens
 
-    def forward(self, tokens: Union[Tensor, Sequence[Tensor]], evidence_logits: Tensor) -> Dict[str, Tensor]:
+    def forward(
+        self,
+        tokens: Union[Tensor, Sequence[Tensor]],
+        evidence_logits: Tensor,
+        branch_valid_mask: Optional[Tensor] = None,
+    ) -> Dict[str, Tensor]:
         tokens = self._stack_tokens(tokens)
         batch, time, _, dim = tokens.shape
         if evidence_logits.shape != (batch, time, 4):
             raise ValueError("evidence_logits must have shape [B,T,4]")
+        if branch_valid_mask is None:
+            branch_valid_mask = torch.ones(batch, time, 4, dtype=torch.bool, device=tokens.device)
+        if branch_valid_mask.shape != (batch, time, 4) or branch_valid_mask.dtype != torch.bool:
+            raise ValueError("branch_valid_mask must have shape [B,T,4] and dtype bool")
         branch_logits = torch.stack([head(tokens[:, :, index]).squeeze(-1) for index, head in enumerate(self.branch_heads)], dim=-1)
-        sufficient_inputs = branch_logits
-        if time:
-            # Evolution has no valid history at t=0.  Exclude only that branch
-            # from the sufficient normality path at the first point.
-            sufficient_inputs = branch_logits.clone()
-            sufficient_inputs[:, 0, 1] = torch.finfo(branch_logits.dtype).min
+        dtype_min = torch.finfo(branch_logits.dtype).min
+        sufficient_inputs = branch_logits.masked_fill(~branch_valid_mask, dtype_min)
         sufficient = self.sufficient_temperature * torch.logsumexp(sufficient_inputs / self.sufficient_temperature, dim=-1)
+        branch_relation_tokens = tokens + self.evidence_projection(evidence_logits.unsqueeze(-1))
+        branch_relation_tokens = branch_relation_tokens * branch_valid_mask.unsqueeze(-1).to(tokens.dtype)
         relation_tokens = []
+        pair_valid = []
         for index, (left_index, right_index) in enumerate(itertools.combinations(range(4), 2)):
-            left, right = tokens[:, :, left_index], tokens[:, :, right_index]
-            relation_tokens.append(self.pair_mlps[index](torch.cat((left, right, (left - right).abs(), left * right), dim=-1)))
-        all_tokens = torch.cat((tokens + self.evidence_projection(evidence_logits.unsqueeze(-1)), torch.stack(relation_tokens, dim=2)), dim=2)
-        encoded = self.relation_transformer(all_tokens.reshape(batch * time, 10, dim)).reshape(batch, time, 10, dim)
-        summary = encoded.mean(dim=2)
+            left, right = branch_relation_tokens[:, :, left_index], branch_relation_tokens[:, :, right_index]
+            valid = branch_valid_mask[:, :, left_index] & branch_valid_mask[:, :, right_index]
+            token = self.pair_mlps[index](torch.cat((left, right, (left - right).abs(), left * right), dim=-1))
+            relation_tokens.append(token * valid.unsqueeze(-1).to(token.dtype))
+            pair_valid.append(valid)
+        pair_valid_mask = torch.stack(pair_valid, dim=2)
+        relation_tokens_tensor = torch.stack(relation_tokens, dim=2)
+        all_tokens = torch.cat((branch_relation_tokens, relation_tokens_tensor), dim=2)
+        relation_token_valid_mask = torch.cat((branch_valid_mask, pair_valid_mask), dim=2)
+        encoded = self.relation_transformer(
+            all_tokens.reshape(batch * time, 10, dim),
+            src_key_padding_mask=~relation_token_valid_mask.reshape(batch * time, 10),
+        ).reshape(batch, time, 10, dim)
+        valid_weights = relation_token_valid_mask.unsqueeze(-1).to(encoded.dtype)
+        summary = (encoded * valid_weights).sum(dim=2) / valid_weights.sum(dim=2).clamp_min(1.0)
         temporal = self.temporal_depthwise(summary.transpose(1, 2))
         temporal = self.temporal_pointwise(temporal).transpose(1, 2)
         temporal = F.gelu(self.temporal_norm(temporal))
@@ -79,7 +97,10 @@ class RelationAwareJointScorer(nn.Module):
             "sufficient_logit": sufficient,
             "sufficient_branch_logits": sufficient_inputs,
             "branch_logits": branch_logits,
+            "branch_valid_mask": branch_valid_mask,
             "relation_delta_raw": relation_delta_raw,
             "relation_delta": relation_delta,
-            "relation_tokens": torch.stack(relation_tokens, dim=2),
+            "relation_tokens": relation_tokens_tensor,
+            "pair_valid_mask": pair_valid_mask,
+            "relation_token_valid_mask": relation_token_valid_mask,
         }

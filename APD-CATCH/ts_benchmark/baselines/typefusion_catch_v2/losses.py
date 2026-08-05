@@ -22,13 +22,29 @@ def _masked_mean(values: Tensor, mask: Tensor) -> Tensor:
     return (values * weights).sum() / weights.sum().clamp_min(1.0)
 
 
+def _branch_valid_mask(branches: Mapping[str, object], reference: Tensor) -> Tensor:
+    masks = []
+    for name in ("state", "evolution", "pattern", "relation"):
+        branch = branches[name]
+        valid = branch.get("valid_mask") if isinstance(branch, Mapping) else None
+        if valid is None:
+            valid = torch.ones_like(reference, dtype=torch.bool)
+        masks.append(valid.to(device=reference.device, dtype=torch.bool))
+    return torch.stack(masks, dim=1)
+
+
 def compute_losses(clean: Mapping[str, object], intervention: Optional[Mapping[str, object]], config: TypeFusionCATCHV2Config) -> Dict[str, Tensor]:
     branches = clean["branches"]
     task = sum(branch["task_loss"] for branch in branches.values())
-    clean_evidence = torch.stack([
-        F.binary_cross_entropy_with_logits(branch["evidence_logit"], torch.zeros_like(branch["evidence_logit"]))
-        for branch in branches.values()
-    ]).mean()
+    clean_valid = clean.get("branch_valid_mask")
+    if clean_valid is None:
+        clean_valid = _branch_valid_mask(branches, clean["joint_logit"])
+    clean_evidence_terms = []
+    for index, name in enumerate(("state", "evolution", "pattern", "relation")):
+        logits = branches[name]["evidence_logit"]
+        loss_map = F.binary_cross_entropy_with_logits(logits, torch.zeros_like(logits), reduction="none")
+        clean_evidence_terms.append(_masked_mean(loss_map, clean_valid[:, :, index]))
+    clean_evidence = torch.stack(clean_evidence_terms).mean()
     clean_score = clean["joint_score"].mean()
     target_positive = clean["joint_logit"].new_zeros(())
     responsibility = clean["joint_logit"].new_zeros(())
@@ -41,28 +57,35 @@ def compute_losses(clean: Mapping[str, object], intervention: Optional[Mapping[s
         masks = intervention["type_masks"].to(clean["joint_logit"].device).float().amax(dim=-1)
         union = intervention["union_mask"].to(clean["joint_logit"].device).float()
         int_branches = intervention["branches"]
+        branch_valid_mask = intervention.get("branch_valid_mask")
+        if branch_valid_mask is None:
+            branch_valid_mask = _branch_valid_mask(int_branches, clean["joint_logit"])
+        else:
+            branch_valid_mask = branch_valid_mask.to(device=clean["joint_logit"].device, dtype=torch.bool)
         logits = torch.stack([int_branches[name]["evidence_logit"] for name in ("state", "evolution", "pattern", "relation")], dim=1)
         positive_terms = []
         responses = torch.sigmoid(logits)
         for index in range(4):
             selected = targets[:, index] > 0.5
             if selected.any():
-                positive_terms.append(F.binary_cross_entropy_with_logits(logits[:, index][selected], masks[:, index][selected]))
+                loss_map = F.binary_cross_entropy_with_logits(logits[:, index], masks[:, index], reduction="none")
+                effective_valid = branch_valid_mask[:, :, index] & selected.unsqueeze(1)
+                positive_terms.append(_masked_mean(loss_map, effective_valid))
         if positive_terms:
             target_positive = torch.stack(positive_terms).mean()
         relation_terms = []
         relation_valid = []
         for index in range(4):
             target_i = targets[:, index] > 0.5
-            target_mask = masks[:, index]
-            target_count = target_mask.sum(dim=1).clamp_min(1.0)
-            target_response = (responses[:, index] * target_mask).sum(dim=1) / target_count
             for other in range(4):
                 # A compound's two active types are both targets and therefore
                 # never form a responsibility comparison against each other.
                 target_other = targets[:, other] > 0.5
-                valid_pair = target_i & ~target_other & (target_mask.sum(dim=1) > 0)
-                other_response = (responses[:, other] * target_mask).sum(dim=1) / target_count
+                effective_region = masks[:, index] * branch_valid_mask[:, :, index].to(masks.dtype) * branch_valid_mask[:, :, other].to(masks.dtype)
+                target_count = effective_region.sum(dim=1).clamp_min(1.0)
+                target_response = (responses[:, index] * effective_region).sum(dim=1) / target_count
+                valid_pair = target_i & ~target_other & (effective_region.sum(dim=1) > 0)
+                other_response = (responses[:, other] * effective_region).sum(dim=1) / target_count
                 relation_terms.append(F.relu(config.responsibility_margin - target_response + other_response))
                 relation_valid.append(valid_pair)
         if relation_terms:

@@ -54,6 +54,13 @@ class PatternRepairTests(unittest.TestCase):
         output = branch(torch.randn(2, config.seq_len, config.c_in), frontend=DifferentLengthFrontend())
         self.assertEqual(output["prediction"].shape[:2], (2, config.seq_len))
 
+    def test_frequency_debug_flag_reflects_frontend(self):
+        config = tiny_config()
+        branch = PatternNormalityBranch(config)
+        x = torch.randn(2, config.seq_len, config.c_in)
+        self.assertFalse(bool(branch(x, frontend=None)["masked_frequency_used"]))
+        self.assertTrue(bool(branch(x, frontend=SharedRepresentationFrontend(config))["masked_frequency_used"]))
+
 
 class InterventionAndValidationTests(unittest.TestCase):
     def test_donor_never_self_for_batch_two_and_three(self):
@@ -105,6 +112,22 @@ class StateLossEvolutionTests(unittest.TestCase):
         self.assertTrue(torch.all((dense_output["prototype_assignment"] > 0).sum(dim=-1) == 4))
         self.assertFalse(torch.allclose(sparse_output["raw_error"], dense_output["raw_error"]))
 
+    def test_dense_usage_assignment_regularizes_unselected_prototypes(self):
+        config = tiny_config(state_topk=1)
+        branch = StateNormalityBranch(config)
+        output = branch(torch.randn(2, config.seq_len, config.d_model))
+        usage_assignment = output["prototype_usage_assignment"]
+        self.assertTrue(torch.all(usage_assignment > 0))
+        self.assertTrue(torch.allclose(usage_assignment.sum(dim=-1), torch.ones_like(usage_assignment.sum(dim=-1))))
+        formal_assignment = output["prototype_assignment"]
+        selected = formal_assignment.sum(dim=(0, 1)) > 0
+        self.assertTrue(torch.any(~selected))
+        branch.zero_grad(set_to_none=True)
+        output["prototype_usage_loss"].backward()
+        unselected_grad = branch.prototypes.grad[~selected]
+        self.assertTrue(torch.isfinite(unselected_grad).all())
+        self.assertGreater(float(unselected_grad.abs().sum()), 0.0)
+
     def _loss_inputs(self, config, batch=2, time=4):
         zero = torch.zeros(())
         branches = {name: {"task_loss": zero, "evidence_logit": torch.zeros(batch, time)} for name in ("state", "evolution", "pattern", "relation")}
@@ -153,8 +176,64 @@ class StateLossEvolutionTests(unittest.TestCase):
         self.assertFalse(bool(output["valid_mask"][:, 0].any()))
         self.assertTrue(torch.equal(output["z"][:, 0], torch.zeros_like(output["z"][:, 0])))
         scorer = RelationAwareJointScorer(config)
-        scored = scorer(torch.randn(2, config.seq_len, 4, config.joint_dim), torch.randn(2, config.seq_len, 4))
+        valid = torch.ones(2, config.seq_len, 4, dtype=torch.bool)
+        valid[:, 0, 1] = False
+        scored = scorer(torch.randn(2, config.seq_len, 4, config.joint_dim), torch.randn(2, config.seq_len, 4), valid)
         self.assertTrue(torch.equal(scored["sufficient_branch_logits"][:, 0, 1], torch.full((2,), torch.finfo(torch.float32).min)))
+
+    def test_invalid_evolution_is_masked_from_all_scorer_paths(self):
+        config = tiny_config()
+        scorer = RelationAwareJointScorer(config)
+        tokens = torch.randn(1, config.seq_len, 4, config.joint_dim)
+        logits = torch.randn(1, config.seq_len, 4)
+        valid = torch.ones(1, config.seq_len, 4, dtype=torch.bool)
+        valid[:, 0, 1] = False
+        reference = scorer(tokens, logits, valid)
+        changed_tokens = tokens.clone()
+        changed_logits = logits.clone()
+        changed_tokens[:, 0, 1] += 1000.0
+        changed_logits[:, 0, 1] += 1000.0
+        changed = scorer(changed_tokens, changed_logits, valid)
+        self.assertTrue(torch.allclose(reference["joint_logit"][:, 0], changed["joint_logit"][:, 0], atol=1e-6, rtol=1e-6))
+        self.assertTrue(torch.all(~reference["relation_token_valid_mask"][:, 0, (4, 7, 8)]))
+        self.assertTrue(torch.equal(reference["branch_valid_mask"], valid))
+        self.assertEqual(tuple(reference["relation_token_valid_mask"].shape), (1, config.seq_len, 10))
+        changed_valid = scorer(tokens, logits, valid)
+        changed_valid_tokens = tokens.clone()
+        changed_valid_tokens[:, 1, 1] += 100.0
+        changed_valid_result = scorer(changed_valid_tokens, logits, valid)
+        self.assertFalse(torch.allclose(changed_valid["joint_logit"][:, 1], changed_valid_result["joint_logit"][:, 1]))
+
+    def test_clean_evidence_ignores_invalid_evolution_t0(self):
+        config = tiny_config(lambda_task=0.0, lambda_evidence=1.0, lambda_responsibility=0.0, lambda_score=0.0, lambda_score_rank=0.0, lambda_clean_score=0.0, lambda_synergy=0.0)
+        time = config.seq_len
+        branches = {name: {"task_loss": torch.zeros(()), "evidence_logit": torch.zeros(1, time)} for name in ("state", "evolution", "pattern", "relation")}
+        branches["evolution"]["valid_mask"] = torch.ones(1, time, dtype=torch.bool)
+        branches["evolution"]["valid_mask"][:, 0] = False
+        clean = {"branches": branches, "joint_logit": torch.zeros(1, time), "joint_score": torch.zeros(1, time), "branch_valid_mask": torch.stack((torch.ones(1, time, dtype=torch.bool), branches["evolution"]["valid_mask"], torch.ones(1, time, dtype=torch.bool), torch.ones(1, time, dtype=torch.bool)), dim=2)}
+        first = compute_losses(clean, None, config)["clean_evidence"]
+        branches["evolution"]["evidence_logit"][:, 0] = 10000.0
+        second = compute_losses(clean, None, config)["clean_evidence"]
+        self.assertTrue(torch.equal(first, second))
+
+    def test_intervention_evidence_ignores_invalid_evolution_t0(self):
+        config = tiny_config(lambda_task=0.0, lambda_evidence=1.0, lambda_responsibility=0.0, lambda_score=0.0, lambda_score_rank=0.0, lambda_clean_score=0.0, lambda_synergy=0.0)
+        clean, intervention = self._loss_inputs(config)
+        time = clean["joint_logit"].size(1)
+        valid_evolution = torch.ones(2, time, dtype=torch.bool)
+        valid_evolution[:, 0] = False
+        branch_valid = torch.ones(2, time, 4, dtype=torch.bool)
+        branch_valid[:, :, 1] = valid_evolution
+        intervention["branch_valid_mask"] = branch_valid
+        intervention["type_targets"][:] = 0
+        intervention["type_targets"][0, 1] = 1
+        intervention["type_masks"][:] = False
+        intervention["type_masks"][0, 1, :, 0] = True
+        intervention["union_mask"][:] = True
+        first = compute_losses(clean, intervention, config)["target_positive"]
+        intervention["branches"]["evolution"]["evidence_logit"][0, 0] = 10000.0
+        second = compute_losses(clean, intervention, config)["target_positive"]
+        self.assertTrue(torch.equal(first, second))
 
     def test_relation_checkpoint_on_off_forward_and_gradient_equivalent(self):
         on = RelationNormalityBranch(tiny_config(use_activation_checkpoint=True))

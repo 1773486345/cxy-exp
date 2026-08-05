@@ -36,17 +36,20 @@ class StateNormalityBranch(nn.Module):
     def forward(self, h_time: Tensor) -> Dict[str, Tensor]:
         state_hidden = self.state_projection(h_time)
         distances = (state_hidden.unsqueeze(2) - self.prototypes.view(1, 1, self.memory_size, self.branch_dim)).pow(2).mean(dim=-1)
-        # Keep only the configured sparse normal prototypes.  Scatter restores
-        # the full memory axis, so prototype context, raw error, and usage all
-        # use the same differentiable top-k assignment.
+        # Formal state matching remains sparse top-k: only this assignment is
+        # allowed to affect context, raw error, and the returned state token.
         top_values, top_indices = torch.topk(-distances, self.topk, dim=-1)
         top_weights = torch.softmax(top_values / self.temperature, dim=-1)
-        assignment = torch.zeros_like(distances).scatter(-1, top_indices, top_weights)
-        prototype_context = torch.einsum("btm,md->btd", assignment, self.prototypes)
-        raw_error = (assignment * distances).sum(dim=-1)
+        sparse_assignment = torch.zeros_like(distances).scatter(-1, top_indices, top_weights)
+        prototype_context = torch.einsum("btm,md->btd", sparse_assignment, self.prototypes)
+        raw_error = (sparse_assignment * distances).sum(dim=-1)
         z = self.z_projection(torch.cat((state_hidden, prototype_context, state_hidden - prototype_context), dim=-1))
         evidence_logit = self.evidence_head(z).squeeze(-1) + raw_error
-        usage = assignment.mean(dim=(0, 1))
+        # Usage is deliberately dense and is never used to construct the
+        # formal normal prototype context.  This gives every memory slot a
+        # regularization gradient without weakening top-k state matching.
+        usage_assignment = torch.softmax(-distances / self.temperature, dim=-1)
+        usage = usage_assignment.mean(dim=(0, 1))
         usage_loss = (usage - 1.0 / self.memory_size).pow(2).mean()
         compactness = raw_error.mean()
         commitment = F.mse_loss(state_hidden, prototype_context.detach())
@@ -57,6 +60,8 @@ class StateNormalityBranch(nn.Module):
             "evidence": F.softplus(evidence_logit),
             "task_loss": compactness + commitment + self.usage_weight * usage_loss,
             "prototype_usage_loss": usage_loss,
-            "prototype_assignment": assignment,
+            "prototype_assignment": sparse_assignment,
+            "prototype_usage_assignment": usage_assignment,
+            "prototype_usage": usage,
             "prototype_indices": top_indices,
         }

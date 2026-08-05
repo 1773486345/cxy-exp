@@ -43,14 +43,17 @@ used to predict its own target patch.
 
 ## Four Normality Tests
 
-State consumes `h_time`, computes differentiable soft prototype assignments,
-prototype context, weighted distance, compactness, commitment, and usage
-regularization. Usage is `assignment.mean(dim=(batch,time))`, so prototype
-usage has gradient.
+State consumes `h_time` and performs formal sparse top-k prototype matching:
+top-k selection, within-top-k softmax, sparse context, and sparse raw error.
+The separate prototype usage regularizer uses dense full-softmax assignment
+only to prevent dead prototypes; it never changes the formal state context or
+error.
 
 Evolution consumes only StandardScaler-space `x`. It right-shifts the input and
 uses causal depthwise/pointwise blocks with LayerNorm. Prediction at t reads
-`x[:t]`; t=0 raw error, evidence, and task contribution are zero.
+`x[:t]`; t=0 is marked invalid and is excluded by branch validity from the
+EvidenceAdapter, sufficient path, pairwise path, relation Transformer summary,
+and evidence loss.
 
 Pattern performs even-mask and odd-mask completion with non-overlapping time
 patches (`stride=patch_size`). Target token content is replaced by a learned
@@ -102,6 +105,10 @@ correction is `2.0 * tanh(relation_delta_raw)`.
 The only formal score is:
 
 `joint_score = softplus(joint_logit)`
+
+No independent context module or reconstruction decoder is added. CUDA smoke
+checks use random tensors only and are structural checks, not performance
+experiments.
 
 The adapter returns `scores, scores` after the existing window-to-point
 expansion. Branch errors, sufficient logits, relation deltas, thresholds,

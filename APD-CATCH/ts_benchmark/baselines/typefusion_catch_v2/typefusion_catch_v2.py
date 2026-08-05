@@ -47,10 +47,27 @@ class TypeFusionCATCHV2Model(nn.Module):
             "pattern": self.pattern_branch(x, frontend=self.shared_frontend),
             "relation": self.relation_branch(x),
         }
+        all_valid = torch.ones(x.size(0), x.size(1), dtype=torch.bool, device=x.device)
+        branch_valid_mask = torch.stack((
+            all_valid,
+            branches["evolution"]["valid_mask"],
+            all_valid,
+            all_valid,
+        ), dim=2)
         tokens = self.evidence_adapters(branches.values())
+        # Adapter linear biases and type embeddings must not recreate an
+        # invalid Evolution token at t=0.
+        tokens = tokens * branch_valid_mask.unsqueeze(-1).to(tokens.dtype)
         evidence_logits = torch.stack([branches[name]["evidence_logit"] for name in self.branch_names], dim=2)
-        scored = self.joint_scorer(tokens, evidence_logits)
-        return {"shared": shared, "branches": branches, "tokens": tokens, "evidence_logits": evidence_logits, **scored}
+        scored = self.joint_scorer(tokens, evidence_logits, branch_valid_mask=branch_valid_mask)
+        return {
+            "shared": shared,
+            "branches": branches,
+            "tokens": tokens,
+            "evidence_logits": evidence_logits,
+            "branch_valid_mask": branch_valid_mask,
+            **scored,
+        }
 
     def forward(self, x: Tensor, intervention: Optional[Mapping[str, Tensor]] = None, compute_loss: bool = True) -> Dict[str, object]:
         if x.ndim != 3 or x.size(1) != self.config.seq_len or x.size(2) != self.config.c_in:
@@ -61,6 +78,7 @@ class TypeFusionCATCHV2Model(nn.Module):
             "branches": clean["branches"],
             "tokens": clean["tokens"],
             "evidence_logits": clean["evidence_logits"],
+            "branch_valid_mask": clean["branch_valid_mask"],
             "joint_logit": clean["joint_logit"],
             "joint_score": clean["joint_score"],
             "total_score": clean["joint_score"],
