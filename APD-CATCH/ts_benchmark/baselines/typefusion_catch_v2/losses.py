@@ -30,7 +30,7 @@ def _branch_valid_mask(branches: Mapping[str, object], reference: Tensor) -> Ten
         if valid is None:
             valid = torch.ones_like(reference, dtype=torch.bool)
         masks.append(valid.to(device=reference.device, dtype=torch.bool))
-    return torch.stack(masks, dim=1)
+    return torch.stack(masks, dim=2)
 
 
 def compute_losses(clean: Mapping[str, object], intervention: Optional[Mapping[str, object]], config: TypeFusionCATCHV2Config) -> Dict[str, Tensor]:

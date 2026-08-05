@@ -15,7 +15,7 @@ from ..layers.relation_aware_joint_scorer import RelationAwareJointScorer
 from ..layers.relation_normality_branch import RelationNormalityBranch
 from ..layers.shared_representation_frontend import SharedRepresentationFrontend
 from ..layers.state_normality_branch import StateNormalityBranch
-from ..losses import compute_losses
+from ..losses import _branch_valid_mask, compute_losses
 
 
 class PatternRepairTests(unittest.TestCase):
@@ -115,7 +115,11 @@ class StateLossEvolutionTests(unittest.TestCase):
     def test_dense_usage_assignment_regularizes_unselected_prototypes(self):
         config = tiny_config(state_topk=1)
         branch = StateNormalityBranch(config)
-        output = branch(torch.randn(2, config.seq_len, config.d_model))
+        with torch.no_grad():
+            branch.state_projection[0].weight.zero_()
+            branch.state_projection[0].bias.zero_()
+            branch.prototypes.copy_(torch.arange(config.state_memory_size, dtype=torch.float32).view(-1, 1).expand(-1, config.branch_dim) * 0.5)
+        output = branch(torch.zeros(2, config.seq_len, config.d_model))
         usage_assignment = output["prototype_usage_assignment"]
         self.assertTrue(torch.all(usage_assignment > 0))
         self.assertTrue(torch.allclose(usage_assignment.sum(dim=-1), torch.ones_like(usage_assignment.sum(dim=-1))))
@@ -127,6 +131,32 @@ class StateLossEvolutionTests(unittest.TestCase):
         unselected_grad = branch.prototypes.grad[~selected]
         self.assertTrue(torch.isfinite(unselected_grad).all())
         self.assertGreater(float(unselected_grad.abs().sum()), 0.0)
+
+    def test_branch_valid_fallback_b2_t7_clean_and_intervention(self):
+        config = tiny_config(lambda_task=0.0, lambda_evidence=1.0, lambda_responsibility=0.0, lambda_score=0.0, lambda_score_rank=0.0, lambda_clean_score=0.0, lambda_synergy=0.0)
+        batch, time = 2, 7
+        branches = {name: {"task_loss": torch.zeros(()), "evidence_logit": torch.zeros(batch, time)} for name in ("state", "evolution", "pattern", "relation")}
+        evolution_valid = torch.ones(batch, time, dtype=torch.bool)
+        evolution_valid[:, 0] = False
+        branches["evolution"]["valid_mask"] = evolution_valid
+        fallback = _branch_valid_mask(branches, torch.zeros(batch, time))
+        self.assertEqual(tuple(fallback.shape), (batch, time, 4))
+        clean = {"branches": branches, "joint_logit": torch.zeros(batch, time), "joint_score": torch.zeros(batch, time)}
+        clean_losses = compute_losses(clean, None, config)
+        self.assertTrue(torch.isfinite(clean_losses["clean_evidence"]))
+        intervention_branches = {name: dict(value) for name, value in branches.items()}
+        type_masks = torch.zeros(batch, 4, time, 1, dtype=torch.bool)
+        type_masks[:, 0, :, 0] = True
+        intervention = {
+            "branches": intervention_branches,
+            "joint_logit": torch.zeros(batch, time),
+            "type_targets": torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]], dtype=torch.float32),
+            "type_masks": type_masks,
+            "union_mask": type_masks[:, 0, :, 0],
+        }
+        intervention_losses = compute_losses(clean, intervention, config)
+        self.assertTrue(torch.isfinite(intervention_losses["target_positive"]))
+        self.assertTrue(torch.equal(fallback[:, 0, 1], torch.zeros(batch, dtype=torch.bool)))
 
     def _loss_inputs(self, config, batch=2, time=4):
         zero = torch.zeros(())

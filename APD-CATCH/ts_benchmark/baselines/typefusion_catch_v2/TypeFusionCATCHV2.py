@@ -132,7 +132,8 @@ class TypeFusionCATCHV2:
             }
             component_text = " ".join(f"{name}={value:.7f}" for name, value in component_means.items())
             print(
-                f">>>>>>> TypeFusion-CATCH v2 | Epoch: {epoch + 1} | Steps: {self.optimizer_steps} | "
+                f">>>>>>> TypeFusion-CATCH v2 | Epoch: {epoch + 1} | Epoch Steps: {len(epoch_total_losses)} | "
+                f"Optimizer Steps: {self.optimizer_steps} | "
                 f"Train Loss: {train_total_loss:.7f} Vali Loss: {validation_loss:.7f}",
                 flush=True,
             )
