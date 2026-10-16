@@ -1,0 +1,28 @@
+{
+  "data_config": {
+    "feature_dict": {
+      "if_univariate": false,
+      "if_trend": null,
+      "has_timestamp": null,
+      "if_season": null
+    },
+    "data_set_name": "large_detect"
+  },
+  "model_config": {
+    "models": [],
+    "recommend_model_hyper_params": {}
+  },
+  "evaluation_config": {
+    "metrics": ["auc_roc", "auc_pr"],
+    "strategy_args": {
+      "strategy_name": "mnrf_valid_detect",
+      "seed": 2021
+    }
+  },
+  "report_config": {
+    "aggregate_type": "mean",
+    "report_metrics": ["auc_roc", "auc_pr"],
+    "fill_type": "mean_value",
+    "null_value_threshold": "1.0"
+  }
+}

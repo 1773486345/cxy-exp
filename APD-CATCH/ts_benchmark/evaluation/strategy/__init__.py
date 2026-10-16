@@ -3,6 +3,7 @@ from ts_benchmark.evaluation.strategy.fixed_forecast import FixedForecast
 from ts_benchmark.evaluation.strategy.anomaly_detect import FixedDetectScore, FixedDetectLabel, UnFixedDetectScore, \
     UnFixedDetectLabel, AllDetectScore, AllDetectLabel
 from ts_benchmark.evaluation.strategy.rolling_forecast import RollingForecast
+from ts_benchmark.evaluation.strategy.mnrf_valid_detect import MNRFValidDetect
 
 STRATEGY = {
     "fixed_forecast": FixedForecast,
@@ -13,4 +14,5 @@ STRATEGY = {
     "unfixed_detect_label": UnFixedDetectLabel,
     "all_detect_score": AllDetectScore,
     "all_detect_label": AllDetectLabel,
+    "mnrf_valid_detect": MNRFValidDetect,
 }

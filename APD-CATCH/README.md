@@ -1,8 +1,8 @@
 # APD-CATCH
 
-This working tree is rebuilt from the original CATCH project. It contains no
-custom research model. The added tasks retain original CATCH commands and the
-standard upstream baseline commands that were run for those tasks.
+This working tree retains the original CATCH project and its task commands.
+The independent MNRF-Lite V2 implementation is documented below and does not
+modify the original CATCH baseline or its scripts.
 
 ## Data
 
@@ -50,3 +50,26 @@ configuration reported AUC-ROC only, so no AUC-PR value is stored for these
 runs.
 
 Future model development starts from this clean CATCH baseline.
+
+## MNRF-Lite V2
+
+An independent two-stage detector is available as `MNRFLiteV2`. It keeps the
+official train/test boundary, performs purged train/validation/calibration
+splits, and evaluates only complete stride-one windows. For example, from the
+repository root:
+
+```bash
+bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+```
+
+Use `GPU_ID=cpu` for CPU, or override `BATCH_SIZE`, `SEED`, stage epoch limits,
+cache chunk size, and `MNRF_SAVE_PATH` explicitly. Check task availability and
+the exact plan without training:
+
+```bash
+python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect
+```
+
+See [MNRF_LITE_V2.md](MNRF_LITE_V2.md) for the model, training, scoring
+protocol, and supported tasks. No performance conclusion is implied by the
+implementation or smoke tests.
