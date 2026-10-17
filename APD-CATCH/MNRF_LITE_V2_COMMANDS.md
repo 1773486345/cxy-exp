@@ -101,6 +101,15 @@ Resume an existing epoch-boundary run explicitly:
 GPU_ID=0 MNRF_RESUME_FROM=score/MNRF-Lite-V2/PSM/run-<UTC>-<PID> conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
 ```
 
+For a non-default layout, repeat every resolved branch dimension and the
+original training settings when resuming. Replace the run path and values with
+those recorded in that run's `run_metadata.json`; do not omit dimensions and
+fall back to default `8/8/8`:
+
+```bash
+GPU_ID=0 EVOLUTION_DIM=3 PATTERN_DIM=5 RELATION_DIM=7 BATCH_SIZE=<ORIGINAL_BATCH_SIZE> STAGE1_EPOCHS=<ORIGINAL_STAGE1_EPOCHS> STAGE2_EPOCHS=<ORIGINAL_STAGE2_EPOCHS> SEED=<ORIGINAL_SEED> MNRF_RESUME_FROM=score/MNRF-Lite-V2/PSM/run-<UTC>-<PID> conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+```
+
 Resume validates task/configuration, variables, raw values, canonical time
 indices, the frozen cadence, phase state, and stage-2 encoder/statistics/cache
 binding before restoring optimizer and RNG/sampler state. Completed phases are

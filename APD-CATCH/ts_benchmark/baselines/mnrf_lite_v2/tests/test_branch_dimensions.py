@@ -102,5 +102,5 @@ def test_layout_rejects_nonpositive_and_inconsistent_serialization():
         FeatureLayout(0, 8, 8)
     broken = FeatureLayout(3, 5, 7).to_dict()
     broken["F"] += 1
-    with pytest.raises(ValueError, match="layout is inconsistent"):
+    with pytest.raises(ValueError, match="F mismatch|layout is inconsistent"):
         FeatureLayout.from_dict(broken)

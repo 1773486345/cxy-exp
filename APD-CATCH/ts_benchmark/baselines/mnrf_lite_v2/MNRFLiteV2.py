@@ -14,6 +14,7 @@ import pandas as pd
 import torch
 
 from .config import MNRFConfig
+from .layout import require_layout
 from .training import EndWindowDataset, MNRFTrainer, _validate_resume_state, purged_ranges, seed_all
 from .windows import (TimeIndex, continuous_segments, infer_expected_interval,
                       intersect_segments, normalize_time_index)
@@ -187,8 +188,36 @@ class MNRFLiteV2:
             identity_document = json.loads(identity_path.read_text())
             if identity_document.get("resume_id") != resume_id:
                 raise ValueError("resume rejected: model config, variables, data length, or temporal indices differ")
+            require_layout(identity_document.get("feature_layout"), self.config.layout,
+                           str(identity_path))
+            try:
+                identity_config = MNRFConfig.from_kwargs(**identity_document["config"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"resume rejected: invalid saved configuration in {identity_path}: {error}") from error
+            require_layout(identity_config.layout, self.config.layout, f"{identity_path} config")
             if identity_document.get("task_name", "") != self.config.task_name:
                 raise ValueError("resume rejected: task name differs")
+            manifest_path = self.output_dir / "cache_manifest.json"
+            if manifest_path.is_file():
+                manifest_document = json.loads(manifest_path.read_text())
+                require_layout(manifest_document.get("feature_layout"), self.config.layout,
+                               str(manifest_path))
+            binding_path = self.output_dir / "stage2_binding.json"
+            checkpoint_path = self.output_dir / "checkpoints" / "stage2_latest.pt"
+            if checkpoint_path.is_file():
+                if not binding_path.is_file():
+                    raise ValueError("resume rejected: stage-2 binding is missing")
+                binding_document = json.loads(binding_path.read_text())
+                require_layout(binding_document.get("feature_layout"), self.config.layout,
+                               str(binding_path))
+                stage2_state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+                checkpoint_binding = stage2_state.get("stage2_identity")
+                if not isinstance(checkpoint_binding, dict):
+                    raise ValueError("resume rejected: stage2_latest.pt has no stage-2 identity")
+                require_layout(checkpoint_binding.get("feature_layout"), self.config.layout,
+                               f"{checkpoint_path} stage2_identity")
+                if checkpoint_binding != binding_document:
+                    raise ValueError("resume rejected: stage-2 checkpoint identity differs from stage2_binding.json")
             for stage, checkpoint_name in (("stage1", "stage1_latest.pt"), ("stage2", "stage2_latest.pt")):
                 checkpoint_path = self.output_dir / "checkpoints" / checkpoint_name
                 if checkpoint_path.is_file():
@@ -542,6 +571,7 @@ class MNRFLiteV2:
             raise ValueError("deployment architecture version is missing or incompatible")
         requested_device = self.config.device
         config = MNRFConfig.from_kwargs(**artifact["config"])
+        require_layout(artifact.get("feature_layout"), config.layout, f"{path} deployment")
         if artifact.get("feature_layout") != config.layout.to_dict():
             raise ValueError("deployment feature layout is missing or incompatible")
         config.device = requested_device

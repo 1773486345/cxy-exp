@@ -37,6 +37,20 @@ four alternating attention-conditioned affine coupling blocks. Mechanisms A
 and B are `(S,R)` and `(E,P)`, updated B/A/B/A. The only detector score is the
 four-fixed-noise mean Gaussian-base joint NLL with log-determinant correction.
 
+Persisted `feature_layout` uses a strict schema: all of `order`, `dimensions`
+(`S/E/P/R`), `slices`, and `F` are required and checked against the canonical
+concatenation. `S` must be the integer 1; learned dimensions and slice endpoints
+must be actual integers (booleans, strings, and fractional values are rejected).
+Run identity, metadata, cache manifest, stage-2 binding, checkpoints, and
+deployment configuration must resolve to the same complete layout. The
+read-only run validator also checks actual cache `[N,D,F]`, feature statistics
+`[D,F]`, input/calibration vectors `[D]`, and fixed scoring noise `[4,F]` in
+the saved arrays/tensors. It does not repair declarations to fit artifacts.
+Older artifacts with a missing or unprovable layout are rejected for loading
+or resume and retained unchanged; they are never silently assigned the default
+layout. This tightens validation without changing the current architecture
+version, so valid current artifacts remain compatible.
+
 ## Training
 
 One task command performs the complete protocol. The dataset's official

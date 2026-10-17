@@ -43,7 +43,12 @@ class MNRFConfig:
     @classmethod
     def from_kwargs(cls, **kwargs: Any) -> "MNRFConfig":
         kwargs = dict(kwargs)
-        saved_layout = {key: kwargs.pop(key) for key in ("order", "dimensions", "slices", "F") if key in kwargs}
+        layout_fields = {"order", "dimensions", "slices", "F"}
+        present_layout_fields = layout_fields.intersection(kwargs)
+        if present_layout_fields and present_layout_fields != layout_fields:
+            missing = layout_fields.difference(present_layout_fields)
+            raise ValueError(f"feature layout metadata must be complete; missing fields: {sorted(missing)}")
+        saved_layout = {key: kwargs.pop(key) for key in layout_fields if key in kwargs}
         known = {field.name for field in fields(cls)}
         unknown = set(kwargs) - known
         if unknown:

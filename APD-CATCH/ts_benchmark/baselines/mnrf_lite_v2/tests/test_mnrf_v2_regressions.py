@@ -299,6 +299,67 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
     run_benchmark._register_mnrf_report_references(report_args, report_config)
     from scripts.validate_mnrf_lite_v2_run import main as validate_run
     validate_run(str(run_dir), "toy")
+    from ts_benchmark.baselines.mnrf_lite_v2.layout import FeatureLayout
+
+    def reject_tampered_artifact(path, mutate, message):
+        original = path.read_bytes()
+        try:
+            mutate()
+            with pytest.raises(SystemExit, match=message):
+                validate_run(str(run_dir), "toy")
+        finally:
+            path.write_bytes(original)
+        assert path.read_bytes() == original
+
+    layout_paths = [
+        run_dir / "cache_manifest.json", run_dir / "run_identity.json",
+        run_dir / "run_metadata.json", run_dir / "stage2_binding.json",
+    ]
+    for layout_path in layout_paths:
+        original_payload = json.loads(layout_path.read_text())
+        saved_bytes = layout_path.read_bytes()
+
+        def change_layout(path=layout_path, payload=original_payload):
+            broken = copy.deepcopy(payload)
+            if path.name == "cache_manifest.json":
+                broken["feature_layout"] = FeatureLayout(8, 8, 8).to_dict()  # same schema, F=25
+            elif path.name == "run_metadata.json":
+                broken["feature_layout"] = FeatureLayout(5, 3, 7).to_dict()  # same F, different branch split
+            else:
+                broken["feature_layout"]["dimensions"]["S"] = 2
+            path.write_text(json.dumps(broken), encoding="utf-8")
+
+        reject_tampered_artifact(layout_path, change_layout, "feature_layout|layout|dimensions")
+        assert layout_path.read_bytes() == saved_bytes
+
+    deployment_path = run_dir / "deployment.pt"
+    deployment_bytes = deployment_path.read_bytes()
+    deployment_payload = torch.load(deployment_path, map_location="cpu", weights_only=False)
+    deployment_payload["feature_layout"]["dimensions"]["S"] = 2
+    bad_deployment = tmp_path / "bad-layout-deployment.pt"
+    torch.save(deployment_payload, bad_deployment)
+    with pytest.raises(ValueError, match="deployment.*feature_layout|dimension S"):
+        MNRFLiteV2(device="cpu").load_checkpoint(bad_deployment)
+    assert deployment_path.read_bytes() == deployment_bytes
+
+    def change_deployment_config():
+        broken = torch.load(deployment_path, map_location="cpu", weights_only=False)
+        broken["config"]["evolution_dim"] = 5
+        broken["config"]["pattern_dim"] = 3
+        torch.save(broken, deployment_path)
+
+    reject_tampered_artifact(deployment_path, change_deployment_config,
+                             "deployment.pt config layout differs")
+
+    checkpoint_path = run_dir / "checkpoints" / "stage2_latest.pt"
+    checkpoint_bytes = checkpoint_path.read_bytes()
+    checkpoint_payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    checkpoint_payload["stage2_identity"]["feature_layout"]["dimensions"]["S"] = 2
+    def save_bad_checkpoint():
+        torch.save(checkpoint_payload, checkpoint_path)
+    reject_tampered_artifact(checkpoint_path, save_bad_checkpoint, "stage2_latest.pt.*feature_layout|dimension S")
+    assert checkpoint_path.read_bytes() == checkpoint_bytes
+
     deployed = MNRFLiteV2(device="cpu").load_checkpoint(run_dir / "deployment.pt")
     assert deployed.config.layout.to_dict()["F"] == 16
     scored_again = deployed.score_with_metadata(frame.iloc[train_n:].drop(columns="label"), index_offset=train_n)
