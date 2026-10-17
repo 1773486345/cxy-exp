@@ -41,8 +41,8 @@ class FixedFeatureStandardizer:
         self.floor = float(floor)
 
     def fit(self, features: np.ndarray, chunk_size: int = 512) -> "FixedFeatureStandardizer":
-        if features.ndim != 3 or features.shape[1] < 2 or features.shape[2] != 25:
-            raise ValueError("features must have shape [windows, D>=2, 25]")
+        if features.ndim != 3 or features.shape[1] < 2 or features.shape[2] < 1:
+            raise ValueError("features must have shape [windows, D>=2, F>=1]")
         count = 0
         total = np.zeros(features.shape[1:], dtype=np.float64)
         total_sq = np.zeros_like(total)

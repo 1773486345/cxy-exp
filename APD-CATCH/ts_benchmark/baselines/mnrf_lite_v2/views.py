@@ -5,6 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from .backbone import PointEmbedding, CausalResidualTCN
+from .layout import FeatureLayout
 
 
 def mask_pattern_values(local, local_valid, starts, span=8):
@@ -20,19 +21,22 @@ def mask_pattern_values(local, local_valid, starts, span=8):
 
 
 class FourViewEncoder(nn.Module):
-    def __init__(self, variables: int, width: int = 32, view_dim: int = 8):
+    def __init__(self, variables: int, width: int = 32, view_dim: int = 8,
+                 layout: FeatureLayout = None):
         super().__init__()
+        layout = layout or FeatureLayout(view_dim, view_dim, view_dim)
         self.variables = variables
         self.width = width
+        self.layout = layout
         self.view_dim = view_dim
         self.point = PointEmbedding(variables, width)
         self.tcn = CausalResidualTCN(width)
-        self.evolution_adapter = nn.Linear(width, view_dim)
-        self.pattern_adapter = nn.Linear(3 * width, view_dim)
+        self.evolution_adapter = nn.Linear(width, layout.evolution_dim)
+        self.pattern_adapter = nn.Linear(3 * width, layout.pattern_dim)
         self.relation_source = nn.Linear(3 * width, width)
         self.relation_query = nn.Linear(width, width)
         self.relation_attention = nn.MultiheadAttention(width, 2, dropout=0.0, batch_first=True)
-        self.relation_adapter = nn.Linear(width, view_dim)
+        self.relation_adapter = nn.Linear(width, layout.relation_dim)
 
     def _encode_sequence(self, values, valid=None):
         return self.tcn(self.point(values, valid))
@@ -73,8 +77,8 @@ class FourViewEncoder(nn.Module):
         source = F.gelu(self.relation_source(source_input))
         relation = self._relation_from_source(source, identity)
         features = torch.cat((state, evolution, pattern, relation), dim=-1)
-        if features.size(-1) != 25:
-            raise RuntimeError("four-view layout must be [S,E,P,R] with 25 coordinates")
+        if features.size(-1) != self.layout.total_dim:
+            raise RuntimeError(f"four-view layout expected F={self.layout.total_dim}, got {features.size(-1)}")
         return {
             "features": features,
             "state": state,

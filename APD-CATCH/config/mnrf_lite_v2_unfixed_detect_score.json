@@ -10,7 +10,12 @@
   },
   "model_config": {
     "models": [],
-    "recommend_model_hyper_params": {}
+    "recommend_model_hyper_params": {
+      "view_dim": 8,
+      "evolution_dim": 8,
+      "pattern_dim": 8,
+      "relation_dim": 8
+    }
   },
   "evaluation_config": {
     "metrics": ["auc_roc", "auc_pr"],

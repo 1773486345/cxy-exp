@@ -227,7 +227,9 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
         external_root / "EXTERNAL_DETECT_META.csv", index=False
     )
     from scripts.mnrf_lite_v2_preflight import preflight
-    preflight_result = preflight("toy", "external_detect", seq_len=32, root=tmp_path)
+    preflight_result = preflight("toy", "external_detect", seq_len=32,
+                                 evolution_dim=3, pattern_dim=5, relation_dim=7,
+                                 root=tmp_path)
     assert preflight_result["test_window_count"] == 2
     from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
     external_reader = LocalExternalAnomalyDetectDataSource.__new__(LocalExternalAnomalyDetectDataSource)
@@ -250,6 +252,7 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
     run_dir.parent.mkdir()
     model_config = dict(seq_len=32, batch_size=512, encoding_batch_size=0,
                         cache_chunk_size=256, stage1_epochs=1, stage2_epochs=1,
+                        evolution_dim=3, pattern_dim=5, relation_dim=7,
                         patience=1, device="cpu", task_name="toy.csv", output_dir=str(run_dir))
     model_factory = lambda: MNRFLiteV2(**model_config)
     evaluator = Evaluator([{"name": "auc_roc"}, {"name": "auc_pr"}])
@@ -263,6 +266,9 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
         assert np.all(aligned["time_indices"] == aligned["local_time_indices"] + train_n)
         assert len(aligned["scores"]) == len(aligned["predictions"]) == 2
     assert metric_payload["status"] == "complete"
+    manifest_layout = json.loads((run_dir / "cache_manifest.json").read_text())["feature_layout"]
+    assert manifest_layout["F"] == 16
+    assert manifest_layout["dimensions"] == {"S": 1, "E": 3, "P": 5, "R": 7}
 
     record_path = tmp_path / "integration_record.csv"
     report_config = {
@@ -294,6 +300,7 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
     from scripts.validate_mnrf_lite_v2_run import main as validate_run
     validate_run(str(run_dir), "toy")
     deployed = MNRFLiteV2(device="cpu").load_checkpoint(run_dir / "deployment.pt")
+    assert deployed.config.layout.to_dict()["F"] == 16
     scored_again = deployed.score_with_metadata(frame.iloc[train_n:].drop(columns="label"), index_offset=train_n)
     with np.load(aligned_path) as aligned:
         assert np.allclose(scored_again["scores"], aligned["scores"], atol=1e-6, rtol=1e-6)
@@ -344,6 +351,10 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
     assert [torch.load(path, map_location="cpu", weights_only=False)["completed_steps"]
             for path in checkpoint_paths] == checkpoint_steps
     monkeypatch.setattr(MNRFTrainer, "extract_cache", original_extract)
+
+    mismatched = MNRFLiteV2(**{**resumed_config, "relation_dim": 8})
+    with pytest.raises(ValueError, match="model config, variables, data length, or temporal indices differ"):
+        mismatched.detect_fit(frame.drop(columns="label").iloc[:train_n])
 
     record["auc_roc"], record["auc_pr"] = resumed_result[0], resumed_result[1]
     pd.DataFrame([record]).to_csv(record_path, index=False)

@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from .config import MNRFConfig
 from .fusion import AlternatingAffineFlow
+from .layout import FeatureLayout
 from .normalization import FixedFeatureStandardizer, FixedInputStandardizer
 from .views import FourViewEncoder
 from .windows import intersect_segments, window_endpoints
@@ -68,13 +69,21 @@ class EndWindowDataset(Dataset):
 
 
 class GaussianAuxiliaryDecoder(nn.Module):
-    def __init__(self, variables, hidden=32, view_dim=8):
+    def __init__(self, variables, hidden=32, layout=None):
         super().__init__()
+        self.layout = layout or FeatureLayout()
+        dims = (self.layout.evolution_dim, self.layout.pattern_dim, self.layout.relation_dim)
+        self.input_adapters = nn.ModuleList(
+            nn.Identity() if dim == 8 else nn.Linear(dim, 8) for dim in dims
+        )
         self.task_identity = nn.Parameter(torch.randn(3, 8) * 0.02)
-        self.decoder = nn.Sequential(nn.Linear(view_dim + 8 + hidden + 1, 64), nn.GELU(), nn.Linear(64, 2))
+        self.decoder = nn.Sequential(nn.Linear(8 + 8 + hidden + 1, 64), nn.GELU(), nn.Linear(64, 2))
 
     def loss(self, z, target, relative_position, variable_identity, task_index):
         batch, variables, width = z.shape
+        if task_index not in (0, 1, 2):
+            raise ValueError("task_index must identify evolution, pattern, or relation")
+        z = self.input_adapters[task_index](z)
         if target.ndim == 2:
             target = target.unsqueeze(-1)
         if relative_position.ndim == 2:
@@ -100,9 +109,11 @@ class MNRFTrainer:
         self.config = config
         self.variables = variables
         self.device = device
-        self.encoder = FourViewEncoder(variables, config.hidden_dim, config.view_dim).to(device)
-        self.auxiliary = GaussianAuxiliaryDecoder(variables).to(device)
-        self.flow = AlternatingAffineFlow(config.hidden_dim).to(device)
+        self.layout = config.layout
+        self.feature_dim = self.layout.total_dim
+        self.encoder = FourViewEncoder(variables, config.hidden_dim, config.view_dim, self.layout).to(device)
+        self.auxiliary = GaussianAuxiliaryDecoder(variables, config.hidden_dim, self.layout).to(device)
+        self.flow = AlternatingAffineFlow(config.hidden_dim, self.layout).to(device)
         self.fixed_input = FixedInputStandardizer()
         self.fixed_feature = FixedFeatureStandardizer(config.feature_std_floor)
         self.noise_vectors = None
@@ -279,7 +290,7 @@ class MNRFTrainer:
         os.replace(tmp_indices, indices_path)
         mmap = np.lib.format.open_memmap(
             temporary_path, mode="w+", dtype=np.float32,
-            shape=(count, self.variables, 25),
+            shape=(count, self.variables, self.feature_dim),
         )
         self.encoder.eval()
         cursor = 0
@@ -309,7 +320,7 @@ class MNRFTrainer:
     def _fixed_noises(self):
         if self.noise_vectors is None:
             generator = torch.Generator(device="cpu").manual_seed(self.config.noise_seed)
-            self.noise_vectors = torch.randn(4, 25, generator=generator) * self.config.train_noise_std
+            self.noise_vectors = torch.randn(4, self.feature_dim, generator=generator) * self.config.train_noise_std
             self.noise_vectors = self.noise_vectors.to(self.device)
         return self.noise_vectors
 
@@ -393,7 +404,7 @@ class MNRFTrainer:
                 selection = indices[start:start + self.config.batch_size]
                 feature = torch.as_tensor(self._normalized_feature_batch(train_features, selection), device=self.device)
                 noise = torch.randn(
-                    feature.size(0), 1, 25, device=self.device
+                    feature.size(0), 1, self.feature_dim, device=self.device
                 ) * self.config.train_noise_std
                 optimizer.zero_grad(set_to_none=True)
                 result = self.flow(feature + noise, self.encoder.point.variable_identity)
@@ -494,7 +505,7 @@ class MNRFTrainer:
     def fingerprint(self):
         digest = hashlib.sha256()
         digest.update(json.dumps({"variables": self.variables, "hidden_dim": self.config.hidden_dim,
-                                 "view_dim": self.config.view_dim, "seq_len": self.config.seq_len,
+                                 "layout": self.layout.to_dict(), "seq_len": self.config.seq_len,
                                  "pattern_len": self.config.pattern_len}, sort_keys=True).encode())
         for key, value in sorted(self.encoder.state_dict().items()):
             digest.update(key.encode("utf-8"))

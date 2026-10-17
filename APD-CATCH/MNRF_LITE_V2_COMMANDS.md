@@ -72,6 +72,24 @@ First single-task command, prepared but not launched here:
 GPU_ID=0 conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
 ```
 
+The common-dimension and unequal-dimension variants use the same task data,
+split, windowing, and evaluation protocol, but each creates a separate run and
+independently fits its feature statistics and calibration threshold. Compare
+their evaluation metrics; absolute NLL values are not directly comparable
+because the Gaussian normalization constant changes with total feature size.
+
+Common learned dimension `E/P/R=4` (`S/E/P/R=1/4/4/4`):
+
+```bash
+GPU_ID=0 EVOLUTION_DIM=4 PATTERN_DIM=4 RELATION_DIM=4 conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+```
+
+Unequal odd dimensions `S/E/P/R=1/3/5/7`:
+
+```bash
+GPU_ID=0 EVOLUTION_DIM=3 PATTERN_DIM=5 RELATION_DIM=7 conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+```
+
 On the shared GPU, manually set `BATCH_SIZE` and optionally a smaller
 `ENCODING_BATCH_SIZE`; encoding never exceeds training batch. `CACHE_CHUNK_SIZE`
 controls disk I/O grouping only. Use `GPU_ID=cpu` only when explicitly choosing

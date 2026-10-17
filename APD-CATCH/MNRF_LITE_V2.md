@@ -14,7 +14,21 @@ layers per block, left-only padding, per-time LayerNorm, and GELU. Layers have
 no residual; each block computes `x + layer2(layer1(x))` once. Its receptive
 field is 253 points.
 
-The four views are `[S,E,P,R]` with 25 features per variable: current state,
+The four views are `[S,E,P,R]` with a canonical layout shared by encoding,
+fusion, feature statistics, caches and deployment. `S` is always the single
+standardized current-value coordinate; `E`, `P`, and `R` are learned outputs
+with independent positive dimensions. Defaults are `1/8/8/8` (`F=25`). The
+legacy `view_dim=8` shorthand supplies each learned dimension unless that
+dimension is explicitly set; explicit `evolution_dim`, `pattern_dim`, or
+`relation_dim` overrides the shorthand independently. The resolved dimensions,
+order, slices, and `F` are serialized. `hidden_dim` and attention width remain
+32; output dimensions may be odd. S stays one-dimensional because it is the
+direct observation coordinate and there is no S representation pretraining;
+learned/multidimensional S is a separate method variant. For example,
+`view_dim=4` means `1/4/4/4`, while `evolution_dim=3, pattern_dim=5,
+relation_dim=7` means `1/3/5/7`.
+
+The four views are `[S,E,P,R]`: current state,
 causal evolution, 32-point pattern, and cross-variable relation. E excludes the
 target value. R constructs source tokens independently and uses identity-only
 target queries; a batched MHA call blocks the diagonal, so no target's own
@@ -61,7 +75,13 @@ sets the fixed 0.995 score quantile. Test labels do not select parameters or the
 threshold. Default settings: seed 2021, `L=128`, pattern length 32, width 32,
 view dimension 8, train batch 64, stage limits 50/30 epochs, patience 5,
 AdamW lr 0.001, weight decay 0.0001, feature scale floor 0.05, and training
-noise std 0.01.
+noise std 0.01. The learned branch dimensions can also be increased, for
+example to `1/8/16/32`. Each dimension configuration is a distinct architecture:
+it requires new caches, feature statistics, flow training, and independent
+threshold calibration. Recovery and deployment loading reject incompatible
+layouts before use. Compare detection metrics across layouts under identical
+data and evaluation protocols; do not compare raw NLL absolute values because
+the Gaussian base-density constant depends on `F`.
 
 ## Memory, Progress, and Recovery
 
@@ -91,7 +111,7 @@ rebuilt only with that same encoder/statistics and accepted only if their
 content hashes match the saved binding. Incompatible or legacy checkpoints are
 rejected without overwriting run artifacts; start a new run for a new protocol.
 The time/cache/deployment schema is versioned as
-`mnrf-lite-v2-tcn6b-2l-r1-segment-v3-timefreeze`. The deployment package
+`mnrf-lite-v2-tcn6b-2l-r1-segment-v3-timefreeze-layout-v1`. The deployment package
 excludes the auxiliary head. Caches, statistics, manifests, aligned scores,
 metrics and the benchmark report remain inside the run directory. The run
 validator fails on missing, malformed, cross-task, or inconsistent artifacts.

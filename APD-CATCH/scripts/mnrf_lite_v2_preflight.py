@@ -32,7 +32,9 @@ def _load_task_read_only(source, folder, task):
 
 
 def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
-              encoding_batch_size: int = 0, root: Path = ROOT):
+              encoding_batch_size: int = 0, evolution_dim: int = None,
+              pattern_dim: int = None, relation_dim: int = None, view_dim: int = 8,
+              root: Path = ROOT):
     if source == "large_detect":
         folder = root / "dataset/anomaly_detect"
         meta_path = folder / "DETECT_META.csv"
@@ -65,7 +67,9 @@ def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
         raise ValueError(f"task={task} source={source}: invalid train_lens metadata: {error}") from error
     try:
         config = MNRFConfig.from_kwargs(batch_size=batch_size, seq_len=seq_len,
-                                        encoding_batch_size=encoding_batch_size)
+                                        encoding_batch_size=encoding_batch_size,
+                                        view_dim=view_dim, evolution_dim=evolution_dim,
+                                        pattern_dim=pattern_dim, relation_dim=relation_dim)
     except Exception as error:
         raise ValueError(f"task={task} source={source}: invalid MNRF preflight configuration: {error}") from error
     frame = _load_task_read_only(source, folder, task)
@@ -114,6 +118,7 @@ def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
     print(f"task={task}.csv source={source} data={data_path}")
     print(f"variables={len(actual_variables)} seq_len={config.seq_len} batch_size={config.batch_size} "
           f"encoding_batch_size={min(config.batch_size, config.encoding_batch_size or config.batch_size)}")
+    print(f"branch_dimensions={config.layout.dimensions} F={config.layout.total_dim} layout={config.layout.to_dict()}")
     print(f"external_train_boundary={train_length} total_rows={len(frame)}")
     print(f"train_segments={train_segments} continuity={train_audit} frozen_expected_interval_ns={expected_interval}")
     print(f"test_segments={test_segments} continuity={test_audit}")
@@ -138,8 +143,13 @@ def main():
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--seq-len", type=int, default=128)
     parser.add_argument("--encoding-batch-size", type=int, default=0)
+    parser.add_argument("--view-dim", type=int, default=8, help="legacy common E/P/R dimension shorthand")
+    parser.add_argument("--evolution-dim", type=int)
+    parser.add_argument("--pattern-dim", type=int)
+    parser.add_argument("--relation-dim", type=int)
     args = parser.parse_args()
-    preflight(args.task, args.data_source, args.batch_size, args.seq_len, args.encoding_batch_size)
+    preflight(args.task, args.data_source, args.batch_size, args.seq_len, args.encoding_batch_size,
+              args.evolution_dim, args.pattern_dim, args.relation_dim, args.view_dim)
 
 
 if __name__ == "__main__":

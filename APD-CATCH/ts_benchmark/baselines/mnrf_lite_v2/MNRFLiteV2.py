@@ -18,7 +18,7 @@ from .training import EndWindowDataset, MNRFTrainer, _validate_resume_state, pur
 from .windows import (TimeIndex, continuous_segments, infer_expected_interval,
                       intersect_segments, normalize_time_index)
 
-ARCHITECTURE_VERSION = "mnrf-lite-v2-tcn6b-2l-r1-segment-v3-timefreeze"
+ARCHITECTURE_VERSION = "mnrf-lite-v2-tcn6b-2l-r1-segment-v3-timefreeze-layout-v1"
 TIME_PROTOCOL_VERSION = "train-frozen-cadence-v1"
 
 
@@ -176,6 +176,7 @@ class MNRFLiteV2:
             "input_sha256": _hash_array(values),
             "config": {key: value for key, value in self.config.to_dict().items()
                        if key not in {"output_dir", "resume_from", "device"}},
+            "feature_layout": self.config.layout.to_dict(),
         }
         resume_id = hashlib.sha256(json.dumps(resume_payload, sort_keys=True).encode()).hexdigest()
         self._make_output_dirs()
@@ -208,6 +209,7 @@ class MNRFLiteV2:
         if not self.config.resume_from:
             _atomic_json(self.output_dir / "cache_manifest.json", {"status": "building", "resume_id": resume_id,
                                                                     "architecture_version": ARCHITECTURE_VERSION,
+                                                                    "feature_layout": self.config.layout.to_dict(),
                                                                     "temporal_rule": temporal_rule})
         self.trainer = MNRFTrainer(self.config, len(columns), self.device)
         self.temporal_rule = temporal_rule
@@ -365,6 +367,7 @@ class MNRFLiteV2:
         encoder_fingerprint = self.trainer.fingerprint()
         stage2_identity = {
             "schema_version": 2,
+            "feature_layout": self.config.layout.to_dict(),
             "resume_id": resume_id,
             "encoder_fingerprint": encoder_fingerprint,
             "input_mean_sha256": _hash_array(self.trainer.fixed_input.mean_),
@@ -440,6 +443,7 @@ class MNRFLiteV2:
             "stage2_seconds": stage2_seconds,
             "total_fit_seconds": time.perf_counter() - fit_start,
             "feature_fingerprint": self.trainer.fingerprint(),
+            "feature_layout": self.config.layout.to_dict(),
             "parameter_counts": {
                 "encoder": sum(parameter.numel() for parameter in self.trainer.encoder.parameters()),
                 "fusion": sum(parameter.numel() for parameter in self.trainer.flow.parameters()),
@@ -464,11 +468,13 @@ class MNRFLiteV2:
         _atomic_json(self.output_dir / "cache_manifest.json", {
                 "status": "complete",
                 "architecture_version": ARCHITECTURE_VERSION,
-                "cache_schema_version": 2,
+                "cache_schema_version": 3,
                 "variable_names": list(self.variable_names),
                 "architecture_config": {key: self.config.to_dict()[key] for key in (
-                    "seq_len", "pattern_len", "hidden_dim", "view_dim"
+                    "seq_len", "pattern_len", "hidden_dim", "view_dim", "evolution_dim",
+                    "pattern_dim", "relation_dim"
                 )},
+                "feature_layout": self.config.layout.to_dict(),
                 "input_mean": self.trainer.fixed_input.mean_.tolist(),
                 "input_scale": self.trainer.fixed_input.scale_.tolist(),
                 "encoder_fingerprint": self.training_metadata["feature_fingerprint"],
@@ -508,6 +514,7 @@ class MNRFLiteV2:
             json.dump(self.training_metadata, handle, indent=2, default=str)
         artifact = {
             "architecture_version": ARCHITECTURE_VERSION,
+            "feature_layout": self.config.layout.to_dict(),
             "time_protocol_version": TIME_PROTOCOL_VERSION,
             "config": self.config.to_dict(),
             "variable_names": self.variable_names,
@@ -535,6 +542,8 @@ class MNRFLiteV2:
             raise ValueError("deployment architecture version is missing or incompatible")
         requested_device = self.config.device
         config = MNRFConfig.from_kwargs(**artifact["config"])
+        if artifact.get("feature_layout") != config.layout.to_dict():
+            raise ValueError("deployment feature layout is missing or incompatible")
         config.device = requested_device
         if self.config.output_dir:
             config.output_dir = self.config.output_dir
