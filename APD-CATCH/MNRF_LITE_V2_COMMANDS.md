@@ -89,3 +89,19 @@ binding before restoring optimizer and RNG/sampler state. Completed phases are
 skipped and their selected best checkpoint is reloaded. Equivalent aware times
 share a UTC-nanosecond identity. Incompatible old-schema runs are preserved and
 rejected; start a new independent run instead of reusing them.
+
+If all bound feature caches are intact, resume reuses them and repairs a missing
+cache-hash entry in the final manifest without training or re-encoding. Missing
+caches may be rebuilt only if their content and window-index hashes reproduce
+the frozen stage-2 binding. The benchmark report reference is atomically
+updated only after the report is written; older reports stay in the run folder.
+The validator requires the report for the current invocation and verifies its
+hash and metrics against aligned scores. After a crash between report writing
+and reference update, rerun the same command with the same run path and
+configuration; the unreferenced report is retained but not accepted.
+
+Time inputs at ns/us/ms/s precision are normalized to nanoseconds. Entity and
+session boundary columns are frozen from training and must be present with the
+same field set during scoring. Legacy runs are reused only when their saved
+data identity, temporal protocol, and cache binding prove compatibility; no
+time-unit conversion is guessed from old field names.

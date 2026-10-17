@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import warnings
+from pathlib import Path
 from typing import Dict, NoReturn
 
 import torch
@@ -13,9 +14,90 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 from ts_benchmark.utils.get_file_name import get_unique_file_suffix
 from ts_benchmark.report import report
-from ts_benchmark.common.constant import CONFIG_PATH, THIRD_PARTY_PATH
+from ts_benchmark.common.constant import CONFIG_PATH, ROOT_PATH, THIRD_PARTY_PATH
 from ts_benchmark.pipeline import pipeline
 from ts_benchmark.utils.parallel import ParallelBackend
+
+
+def _register_mnrf_report_references(args, report_config):
+    """Bind a successfully written report to each MNRF run, without affecting other models."""
+    import hashlib
+    import pandas as pd
+    import tempfile
+
+    report_path = Path(ROOT_PATH) / "result" / (report_config.get("save_path") or "") / report_config["leaderboard_file_name"]
+    if not report_path.is_file():
+        raise FileNotFoundError(f"benchmark report was not written: {report_path}")
+    report = pd.read_csv(report_path)
+    for model_name, encoded_params in zip(args.model_name, args.model_hyper_params):
+        if model_name != "mnrf_lite_v2.MNRFLiteV2" or not encoded_params:
+            continue
+        params = json.loads(encoded_params)
+        run_dir = Path(params["output_dir"])
+        if report_path.resolve().parent != run_dir.resolve():
+            raise ValueError(
+                f"MNRF report must be saved inside its run directory: report={report_path}, run={run_dir}"
+            )
+        context_path = run_dir / "benchmark_context.json"
+        if not context_path.is_file():
+            raise ValueError(f"MNRF benchmark context is missing: {context_path}")
+        context = json.loads(context_path.read_text(encoding="utf-8"))
+        task = context.get("task")
+        if (context.get("run_id") != run_dir.name or not task
+                or params.get("task_name") != task):
+            raise ValueError(f"MNRF benchmark context identity is invalid: {context_path}")
+        source_logs = report_config.get("log_files_list")
+        if isinstance(source_logs, pd.DataFrame):
+            source_records = source_logs
+        else:
+            source_records = pd.concat([pd.read_csv(path) for path in source_logs], ignore_index=True)
+        strategy_names = set()
+        for value in source_records.get("strategy_args", []):
+            try:
+                decoded = json.loads(value) if isinstance(value, str) else value
+            except (TypeError, ValueError):
+                decoded = value
+            strategy_names.add(decoded.get("strategy_name") if isinstance(decoded, dict) else str(decoded))
+        if ("file_name" not in source_records.columns
+                or set(source_records["file_name"].astype(str)) != {task}
+                or "model_name" not in source_records.columns
+                or set(source_records["model_name"].astype(str)) != {"MNRFLiteV2"}
+                or strategy_names != {"mnrf_valid_detect"}):
+            raise ValueError(f"MNRF benchmark records do not uniquely belong to task {task}")
+        model_columns = [column for column in report.columns if str(column).startswith("MNRFLiteV2;")]
+        if len(model_columns) != 1 or "metric_name" not in report:
+            raise ValueError(f"MNRF report has no unique model metric column: {report_path}")
+        metric_values = {}
+        task_column = "file_name" if "file_name" in report else None
+        selected = report if task_column is None else report.loc[report[task_column] == task]
+        for metric in ("auc_roc", "auc_pr"):
+            rows = selected.loc[selected.metric_name == metric]
+            if len(rows) != 1:
+                raise ValueError(f"MNRF report metric {metric} is missing or ambiguous for {task}")
+            metric_values[metric] = float(rows.iloc[0][model_columns[0]])
+        digest = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        reference = {
+            "schema_version": 1,
+            "task": task,
+            "model_name": "MNRFLiteV2",
+            "run_id": run_dir.name,
+            "benchmark_invocation_id": context["benchmark_invocation_id"],
+            "report_path": str(report_path.resolve()),
+            "report_sha256": digest,
+            "model_column": model_columns[0],
+            "metrics": metric_values,
+        }
+        destination = run_dir / "report_reference.json"
+        fd, temporary = tempfile.mkstemp(prefix=".report-reference-", dir=run_dir)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(reference, handle, indent=2, allow_nan=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
 
 sys.path.insert(0, THIRD_PARTY_PATH)
@@ -319,3 +401,5 @@ if __name__ == "__main__":
         leaderboard_file_name = "test_report" + filename
         report_config["leaderboard_file_name"] = leaderboard_file_name
     report(report_config, report_method=args.report_method)
+    if args.report_method == "csv":
+        _register_mnrf_report_references(args, report_config)

@@ -12,7 +12,7 @@ import torch
 
 from ts_benchmark.baselines.mnrf_lite_v2.backbone import CausalResidualTCN
 from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
-from ts_benchmark.baselines.mnrf_lite_v2.training import EndWindowDataset
+from ts_benchmark.baselines.mnrf_lite_v2.training import EndWindowDataset, MNRFTrainer
 from ts_benchmark.baselines.mnrf_lite_v2.views import FourViewEncoder, mask_pattern_values
 from ts_benchmark.baselines.mnrf_lite_v2.windows import continuous_segments, intersect_segments
 
@@ -204,6 +204,7 @@ def test_run_validator_rejects_missing_artifacts(tmp_path):
 
 
 def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, tmp_path):
+    import json
     from ts_benchmark.baselines.mnrf_lite_v2.config import MNRFConfig
     import ts_benchmark.evaluation.strategy.mnrf_valid_detect as strategy_module
     from ts_benchmark.evaluation.evaluator import Evaluator
@@ -257,6 +258,7 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
     metric_payload = __import__("json").loads(next((run_dir / "results").glob("*_metrics.json")).read_text())
     aligned_path = next((run_dir / "results").glob("*_aligned_scores.npz"))
     with np.load(aligned_path) as aligned:
+        scores_before_resume = aligned["scores"].copy()
         assert np.array_equal(aligned["local_time_indices"], np.array([31, 63]))
         assert np.all(aligned["time_indices"] == aligned["local_time_indices"] + train_n)
         assert len(aligned["scores"]) == len(aligned["predictions"]) == 2
@@ -270,19 +272,137 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
         "save_path": "run-integration",
         "leaderboard_file_name": "test_report_integration.csv",
     }
-    pd.DataFrame([{
-            "strategy_args": "mnrf_valid_detect", "model_name": "MNRFLiteV2",
-            "model_params": "tiny-cpu", "file_name": "toy.csv",
-            "auc_roc": result[0], "auc_pr": result[1],
-            "actual_data": "", "inference_data": "", "log_info": "",
-        }]).to_csv(record_path, index=False)
+    record = {
+        "strategy_args": json.dumps({"strategy_name": "mnrf_valid_detect"}), "model_name": "MNRFLiteV2",
+        "model_params": "tiny-cpu", "file_name": "toy.csv",
+        "auc_roc": result[0], "auc_pr": result[1],
+        "actual_data": "", "inference_data": "", "log_info": "",
+    }
+    pd.DataFrame([record]).to_csv(record_path, index=False)
     assert isinstance(report_config["log_files_list"], list)
     import ts_benchmark.report.report_csv as report_csv
     monkeypatch.setattr(report_csv, "ROOT_PATH", str(tmp_path))
+    import scripts.run_benchmark as run_benchmark
+    monkeypatch.setattr(run_benchmark, "ROOT_PATH", str(tmp_path))
     report(report_config)
+    from argparse import Namespace
+    report_args = Namespace(
+        model_name=["mnrf_lite_v2.MNRFLiteV2"],
+        model_hyper_params=[json.dumps(model_config)],
+    )
+    run_benchmark._register_mnrf_report_references(report_args, report_config)
     from scripts.validate_mnrf_lite_v2_run import main as validate_run
     validate_run(str(run_dir), "toy")
     deployed = MNRFLiteV2(device="cpu").load_checkpoint(run_dir / "deployment.pt")
     scored_again = deployed.score_with_metadata(frame.iloc[train_n:].drop(columns="label"), index_offset=train_n)
     with np.load(aligned_path) as aligned:
         assert np.allclose(scored_again["scores"], aligned["scores"], atol=1e-6, rtol=1e-6)
+
+    import hashlib
+    cache_paths = sorted((run_dir / "cache").glob("*_features.npy"))
+    cache_hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in cache_paths}
+    index_paths = sorted((run_dir / "cache").glob("*_window_end_indices.npy"))
+    index_hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in index_paths}
+    frozen_state_hashes = {
+        name: hashlib.sha256((run_dir / name).read_bytes()).hexdigest()
+        for name in ("normalization_state.npz", "feature_statistics.npz", "stage2_binding.json")
+    }
+    checkpoint_paths = [run_dir / "checkpoints" / "stage1_latest.pt",
+                        run_dir / "checkpoints" / "stage2_latest.pt"]
+    checkpoint_steps = [torch.load(path, map_location="cpu", weights_only=False)["completed_steps"]
+                        for path in checkpoint_paths]
+    manifest_path = run_dir / "cache_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["feature_cache_sha256"] = {}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    original_extract = MNRFTrainer.extract_cache
+
+    def fail_if_reencoded(*args, **kwargs):
+        raise AssertionError("complete bound feature cache must be reused on resume")
+
+    monkeypatch.setattr(MNRFTrainer, "extract_cache", fail_if_reencoded)
+    resumed_config = {**model_config, "resume_from": str(run_dir)}
+    resumed_factory = lambda: MNRFLiteV2(**resumed_config)
+    resumed_result = strategy.execute("toy.csv", resumed_factory)[0]
+    with pytest.raises(SystemExit, match="another task, model, run, or benchmark invocation"):
+        validate_run(str(run_dir), "toy")
+    new_payload = json.loads(next((run_dir / "results").glob("*_metrics.json")).read_text())
+    assert np.allclose(resumed_result[:2], result[:2], atol=1e-9, rtol=1e-9)
+    assert new_payload["status"] == "complete"
+    assert {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in cache_paths} == cache_hashes
+    assert {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in index_paths} == index_hashes
+    assert {
+        name: hashlib.sha256((run_dir / name).read_bytes()).hexdigest()
+        for name in frozen_state_hashes
+    } == frozen_state_hashes
+    with np.load(aligned_path) as aligned:
+        assert np.allclose(aligned["scores"], scores_before_resume, atol=1e-6, rtol=1e-6)
+    repaired_manifest = json.loads(manifest_path.read_text())
+    assert repaired_manifest["feature_cache_sha256"] == {
+        path.stem[:-len("_features")]: cache_hashes[path.name] for path in cache_paths
+    }
+    assert [torch.load(path, map_location="cpu", weights_only=False)["completed_steps"]
+            for path in checkpoint_paths] == checkpoint_steps
+    monkeypatch.setattr(MNRFTrainer, "extract_cache", original_extract)
+
+    record["auc_roc"], record["auc_pr"] = resumed_result[0], resumed_result[1]
+    pd.DataFrame([record]).to_csv(record_path, index=False)
+    report_config["leaderboard_file_name"] = "test_report_recovery.csv"
+    report(report_config)
+    run_benchmark._register_mnrf_report_references(report_args, report_config)
+    assert (run_dir / "test_report_integration.csv").is_file()
+    assert (run_dir / "test_report_recovery.csv").is_file()
+    validate_run(str(run_dir), "toy")
+
+    reference_path = run_dir / "report_reference.json"
+    good_reference = json.loads(reference_path.read_text())
+    reference_path.unlink()
+    with pytest.raises(SystemExit, match="reference is missing"):
+        validate_run(str(run_dir), "toy")
+    reference = dict(good_reference, report_path=str(run_dir / "missing.csv"))
+    reference_path.write_text(json.dumps(reference), encoding="utf-8")
+    with pytest.raises(SystemExit, match="leaderboard is missing"):
+        validate_run(str(run_dir), "toy")
+    report_path = Path(good_reference["report_path"])
+    original_report = report_path.read_bytes()
+    report_path.write_bytes(original_report + b"damaged")
+    reference_path.write_text(json.dumps(good_reference), encoding="utf-8")
+    with pytest.raises(SystemExit, match="damaged or changed"):
+        validate_run(str(run_dir), "toy")
+    report_path.write_bytes(original_report)
+    stale_metric_reference = dict(good_reference, metrics={**good_reference["metrics"], "auc_roc": 0.123})
+    reference_path.write_text(json.dumps(stale_metric_reference), encoding="utf-8")
+    with pytest.raises(SystemExit, match="differs from its registered value"):
+        validate_run(str(run_dir), "toy")
+    stale_invocation = dict(good_reference, benchmark_invocation_id="stale-invocation")
+    reference_path.write_text(json.dumps(stale_invocation), encoding="utf-8")
+    with pytest.raises(SystemExit, match="another task"):
+        validate_run(str(run_dir), "toy")
+    reference = dict(good_reference)
+    reference["task"] = "other.csv"
+    reference_path.write_text(json.dumps(reference), encoding="utf-8")
+    with pytest.raises(SystemExit, match="another task"):
+        validate_run(str(run_dir), "toy")
+
+
+def test_scoring_requires_frozen_boundary_columns_and_never_crosses_entities(tmp_path):
+    rng = np.random.default_rng(211)
+    n = 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)), columns=["a", "b"])
+    frame["entity_id"] = np.where(np.arange(n) < 215, "left", "right")
+    frame["session_id"] = np.where(np.arange(n) < 215, "session-left", "session-right")
+    model = MNRFLiteV2(seq_len=32, batch_size=64, stage1_epochs=1, stage2_epochs=1,
+                       patience=1, device="cpu", output_dir=str(tmp_path / "entity-run"))
+    model.detect_fit(frame)
+    score_data = pd.DataFrame(rng.normal(size=(64, 2)), columns=["a", "b"])
+    score_data["entity_id"] = ["first"] * 32 + ["second"] * 32
+    score_data["session_id"] = ["session-1"] * 32 + ["session-2"] * 32
+    scored = model.score_with_metadata(score_data)
+    assert scored["local_time_indices"].tolist() == [31, 63]
+    with pytest.raises(ValueError, match="boundary columns differ"):
+        model.score_with_metadata(score_data.drop(columns="entity_id"))
+    with pytest.raises(ValueError, match="unexpected"):
+        model.score_with_metadata(score_data.assign(scenario_id="added-after-fit"))
+    deployed = MNRFLiteV2(device="cpu").load_checkpoint(model.output_dir / "deployment.pt")
+    with pytest.raises(ValueError, match="boundary columns differ"):
+        deployed.score_with_metadata(score_data.drop(columns="entity_id"))

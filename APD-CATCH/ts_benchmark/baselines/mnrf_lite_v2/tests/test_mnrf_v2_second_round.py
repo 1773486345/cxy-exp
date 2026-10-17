@@ -125,6 +125,50 @@ def test_timezone_canonicalization_and_hash_are_offset_independent():
     assert _hash_array(normalize_time_index(gap_index)) == _hash_array(normalize_time_index(gap_index.tz_convert("Asia/Shanghai")))
 
 
+def test_datetime_coordinates_are_canonical_nanoseconds_across_resolutions():
+    base = pd.date_range("2025-01-01", periods=12, freq="s")
+    base_ns = base.to_numpy()
+    canonical = None
+    for unit in ("ns", "us", "ms", "s"):
+        represented = base_ns.astype(f"datetime64[{unit}]")
+        normalized = normalize_time_index(represented)
+        if canonical is None:
+            canonical = normalized
+        assert np.array_equal(normalized.values_ns, canonical.values_ns)
+        assert infer_expected_interval(normalized) == 1_000_000_000
+        assert _hash_array(normalized) == _hash_array(canonical)
+        assert _hash_array(represented) == _hash_array(base_ns)
+    aware_utc = base.tz_localize("UTC")
+    aware_local = aware_utc.tz_convert("Asia/Shanghai")
+    assert np.array_equal(normalize_time_index(aware_utc).values_ns,
+                          normalize_time_index(aware_local).values_ns)
+    naive_ns = normalize_time_index(base_ns.astype("datetime64[ns]"))
+    naive_seconds = normalize_time_index(base_ns.astype("datetime64[s]"))
+    assert np.array_equal(naive_ns.values_ns, naive_seconds.values_ns)
+    numpy_seconds = base.to_numpy().astype("datetime64[s]")
+    assert np.array_equal(normalize_time_index(numpy_seconds).values_ns, naive_ns.values_ns)
+
+
+def test_gap_and_multiple_entity_boundaries_have_same_indices_across_units():
+    base = pd.date_range("2025-01-01", periods=80, freq="s")
+    raw = base.to_numpy()
+    raw[40:] += np.timedelta64(30, "m")
+    index = pd.DatetimeIndex(raw)
+    normalized_ns = normalize_time_index(raw.astype("datetime64[ns]"))
+    normalized_seconds = normalize_time_index(raw.astype("datetime64[s]"))
+    boundaries = np.array(["a"] * 20 + ["b"] * 40 + ["c"] * 20)
+    segments_ns, _ = continuous_segments(normalized_ns, 80, expected_interval=1_000_000_000,
+                                         boundary_ids=boundaries)
+    segments_seconds, _ = continuous_segments(normalized_seconds, 80, expected_interval=1_000_000_000,
+                                              boundary_ids=boundaries)
+    endpoints_ns = window_endpoints(segments_ns, 8)
+    endpoints_seconds = window_endpoints(segments_seconds, 8)
+    assert segments_ns == segments_seconds
+    assert np.array_equal(endpoints_ns, endpoints_seconds)
+    assert 46 not in endpoints_ns
+    assert 47 in endpoints_ns
+
+
 def test_datetime_column_and_index_share_canonical_coordinates_and_bad_times_fail():
     column = MNRFLiteV2._time_index(pd.DataFrame({"timestamp": pd.date_range("2025-01-01", periods=5, freq="s")}))
     index = MNRFLiteV2._time_index(pd.DataFrame(index=pd.date_range("2025-01-01", periods=5, freq="s")))

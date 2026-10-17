@@ -133,18 +133,48 @@ def main(run_path: str, task: str) -> None:
         if payload.get(key) is None or not math.isfinite(float(payload[key])):
             raise SystemExit(f"Non-finite {key} in {result_files[0]}")
     reports = sorted(root.glob("test_report*.csv"))
-    if len(reports) != 1:
-        raise SystemExit(f"Expected one test_report CSV, found {len(reports)} in {root}")
-    report = pd.read_csv(reports[0])
-    model_columns = [column for column in report.columns if "MNRFLiteV2;" in str(column)]
-    if len(model_columns) != 1 or "metric_name" not in report.columns:
-        raise SystemExit("Leaderboard does not contain one MNRFLiteV2 result column")
+    reference_path = root / "report_reference.json"
+    if reference_path.is_file():
+        reference = json.loads(reference_path.read_text(encoding="utf-8"))
+        report_path = Path(reference.get("report_path", ""))
+        if (reference.get("task") != f"{task}.csv" or reference.get("model_name") != "MNRFLiteV2"
+                or reference.get("run_id") != root.name
+                or reference.get("benchmark_invocation_id") != context.get("benchmark_invocation_id")):
+            raise SystemExit("Current report reference belongs to another task, model, run, or benchmark invocation")
+        if not report_path.is_file():
+            raise SystemExit(f"Referenced leaderboard is missing: {report_path}")
+        if (report_path.resolve().parent != root.resolve()
+                or not report_path.name.startswith("test_report")
+                or report_path.suffix != ".csv"):
+            raise SystemExit("Referenced leaderboard is not a report artifact inside this run directory")
+        if _sha256_file(report_path) != reference.get("report_sha256"):
+            raise SystemExit(f"Referenced leaderboard is damaged or changed: {report_path}")
+        reports_for_run = [report_path]
+        model_columns = [reference.get("model_column")]
+    else:
+        # Compatibility for legacy runs that predate explicit report references.
+        # A unique report is the only unambiguous legacy case; never pick by mtime.
+        if context.get("benchmark_invocation_id"):
+            raise SystemExit("Current report reference is missing for this benchmark invocation")
+        if len(reports) != 1:
+            raise SystemExit(f"Legacy run has no report reference and {len(reports)} reports; current report is ambiguous")
+        reports_for_run = reports
+        model_columns = [column for column in pd.read_csv(reports[0], nrows=0).columns
+                         if "MNRFLiteV2;" in str(column)]
+    report_path = reports_for_run[0]
+    report = pd.read_csv(report_path)
+    if len(model_columns) != 1 or model_columns[0] not in report.columns or "metric_name" not in report.columns:
+        raise SystemExit("Leaderboard does not contain the referenced MNRFLiteV2 result column")
     for metric in ("auc_roc", "auc_pr"):
         rows = report.loc[report.metric_name == metric]
         if len(rows) != 1 or not math.isfinite(float(rows.iloc[0][model_columns[0]])):
-            raise SystemExit(f"Missing or non-finite {metric} in {reports[0]}")
+            raise SystemExit(f"Missing or non-finite {metric} in {report_path}")
         if payload[metric] is None or not math.isclose(float(rows.iloc[0][model_columns[0]]), float(payload[metric]), rel_tol=1e-9, abs_tol=1e-9):
             raise SystemExit(f"Leaderboard {metric} differs from aligned task metrics")
+        if reference_path.is_file() and not math.isclose(
+                float(reference.get("metrics", {}).get(metric, float("nan"))),
+                float(rows.iloc[0][model_columns[0]]), rel_tol=1e-9, abs_tol=1e-9):
+            raise SystemExit(f"Referenced report metric {metric} differs from its registered value")
     aligned_files = sorted((root / "results").glob("*_aligned_scores.npz"))
     if len(aligned_files) != 1:
         raise SystemExit(f"Expected one aligned score artifact, found {len(aligned_files)}")

@@ -7,6 +7,7 @@ import pickle
 import re
 import time
 import traceback
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -46,13 +47,15 @@ class MNRFValidDetect(UnFixedDetectScore):
         start = time.time()
         model.detect_fit(train_data, train_label)
         run_id = model.output_dir.name
-        (model.output_dir / "benchmark_context.json").write_text(json.dumps({
+        context = {
             "task": series_name,
             "run_id": run_id,
             "train_length": len(train_data),
             "test_length": len(test_data),
             "strategy_name": "mnrf_valid_detect",
-        }, indent=2), encoding="utf-8")
+            "benchmark_invocation_id": uuid.uuid4().hex,
+        }
+        _atomic_json(model.output_dir / "benchmark_context.json", context)
         fit_end = time.time()
         scored = model.score_with_metadata(test_data, index_offset=len(train_data))
         inference_end = time.time()
@@ -150,3 +153,13 @@ class MNRFValidDetect(UnFixedDetectScore):
             inference_pickle,
             log_info,
         ]]
+
+
+def _atomic_json(path, payload):
+    path = os.fspath(path)
+    temporary = f"{path}.tmp-{os.getpid()}"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, allow_nan=False)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)

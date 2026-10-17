@@ -22,7 +22,9 @@ def normalize_time_index(index, *, explicit_time=False):
     if isinstance(index, pd.DatetimeIndex):
         source_tz = str(index.tz) if index.tz is not None else None
         normalized = index.tz_convert("UTC") if index.tz is not None else index
-        values = normalized.asi8.astype(np.int64, copy=True)
+        # asi8 follows the DatetimeIndex storage unit (s/ms/us/ns). Persist a
+        # canonical nanosecond coordinate regardless of the input resolution.
+        values = normalized.to_numpy(dtype="datetime64[ns]").view("i8").copy()
         if np.any(values == np.iinfo(np.int64).min):
             raise ValueError("timestamps contain NaT values")
         return TimeIndex(values, "timestamp_utc_ns" if source_tz else "timestamp_naive_ns", source_tz)

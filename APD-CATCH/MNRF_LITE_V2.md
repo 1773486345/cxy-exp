@@ -45,6 +45,12 @@ sequence. The implementation never sorts, interpolates, or resamples. If only
 row indices exist, metadata records the row-order protocol and does not invent
 time information.
 
+DatetimeIndex, numpy datetime64 arrays, and explicit timestamp columns are
+canonicalized to nanoseconds before cadence inference, identity hashing,
+segmentation, and saved score coordinates. Training freezes the exact set of
+entity/session boundary columns; scoring rejects missing or additional
+boundary definitions rather than silently changing the segmentation protocol.
+
 Stage 1 samples E/P/R auxiliary prediction tasks and uses an auxiliary Gaussian
 head only for training. P masks eight consecutive raw values and validity flags
 before recomputing differences. Validation masking is deterministic from stable
@@ -102,6 +108,23 @@ and timestamps. Optional per-variable test NLL diagnostics are off by default.
 A one-class valid test interval keeps its undefined-metric reason and is not
 reported as a complete evaluation.
 
+When all three feature caches are present and match the stage-2 binding, resume
+reuses them directly and restores their verified hashes into the final manifest
+without re-encoding. A missing or damaged cache is rebuilt only when the same
+frozen encoder/statistics reproduce the bound cache and index hashes; otherwise
+resume fails before replacing the existing manifest. A legacy time coordinate
+is never rescaled based only on its field name.
+
+Every benchmark invocation gets a fresh identity in benchmark_context.json.
+After the report is written, run_benchmark atomically records its run-local
+path, SHA-256, model column, task/run identity, invocation ID, and AUC values in
+report_reference.json. Historical test_report CSVs remain in place. Validation
+checks the referenced report hash and metrics against aligned scores, not report
+count or modification time. An unreferenced report from a crash between report
+writing and reference update is not accepted; retrying creates a new
+report/reference pair. A legacy run without an invocation ID is accepted only
+when exactly one report is unambiguous.
+
 The 23 internal and 18 external wrappers are candidate task entries, not an
 assertion that all 41 remain supported after temporal segmentation. Run
 preflight per task: it uses the same internal long-table or external wide-table
@@ -116,6 +139,12 @@ is silently kept supported by shortening `L` or dropping purge.
 Read-only server preflight at the default `L=128` confirmed usable windows for
 PSM (`D=25`) and BATADAL (`D=43`). Other candidate tasks remain unverified in
 this round and need their own preflight before a run.
+
+PSM's internal source currently converts its integer date ordinal (1, 2, ...)
+to a naive datetime upstream, so preflight reports a 1 ns cadence. Window
+availability is confirmed, but this is not a claim about PSM's physical
+sampling period; cadence-aware gap interpretation for that source remains
+limited by the upstream loader representation.
 
 ```bash
 conda run --no-capture-output -n catch_env python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect

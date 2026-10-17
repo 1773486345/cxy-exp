@@ -87,9 +87,23 @@ class MNRFLiteV2:
         return normalize_time_index(frame.index)
 
     @staticmethod
-    def _boundary_ids(frame):
-        columns = [column for column in frame.columns
-                   if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}]
+    def _boundary_columns(frame):
+        return [column for column in frame.columns
+                if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}]
+
+    @classmethod
+    def _boundary_ids(cls, frame, required_columns=None):
+        columns = cls._boundary_columns(frame)
+        if required_columns is not None:
+            required_columns = list(required_columns)
+            missing = [column for column in required_columns if column not in frame.columns]
+            unexpected = [column for column in columns if column not in required_columns]
+            if missing or unexpected:
+                raise ValueError(
+                    "entity/session boundary columns differ from the frozen training protocol: "
+                    f"missing={missing}, unexpected={unexpected}, required={required_columns}"
+                )
+            columns = required_columns
         if not columns:
             return None
         return frame.loc[:, columns].astype(str).agg("|".join, axis=1).to_numpy()
@@ -113,7 +127,8 @@ class MNRFLiteV2:
         self.variable_names = tuple(map(str, columns))
         ranges = purged_ranges(len(values), self.config.seq_len)
         time_index = self._time_index(train_data)
-        boundary_ids = self._boundary_ids(train_data)
+        boundary_columns = self._boundary_columns(train_data)
+        boundary_ids = self._boundary_ids(train_data, boundary_columns)
         train_left, train_right = ranges["train"]
         train_ids = None if boundary_ids is None else boundary_ids[train_left:train_right]
         train_time = TimeIndex(time_index.values_ns[train_left:train_right], time_index.kind,
@@ -124,8 +139,7 @@ class MNRFLiteV2:
             "time_kind": time_index.kind,
             "expected_interval_ns": expected_interval,
             "tolerance": 0.05,
-            "entity_boundary_columns": [str(column) for column in train_data.columns
-                                         if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}],
+            "entity_boundary_columns": [str(column) for column in boundary_columns],
             "fit_range": [int(train_left), int(train_right)],
         }
         full_segments, continuity = continuous_segments(time_index, len(values),
@@ -317,6 +331,11 @@ class MNRFLiteV2:
                     for name in cache_names:
                         os.replace(rebuilt[name][0], cached_paths[name])
                         os.replace(rebuilt[name][2], index_paths[name])
+                actual_cache_hashes = rebuilt_cache_hashes
+                actual_index_hashes = rebuilt_index_hashes
+            # The trainer is new on resume, so restore hashes even when every
+            # verified cache was reused without extraction.
+            self.trainer.cache_sha256 = dict(actual_cache_hashes)
             for name in cache_names:
                 indices = np.load(index_paths[name], mmap_mode="r")
                 expected = EndWindowDataset(normalized, *ranges[name], self.config.seq_len,
@@ -562,7 +581,9 @@ class MNRFLiteV2:
             score_time_index, total,
             expected_interval=self.temporal_rule["expected_interval_ns"],
             tolerance=self.temporal_rule["tolerance"],
-            boundary_ids=self._boundary_ids(test_data),
+            boundary_ids=self._boundary_ids(
+                test_data, self.temporal_rule.get("entity_boundary_columns", [])
+            ),
         )
         valid_mask = np.zeros(total, dtype=bool)
         if total < self.config.seq_len:
@@ -636,6 +657,10 @@ def _hash_array(values, chunk_rows=65536):
         array = normalized.values_ns
     else:
         array = np.asarray(values)
+        if array.dtype.kind == "M":
+            normalized = normalize_time_index(array)
+            digest.update(normalized.kind.encode())
+            array = normalized.values_ns
     if array.dtype.kind == "O":
         serialized = json.dumps(array.tolist(), ensure_ascii=False, sort_keys=True, default=str,
                                 separators=(",", ":")).encode("utf-8")
@@ -645,8 +670,8 @@ def _hash_array(values, chunk_rows=65536):
         return digest.hexdigest()
     digest.update(str(array.shape).encode())
     digest.update(str(array.dtype).encode())
-    if array.dtype.kind in "mM":
-        array = array.astype("datetime64[ns]").astype(np.int64)
+    if array.dtype.kind == "m":
+        raise ValueError("timedelta arrays cannot be used as time-coordinate hashes")
     for start in range(0, len(array), chunk_rows):
         digest.update(np.ascontiguousarray(array[start:start + chunk_rows]).view(np.uint8))
     return digest.hexdigest()
