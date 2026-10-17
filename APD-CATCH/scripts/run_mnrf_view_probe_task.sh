@@ -16,6 +16,8 @@ GPU_ID="${GPU_ID:-0}"
 VIEW_PROBE_OUTPUT="${VIEW_PROBE_OUTPUT:-result/score/MNRF-ViewProbe/${TASK}/${MODE}-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 SOURCE_DIR="${VIEW_PROBE_SOURCE_DIR:-}"
 VIEWS="${VIEW_PROBE_VIEWS:-S,E,P,R}"
+STAGE2_EPOCHS="${STAGE2_EPOCHS:-30}"
+RESUME_FROM="${VIEW_PROBE_RESUME_FROM:-}"
 
 if [[ "${GPU_ID}" == "cpu" ]]; then
   DEVICE=cpu
@@ -25,13 +27,30 @@ else
   DEVICE=cuda:0
 fi
 
+if [[ "${VIEW_PROBE_OUTPUT}" = /* ]]; then
+  OUTPUT_PATH="${VIEW_PROBE_OUTPUT}"
+else
+  OUTPUT_PATH="${ROOT}/${VIEW_PROBE_OUTPUT}"
+fi
+if [[ -n "${SOURCE_DIR}" && "${SOURCE_DIR}" != /* ]]; then
+  SOURCE_PATH="${ROOT}/${SOURCE_DIR}"
+else
+  SOURCE_PATH="${SOURCE_DIR}"
+fi
+if [[ -n "${RESUME_FROM}" && "${RESUME_FROM}" != /* ]]; then
+  RESUME_PATH="${ROOT}/${RESUME_FROM}"
+else
+  RESUME_PATH="${RESUME_FROM}"
+fi
+
 exec python "${ROOT}/scripts/run_mnrf_view_probe.py" \
   --task "${TASK}" --data-source "${SOURCE}" --mode "${MODE}" \
-  --views "${VIEWS}" --source-dir "${SOURCE_DIR}" --output-dir "${ROOT}/${VIEW_PROBE_OUTPUT}" \
+  --views "${VIEWS}" --source-dir "${SOURCE_PATH}" --output-dir "${OUTPUT_PATH}" \
   --seed "${SEED}" --batch-size "${BATCH_SIZE}" --stage1-epochs "${STAGE1_EPOCHS}" \
+  --stage2-epochs "${STAGE2_EPOCHS}" \
   --patience "${PATIENCE}" --device "${DEVICE}" \
   --evolution-dim "${EVOLUTION_DIM:-8}" --pattern-dim "${PATTERN_DIM:-8}" \
   --relation-dim "${RELATION_DIM:-8}" --cache-chunk-size "${CACHE_CHUNK_SIZE:-256}" \
   --encoding-batch-size "${ENCODING_BATCH_SIZE:-${BATCH_SIZE}}" \
   --gmm-components "${GMM_COMPONENTS:-4}" --gmm-fit-max-windows "${GMM_FIT_MAX_WINDOWS:-20000}" \
-  --cpu-threads "${CPU_THREADS:-1}"
+  --cpu-threads "${CPU_THREADS:-1}" --resume-from "${RESUME_PATH}"

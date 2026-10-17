@@ -21,9 +21,12 @@ class ViewProbeConfig:
     relation_dim: Optional[int] = None
     batch_size: int = 64
     stage1_epochs: int = 50
+    stage2_epochs: int = 30
     patience: int = 5
     learning_rate: float = 0.001
     weight_decay: float = 0.0001
+    train_noise_std: float = 0.01
+    noise_seed: int = 20261013
     feature_std_floor: float = 0.05
     score_mad_floor: float = 0.001
     calibration_quantile: float = 0.995
@@ -31,6 +34,8 @@ class ViewProbeConfig:
     encoding_batch_size: int = 0
     device: str = "auto"
     output_dir: str = ""
+    resume_from: str = ""
+    data_source: str = "large_detect"
     task_name: str = ""
     mode: str = "full_gmm"
     selected_views: Tuple[str, ...] = VALID_VIEWS
@@ -56,6 +61,16 @@ class ViewProbeConfig:
             raise ValueError("selected_views must use canonical S,E,P,R order")
         if self.mode not in {"stage1", "full_gmm", "random_gmm", "select_gmm", "s_only", "flow"}:
             raise ValueError("mode must be stage1, full_gmm, random_gmm, select_gmm, s_only, or flow")
+        if self.data_source not in {"large_detect", "external_detect", "synthetic"}:
+            raise ValueError("data_source must be large_detect, external_detect, or synthetic")
+        if self.batch_size < 1 or self.stage1_epochs < 1 or self.stage2_epochs < 1 or self.patience < 1:
+            raise ValueError("batch_size, stage epochs and patience must be positive")
+        if self.learning_rate <= 0 or self.weight_decay < 0 or self.train_noise_std < 0:
+            raise ValueError("learning_rate must be positive, weight_decay non-negative, and train_noise_std non-negative")
+        if self.encoding_batch_size < 0 or self.cache_chunk_size < 1:
+            raise ValueError("cache_chunk_size must be positive and encoding_batch_size non-negative")
+        if self.encoding_batch_size and self.encoding_batch_size > self.batch_size:
+            raise ValueError("encoding_batch_size cannot exceed batch_size")
         if self.gmm_components < 1 or self.gmm_fit_max_windows < 1 or self.gmm_n_init < 1 or self.gmm_max_iter < 1:
             raise ValueError("GMM component, sample, initialization, and iteration limits must be positive")
         if self.gmm_reg_covar <= 0 or self.cpu_threads < 1:
@@ -68,14 +83,15 @@ class ViewProbeConfig:
             hidden_dim=self.hidden_dim, view_dim=self.view_dim,
             evolution_dim=self.evolution_dim, pattern_dim=self.pattern_dim,
             relation_dim=self.relation_dim, batch_size=self.batch_size,
-            stage1_epochs=self.stage1_epochs, stage2_epochs=1,
+            stage1_epochs=self.stage1_epochs, stage2_epochs=self.stage2_epochs,
             patience=self.patience, learning_rate=self.learning_rate,
-            weight_decay=self.weight_decay, feature_std_floor=self.feature_std_floor,
+            weight_decay=self.weight_decay, train_noise_std=self.train_noise_std,
+            noise_seed=self.noise_seed, feature_std_floor=self.feature_std_floor,
             score_mad_floor=self.score_mad_floor,
             calibration_quantile=self.calibration_quantile,
             cache_chunk_size=self.cache_chunk_size,
             encoding_batch_size=self.encoding_batch_size, device=self.device,
-            output_dir=self.output_dir, task_name="",
+            output_dir=self.output_dir, resume_from=self.resume_from, task_name="",
         )
 
     def to_dict(self):

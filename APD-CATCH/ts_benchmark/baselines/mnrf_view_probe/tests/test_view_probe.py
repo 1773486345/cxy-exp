@@ -3,8 +3,10 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, ViewProbeConfig, load_probe
+from ts_benchmark.baselines.mnrf_view_probe.probe import _select_stratified
 from ts_benchmark.models.model_loader import get_models
 
 
@@ -29,6 +31,15 @@ def test_view_selection_uses_canonical_layout_and_rejects_invalid_views():
             pass
         else:
             raise AssertionError(f"invalid view selection accepted: {views}")
+
+
+def test_stratified_sampling_handles_more_segments_than_samples():
+    endpoints = np.arange(20, dtype=np.int64)
+    segments = [(2 * index, 2 * index + 2) for index in range(10)]
+    selected = _select_stratified(endpoints, segments, limit=3, seed=2021)
+    assert selected.shape == (3,)
+    assert len(np.unique(selected)) == 3
+    assert np.all(np.isin(selected, endpoints))
 
 
 def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
@@ -81,3 +92,39 @@ def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
     original_scores = np.load(selected_dir / "results" / "test_nll.npy")
     restored_scores = restored._gmm_scores(np.load(source_dir / "cache" / "test_features.npy", mmap_mode="r"))
     np.testing.assert_allclose(restored_scores, original_scores, rtol=0, atol=1e-6)
+
+    stats_path = selected_dir / "heads" / "feature_statistics.npz"
+    original_stats = stats_path.read_bytes()
+    with np.load(stats_path) as stats:
+        np.savez(stats_path, mean=stats["mean"], scale=np.zeros_like(stats["scale"]))
+    with pytest.raises(ValueError, match="feature statistics hash|shape mismatch|scale"):
+        load_probe(selected_dir, device="cpu")
+    stats_path.write_bytes(original_stats)
+
+    changed_frame = frame.copy()
+    with pytest.raises(ValueError, match="identity|train split"):
+        MNRFViewProbe(
+            seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1, patience=1,
+            device="cpu", output_dir=str(tmp_path / "bad-boundary"), mode="select_gmm",
+            selected_views=("S", "P", "R"), source_dir=str(source_dir),
+        ).fit(changed_frame, 480, np.zeros(len(changed_frame) - 480, dtype=np.int64))
+
+
+def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):
+    rng = np.random.default_rng(9)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(
+        rng.normal(size=(n, 2)).astype(np.float32), columns=("a", "b"),
+        index=pd.date_range("2026-01-01", periods=n, freq="min"),
+    )
+    frame["label"] = np.r_[np.zeros(train_length, dtype=np.int64), np.ones(n - train_length, dtype=np.int64)]
+    probe = MNRFViewProbe(
+        seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1, patience=1,
+        device="cpu", output_dir=str(tmp_path / "benchmark"), mode="full_gmm", gmm_fit_max_windows=16,
+    )
+    probe.detect_fit(frame.iloc[:train_length].copy(), frame.iloc[:train_length]["label"].to_numpy())
+    scores, predictions = probe.detect_score(frame.iloc[train_length:].copy())
+    assert len(scores) == len(predictions) > 0
+    metadata = probe.score_with_metadata()
+    assert metadata["time_indices"].min() >= train_length
+    assert np.isfinite(scores).all()

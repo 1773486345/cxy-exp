@@ -6,6 +6,14 @@ existing launchers. The probe imports the existing `FourViewEncoder` and
 stage-one `MNRFTrainer` implementation, then writes a separate
 `result/score/MNRF-ViewProbe/...` run directory.
 
+Artifacts use schema `mnrf-view-probe-v2`. Each run is bound to the task, raw
+features, normalized time coordinates, entity boundaries, train split, purge
+ranges, continuous segments, endpoint indices, canonical S/E/P/R layout,
+encoder/input-statistics fingerprint, and dependency versions. A changed
+source, split, variable order, layout, or time gap is rejected before an
+existing artifact can be written. Stage-one, head-fitting, complete, and
+failed states are recorded explicitly.
+
 ## Protocol
 
 Stage one fits the existing E/P/R self-supervised tasks, saves the best encoder
@@ -31,6 +39,14 @@ never labels the trained encoder as random.
 encoder/cache and trains the existing Flow head in a separate probe directory.
 It is not used for arbitrary deleted-view layouts.
 
+GMM and Flow use the same four deterministic feature-noise vectors. GMM fits
+one full-covariance head per original variable and averages negative
+`score_samples` over those perturbations; Flow uses its existing NLL head with
+the same wrapper. GMM variables are atomically written under
+`heads/gmm_variables/` with `gmm_progress.json`, so explicit recovery can skip
+verified variables. Stage-one and Flow checkpoints include optimizer, RNG,
+sampler, and best-state information at epoch boundaries.
+
 ## Artifacts and safety
 
 Each run contains `probe_manifest.json`, `input_statistics.npz`, encoder
@@ -45,3 +61,27 @@ This round does not make a performance claim. Paper CATCH values and any
 CATCH-original result are references only; they are not substituted for probe
 results. AUC-ROC/AUC-PR are measured only on the valid endpoint intersection
 written in each run.
+
+## Common comparison
+
+`scripts/evaluate_mnrf_view_probe_common.py` is a read-only adapter for an
+existing CATCH score artifact and a probe score artifact. It computes the
+explicit endpoint intersection, coverage and excluded anomaly points, then
+uses the repository affiliation implementation on the original coordinate
+axis without joining gaps or entities. It does not train CATCH or silently
+re-split data.
+
+When a CATCH-common run has predeclared split index files, pass all three with
+`--train-indices`, `--validation-indices`, and `--calibration-indices`; the
+adapter verifies sorted, disjoint coordinates and records their hashes instead
+of creating an internal split.
+
+Validate a completed run with:
+
+```bash
+conda run --no-capture-output -n catch_env python scripts/validate_mnrf_view_probe.py <RUN_DIR>
+```
+
+The validator checks complete stage/head state, hashes, finite statistics,
+calibration, fixed noise, aligned score arrays, and reloads a Flow encoder and
+head before scoring the validated source test cache.

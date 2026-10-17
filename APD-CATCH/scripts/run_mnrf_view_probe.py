@@ -59,6 +59,7 @@ def main():
     parser.add_argument("--seq-len", type=int, default=128)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--stage1-epochs", type=int, default=50)
+    parser.add_argument("--stage2-epochs", type=int, default=30)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--cache-chunk-size", type=int, default=256)
@@ -70,16 +71,19 @@ def main():
     parser.add_argument("--gmm-components", type=int, default=4)
     parser.add_argument("--gmm-fit-max-windows", type=int, default=20000)
     parser.add_argument("--cpu-threads", type=int, default=1)
+    parser.add_argument("--resume-from", default="")
     args = parser.parse_args()
     frame, train_length, test_labels = _read_task(args.task, args.data_source)
     kwargs = dict(seed=args.seed, seq_len=args.seq_len, batch_size=args.batch_size,
-                  stage1_epochs=args.stage1_epochs, patience=args.patience,
+                  stage1_epochs=args.stage1_epochs, stage2_epochs=args.stage2_epochs,
+                  patience=args.patience,
                   device=args.device, cache_chunk_size=args.cache_chunk_size,
                   encoding_batch_size=args.encoding_batch_size, view_dim=args.view_dim,
                   evolution_dim=args.evolution_dim, pattern_dim=args.pattern_dim,
                   relation_dim=args.relation_dim, mode=args.mode,
                   selected_views=tuple(item for item in args.views.split(",") if item),
                   source_dir=args.source_dir, output_dir=args.output_dir,
+                  resume_from=args.resume_from, data_source=args.data_source,
                   task_name=f"{args.task}.csv",
                   gmm_components=args.gmm_components, gmm_fit_max_windows=args.gmm_fit_max_windows,
                   cpu_threads=args.cpu_threads)

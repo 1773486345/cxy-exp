@@ -76,3 +76,22 @@ After manual runs, create a read-only summary without selecting a best run:
 ```bash
 conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/summarize_mnrf_view_probe.py --root /media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe
 ```
+
+Validate one completed run without modifying it:
+
+```bash
+conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/validate_mnrf_view_probe.py /absolute/path/to/run
+```
+
+Resume an explicitly interrupted stage-one run in its existing directory:
+
+```bash
+GPU_ID=cpu VIEW_PROBE_MODE=stage1 VIEW_PROBE_RESUME_FROM=/absolute/path/to/run VIEW_PROBE_OUTPUT=/absolute/path/to/run conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+```
+
+Compare a probe and an existing CATCH artifact on explicit common coordinates
+(the labels file is a read-only full-coordinate `.npy`):
+
+```bash
+conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/evaluate_mnrf_view_probe_common.py --probe /absolute/probe/results/aligned_scores.npz --catch /absolute/catch/aligned_scores.npz --labels /absolute/labels.npy --output /absolute/comparison.json
+```

@@ -17,6 +17,8 @@ def collect(root):
             rows.append({"run": str(run), "status": "missing_metrics"})
             continue
         manifest = json.loads(manifest_path.read_text())
+        status_path = run / "run_status.json"
+        run_status = json.loads(status_path.read_text()) if status_path.is_file() else {"status": "missing_status"}
         metrics = json.loads(result_path.read_text())
         config = manifest.get("config", {})
         gmm_status_path = run / "heads" / "gmm_status.json"
@@ -31,11 +33,15 @@ def collect(root):
             "source_feature_fingerprint": manifest.get("source_feature_fingerprint", manifest.get("feature_fingerprint")),
             "gmm_components": config.get("gmm_components"), "gmm_covariance_type": config.get("gmm_covariance_type"),
             "gmm_fit_endpoint_count": metrics.get("gmm_fit_endpoint_count", gmm_status.get("fit_endpoint_count")),
-            "status": metrics.get("status"), "auc_roc": metrics.get("auc_roc"), "auc_pr": metrics.get("auc_pr"),
+            "run_status": run_status.get("status"), "head_status": manifest.get("head_status"),
+            "status": metrics.get("status"), "failure_reason": run_status.get("reason"),
+            "auc_roc": metrics.get("auc_roc"), "auc_pr": metrics.get("auc_pr"),
             "threshold": metrics.get("threshold"), "valid_points": metrics.get("valid_points"),
             "head_parameter_count": metrics.get("head_parameter_count"),
             "fit_time_seconds": metrics.get("fit_time_seconds"),
             "inference_time_seconds": metrics.get("inference_time_seconds"),
+            "source_identity": manifest.get("source_identity"),
+            "protocol": manifest.get("temporal_rule"),
         })
     return pd.DataFrame(rows)
 
