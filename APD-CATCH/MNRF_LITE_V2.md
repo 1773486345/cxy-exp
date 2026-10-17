@@ -32,14 +32,18 @@ calibration. Each split is intersected with continuous record segments.
 Windows must fit wholly inside one segment and one split; the first `L-1`
 points of every new segment are cold-start invalid.
 
-Timestamp indexes are checked for order and duplicates. Within each contiguous
-entity/session block the median positive interval is the inferred normal
-cadence. Integer-multiple intervals within 5% are interpreted as missing
-observations and split the sequence; unexplained non-integer intervals fail
-preflight/fit. Explicit `entity_id`, `session_id`, `record_id`, or `scenario_id`
-changes also split the sequence. The implementation never sorts, interpolates,
-or resamples. If only row indices exist, metadata records the declared row-order
-protocol and does not invent time information.
+Timestamp indexes are checked for parseability, order, duplicates, and `NaT`.
+The normal cadence is fitted only from the internally selected training portion
+of the official training split, then frozen for validation, calibration, test,
+preflight, cache identity, and loaded-model scoring. Integer-multiple intervals
+within 5% of that cadence split a sequence; unexplained intervals fail rather
+than being reinterpreted from a test segment. Aware timestamps are normalized to
+absolute UTC nanoseconds for comparisons and fingerprints; naive timestamps use
+a timezone-independent naive-nanosecond protocol. Explicit
+`entity_id`, `session_id`, `record_id`, or `scenario_id` changes also split the
+sequence. The implementation never sorts, interpolates, or resamples. If only
+row indices exist, metadata records the row-order protocol and does not invent
+time information.
 
 Stage 1 samples E/P/R auxiliary prediction tasks and uses an auxiliary Gaussian
 head only for training. P masks eight consecutive raw values and validity flags
@@ -69,14 +73,22 @@ validation NLL, best value, patience, and elapsed seconds to stdout and
 `logs/training.jsonl`. Cache extraction reports bounded progress. Atomic
 checkpoints are under `checkpoints/`: `best_encoder.pt`, `best_stage1.pt`,
 `stage1_latest.pt`, `best_fusion.pt`, and `stage2_latest.pt`. A normal launch
-creates an independent `run-<UTC>-<PID>` directory. `MNRF_RESUME_FROM` is
-explicit; resume verifies task, architecture/configuration, variable order,
-raw-data and time-index fingerprints. It restores optimizer, RNG/sampler state,
-best state and patience from an epoch boundary; mid-epoch exact recovery is not
-claimed. The deployment package is versioned `deployment.pt` and excludes the
-auxiliary head. Caches, statistics, manifests, aligned scores, metrics and the
-benchmark report remain inside that run directory. The run validator fails on
-missing, malformed, cross-task, or inconsistent artifacts.
+creates an independent `run-<UTC>-<PID>` directory. Recovery is explicit via
+`MNRF_RESUME_FROM` and is epoch-boundary only. Checkpoints record whether a
+stage is in progress or completed, its completion reason (`early_stopping` or
+`epoch_limit`), best epoch/loss, next epoch, patience, optimizer, RNG, and
+sampler state. A completed stage only reloads its selected best state; normal
+resume never revives an early-stopped stage. Stage 2 is bound to the selected
+frozen encoder, input/feature statistics, feature order, window-end indices,
+data identity, and frozen temporal rule. Missing stage-2 cache files may be
+rebuilt only with that same encoder/statistics and accepted only if their
+content hashes match the saved binding. Incompatible or legacy checkpoints are
+rejected without overwriting run artifacts; start a new run for a new protocol.
+The time/cache/deployment schema is versioned as
+`mnrf-lite-v2-tcn6b-2l-r1-segment-v3-timefreeze`. The deployment package
+excludes the auxiliary head. Caches, statistics, manifests, aligned scores,
+metrics and the benchmark report remain inside the run directory. The run
+validator fails on missing, malformed, cross-task, or inconsistent artifacts.
 
 ## Scoring and Task Status
 
@@ -92,11 +104,18 @@ reported as a complete evaluation.
 
 The 23 internal and 18 external wrappers are candidate task entries, not an
 assertion that all 41 remain supported after temporal segmentation. Run
-preflight per task: it reads only that task and prints official boundary,
+preflight per task: it uses the same internal long-table or external wide-table
+source parser as benchmark loading, reads only that task, and prints official boundary,
 segments, cadence/gaps, post-purge train/validation/calibration window counts,
-and test windows. Empty splits fail. A validation or calibration count of one
+and test windows. External parsing removes timestamp/label using the benchmark
+source semantics and never sends the wide table through the internal long-table
+reader. Empty splits fail. A validation or calibration count of one
 is called out as too small for stable scale/high-quantile estimation. No task
 is silently kept supported by shortening `L` or dropping purge.
+
+Read-only server preflight at the default `L=128` confirmed usable windows for
+PSM (`D=25`) and BATADAL (`D=43`). Other candidate tasks remain unverified in
+this round and need their own preflight before a run.
 
 ```bash
 conda run --no-capture-output -n catch_env python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect

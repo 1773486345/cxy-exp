@@ -28,7 +28,7 @@ def test_timestamp_gap_exact_window_endpoints_and_cold_starts():
     times[200:] += np.timedelta64(1, "D")
     segments, audit = continuous_segments(times, 400)
     assert segments == [(0, 200), (200, 400)]
-    assert audit["basis"] == "timestamp" and len(audit["gaps"]) == 1
+    assert audit["basis"] == "timestamp_naive_ns" and len(audit["gaps"]) == 1
     values = np.zeros((400, 2), dtype=np.float32)
     dataset = EndWindowDataset(values, 0, 400, 128, segments)
     assert np.array_equal(dataset.endpoints, np.r_[127:200, 327:400])
@@ -218,6 +218,20 @@ def test_dedicated_strategy_to_benchmark_report_and_run_validator(monkeypatch, t
     labels = np.zeros(n, dtype=np.int64)
     labels[445] = 1
     frame["label"] = labels
+    external_root = tmp_path / "dataset" / "external_validation"
+    (external_root / "data").mkdir(parents=True)
+    external_input = frame.rename_axis("timestamp").reset_index()
+    external_input.to_csv(external_root / "data" / "toy.csv", index=False)
+    pd.DataFrame([{"file_name": "toy.csv", "train_lens": train_n, "if_univariate": False}]).to_csv(
+        external_root / "EXTERNAL_DETECT_META.csv", index=False
+    )
+    from scripts.mnrf_lite_v2_preflight import preflight
+    preflight_result = preflight("toy", "external_detect", seq_len=32, root=tmp_path)
+    assert preflight_result["test_window_count"] == 2
+    from ts_benchmark.data.data_source import LocalExternalAnomalyDetectDataSource
+    external_reader = LocalExternalAnomalyDetectDataSource.__new__(LocalExternalAnomalyDetectDataSource)
+    external_reader.local_data_path = str(external_root / "data")
+    frame = external_reader._load_series("toy.csv")
 
     class Pool:
         def get_series(self, name):

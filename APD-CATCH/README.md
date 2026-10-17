@@ -73,5 +73,7 @@ conda run --no-capture-output -n catch_env python scripts/mnrf_lite_v2_preflight
 ```
 
 See [MNRF_LITE_V2.md](MNRF_LITE_V2.md) for the model, training, scoring
-protocol, and supported tasks. No performance conclusion is implied by the
-implementation or smoke tests.
+protocol, temporal cadence/timezone contract, epoch-boundary resume semantics,
+and per-task preflight status. Normal cadence is fitted from the training
+subset and frozen for validation/test. No performance conclusion is implied by
+the implementation or smoke tests.

@@ -2,9 +2,10 @@
 
 Each command runs exactly one task inside the registered `catch_env` Conda
 environment. Execute them manually and sequentially; there is no run-all or
-background runner. A preflight reads only the selected task, does not train or
-create feature caches, and must be checked per task because gaps/boundaries
-change usable window counts.
+background runner. A preflight reads only the selected task through its
+registered benchmark source parser; it does not train or create feature
+caches. Check each task because the frozen training cadence and record
+boundaries change usable window counts.
 
 ## Internal (`large_detect`)
 
@@ -82,5 +83,9 @@ Resume an existing epoch-boundary run explicitly:
 GPU_ID=0 MNRF_RESUME_FROM=score/MNRF-Lite-V2/PSM/run-<UTC>-<PID> conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
 ```
 
-Resume validates task/configuration, variables, raw values, and time/index
-fingerprints before restoring optimizer and RNG/sampler state.
+Resume validates task/configuration, variables, raw values, canonical time
+indices, the frozen cadence, phase state, and stage-2 encoder/statistics/cache
+binding before restoring optimizer and RNG/sampler state. Completed phases are
+skipped and their selected best checkpoint is reloaded. Equivalent aware times
+share a UTC-nanosecond identity. Incompatible old-schema runs are preserved and
+rejected; start a new independent run instead of reusing them.

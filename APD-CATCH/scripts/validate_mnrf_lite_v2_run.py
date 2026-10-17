@@ -13,6 +13,9 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score, average_precision_score
+from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import (
+    ARCHITECTURE_VERSION, TIME_PROTOCOL_VERSION, _hash_array,
+)
 
 
 def main(run_path: str, task: str) -> None:
@@ -20,6 +23,7 @@ def main(run_path: str, task: str) -> None:
     required = [
         root / "run_identity.json", root / "benchmark_context.json", root / "run_metadata.json",
         root / "cache_manifest.json", root / "input_statistics.npz", root / "deployment.pt",
+        root / "normalization_state.npz", root / "feature_statistics.npz", root / "stage2_binding.json",
         root / "checkpoints" / "best_encoder.pt", root / "checkpoints" / "best_fusion.pt",
         root / "checkpoints" / "best_stage1.pt",
         root / "checkpoints" / "stage1_latest.pt", root / "checkpoints" / "stage2_latest.pt",
@@ -36,10 +40,18 @@ def main(run_path: str, task: str) -> None:
         raise SystemExit(f"Task/run identity mismatch in {root / 'benchmark_context.json'}")
     if context.get("strategy_name") != "mnrf_valid_detect" or metadata.get("config", {}).get("task_name") != f"{task}.csv":
         raise SystemExit("Strategy or model-config task does not match this run")
-    if identity.get("architecture_version") != "mnrf-lite-v2-tcn6b-2l-r1-segment-v2":
+    if identity.get("architecture_version") != ARCHITECTURE_VERSION:
         raise SystemExit("run architecture version is missing or incompatible")
-    if manifest.get("status") != "complete" or manifest.get("encoder_fingerprint") != metadata.get("feature_fingerprint"):
+    if identity.get("temporal_rule", {}).get("version") != TIME_PROTOCOL_VERSION:
+        raise SystemExit("run frozen time protocol is missing or incompatible")
+    if (manifest.get("status") != "complete"
+            or manifest.get("architecture_version") != ARCHITECTURE_VERSION
+            or manifest.get("temporal_rule") != identity.get("temporal_rule")
+            or manifest.get("encoder_fingerprint") != metadata.get("feature_fingerprint")):
         raise SystemExit("feature cache manifest is incomplete or fingerprint-mismatched")
+    for phase in ("stage1", "stage2"):
+        if metadata.get("phase_states", {}).get(phase, {}).get("status") != "completed":
+            raise SystemExit(f"training phase {phase} is not marked complete")
     for name, path in metadata.get("feature_cache_paths", {}).items():
         index_path = Path(metadata.get("feature_cache_window_end_indices", {}).get(name, ""))
         if not Path(path).is_file() or not index_path.is_file():
@@ -79,6 +91,16 @@ def main(run_path: str, task: str) -> None:
             raise SystemExit("Feature mean differs between statistics and cache manifest")
         if not np.allclose(stats["feature_scale"], manifest["feature_scale"], rtol=0, atol=0):
             raise SystemExit("Feature scale differs between statistics and cache manifest")
+        with np.load(root / "normalization_state.npz", allow_pickle=False) as input_state:
+            input_mean = input_state["input_mean"]
+            input_scale = input_state["input_scale"]
+            if (not np.array_equal(input_mean, stats["mean"])
+                    or not np.array_equal(input_scale, stats["scale"])
+                    or str(input_state["resume_id"].item()) != identity.get("resume_id")):
+                raise SystemExit("Frozen input statistics differ between run artifacts")
+            fingerprint = _hash_array(np.concatenate((input_mean, input_scale)))
+            if identity.get("input_statistics_fingerprint") != fingerprint:
+                raise SystemExit("Frozen input statistics fingerprint differs from run identity")
     try:
         import torch
         deployment = torch.load(root / "deployment.pt", map_location="cpu", weights_only=False)
@@ -86,6 +108,8 @@ def main(run_path: str, task: str) -> None:
         raise SystemExit(f"Deployment package cannot be loaded: {error}")
     if deployment.get("architecture_version") != identity["architecture_version"]:
         raise SystemExit("Deployment/run architecture mismatch")
+    if deployment.get("time_protocol_version") != TIME_PROTOCOL_VERSION or deployment.get("temporal_rule") != identity.get("temporal_rule"):
+        raise SystemExit("Deployment frozen time protocol differs from the run identity")
     if deployment.get("training_metadata", {}).get("feature_fingerprint") != manifest.get("encoder_fingerprint"):
         raise SystemExit("Deployment encoder fingerprint differs from cache manifest")
     if tuple(deployment.get("variable_names", ())) != tuple(manifest.get("variable_names", ())):

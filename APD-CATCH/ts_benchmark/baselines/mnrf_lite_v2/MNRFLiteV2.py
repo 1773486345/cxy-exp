@@ -4,6 +4,7 @@ import json
 import hashlib
 import os
 import platform
+import tempfile
 import time
 from pathlib import Path
 from typing import Optional
@@ -13,8 +14,12 @@ import pandas as pd
 import torch
 
 from .config import MNRFConfig
-from .training import EndWindowDataset, MNRFTrainer, purged_ranges, seed_all
-from .windows import continuous_segments, intersect_segments
+from .training import EndWindowDataset, MNRFTrainer, _validate_resume_state, purged_ranges, seed_all
+from .windows import (TimeIndex, continuous_segments, infer_expected_interval,
+                      intersect_segments, normalize_time_index)
+
+ARCHITECTURE_VERSION = "mnrf-lite-v2-tcn6b-2l-r1-segment-v3-timefreeze"
+TIME_PROTOCOL_VERSION = "train-frozen-cadence-v1"
 
 
 class MNRFLiteV2:
@@ -75,11 +80,11 @@ class MNRFLiteV2:
     @staticmethod
     def _time_index(frame):
         if isinstance(frame.index, pd.DatetimeIndex):
-            return frame.index
+            return normalize_time_index(frame.index)
         for column in frame.columns:
             if str(column).lower() in {"timestamp", "date", "time", "datetime"}:
-                return pd.to_datetime(frame[column], errors="raise").to_numpy()
-        return frame.index
+                return normalize_time_index(frame[column].to_numpy(), explicit_time=True)
+        return normalize_time_index(frame.index)
 
     @staticmethod
     def _boundary_ids(frame):
@@ -106,9 +111,27 @@ class MNRFLiteV2:
         if len(values) < self.config.seq_len:
             raise ValueError("training segment is shorter than the configured window")
         self.variable_names = tuple(map(str, columns))
-        full_segments, continuity = continuous_segments(self._time_index(train_data), len(values),
-                                                         boundary_ids=self._boundary_ids(train_data))
         ranges = purged_ranges(len(values), self.config.seq_len)
+        time_index = self._time_index(train_data)
+        boundary_ids = self._boundary_ids(train_data)
+        train_left, train_right = ranges["train"]
+        train_ids = None if boundary_ids is None else boundary_ids[train_left:train_right]
+        train_time = TimeIndex(time_index.values_ns[train_left:train_right], time_index.kind,
+                               time_index.source_timezone)
+        expected_interval = infer_expected_interval(train_time, train_right - train_left, train_ids)
+        temporal_rule = {
+            "version": TIME_PROTOCOL_VERSION,
+            "time_kind": time_index.kind,
+            "expected_interval_ns": expected_interval,
+            "tolerance": 0.05,
+            "entity_boundary_columns": [str(column) for column in train_data.columns
+                                         if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}],
+            "fit_range": [int(train_left), int(train_right)],
+        }
+        full_segments, continuity = continuous_segments(time_index, len(values),
+                                                         expected_interval=expected_interval,
+                                                         tolerance=temporal_rule["tolerance"],
+                                                         boundary_ids=boundary_ids)
         segment_ranges = {
             name: intersect_segments(full_segments, *ranges[name])
             for name in ("train", "validation", "calibration")
@@ -128,13 +151,14 @@ class MNRFLiteV2:
         for warning in stability_warnings:
             print(f"MNRF preflight warning: {warning}", flush=True)
         resume_payload = {
-            "architecture_version": "mnrf-lite-v2-tcn6b-2l-r1-segment-v2",
+            "architecture_version": ARCHITECTURE_VERSION,
             "task_name": self.config.task_name,
             "variable_names": list(map(str, columns)),
             "input_length": len(values),
             "split_ranges": {name: list(ranges[name]) for name in ("train", "validation", "calibration")},
             "segments": full_segments,
-            "time_index_sha256": _hash_array(np.asarray(self._time_index(train_data))),
+            "time_index_sha256": _hash_array(time_index),
+            "temporal_rule": temporal_rule,
             "input_sha256": _hash_array(values),
             "config": {key: value for key, value in self.config.to_dict().items()
                        if key not in {"output_dir", "resume_from", "device"}},
@@ -143,25 +167,84 @@ class MNRFLiteV2:
         self._make_output_dirs()
         identity_path = self.output_dir / "run_identity.json"
         if self.config.resume_from:
-            if not identity_path.is_file() or json.loads(identity_path.read_text()).get("resume_id") != resume_id:
+            if not identity_path.is_file():
+                raise ValueError("resume rejected: run identity is missing; start a new run")
+            identity_document = json.loads(identity_path.read_text())
+            if identity_document.get("resume_id") != resume_id:
                 raise ValueError("resume rejected: model config, variables, data length, or temporal indices differ")
-            if json.loads(identity_path.read_text()).get("task_name", "") != self.config.task_name:
+            if identity_document.get("task_name", "") != self.config.task_name:
                 raise ValueError("resume rejected: task name differs")
+            for stage, checkpoint_name in (("stage1", "stage1_latest.pt"), ("stage2", "stage2_latest.pt")):
+                checkpoint_path = self.output_dir / "checkpoints" / checkpoint_name
+                if checkpoint_path.is_file():
+                    state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+                    _validate_resume_state(state, stage, resume_id)
+            if (self.output_dir / "checkpoints" / "stage2_latest.pt").is_file():
+                required_resume_files = [
+                    self.output_dir / "normalization_state.npz",
+                    self.output_dir / "feature_statistics.npz",
+                    self.output_dir / "stage2_binding.json",
+                ]
+                missing_resume = [str(path) for path in required_resume_files if not path.is_file()]
+                if missing_resume:
+                    raise ValueError(f"resume rejected before cache changes: missing stage-2 identity files {missing_resume}; start a new run")
         else:
-            identity_path.write_text(json.dumps({"resume_id": resume_id, "task_name": self.config.task_name,
-                                                 **resume_payload}, indent=2), encoding="utf-8")
-        _atomic_json(self.output_dir / "cache_manifest.json", {"status": "building", "resume_id": resume_id})
+            identity_document = {"resume_id": resume_id, "task_name": self.config.task_name, **resume_payload}
+            _atomic_json(identity_path, identity_document)
+        if not self.config.resume_from:
+            _atomic_json(self.output_dir / "cache_manifest.json", {"status": "building", "resume_id": resume_id,
+                                                                    "architecture_version": ARCHITECTURE_VERSION,
+                                                                    "temporal_rule": temporal_rule})
         self.trainer = MNRFTrainer(self.config, len(columns), self.device)
+        self.temporal_rule = temporal_rule
         if self.device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(self.device)
         input_train_start, input_train_end = ranges["train"]
-        self.trainer.fixed_input.fit(values[input_train_start:input_train_end])
+        normalization_path = self.output_dir / "normalization_state.npz"
+        if self.config.resume_from:
+            if not normalization_path.is_file():
+                raise ValueError("resume rejected: frozen input statistics are missing; start a new run")
+            with np.load(normalization_path, allow_pickle=False) as stats:
+                if str(stats["resume_id"].item()) != resume_id:
+                    raise ValueError("resume rejected: input statistics belong to another run")
+                self.trainer.fixed_input.mean_ = stats["input_mean"].astype(np.float32, copy=True)
+                self.trainer.fixed_input.scale_ = stats["input_scale"].astype(np.float32, copy=True)
+            if (self.trainer.fixed_input.mean_.shape != (len(columns),)
+                    or not np.isfinite(self.trainer.fixed_input.mean_).all()
+                    or not np.isfinite(self.trainer.fixed_input.scale_).all()
+                    or np.any(self.trainer.fixed_input.scale_ <= 0)):
+                raise ValueError("resume rejected: frozen input statistics are invalid; start a new run")
+            input_statistics_fingerprint = _hash_array(np.concatenate((
+                self.trainer.fixed_input.mean_, self.trainer.fixed_input.scale_
+            )))
+            if identity_document.get("input_statistics_fingerprint") != input_statistics_fingerprint:
+                raise ValueError("resume rejected: frozen input normalization fingerprint differs; start a new run")
+        else:
+            self.trainer.fixed_input.fit(values[input_train_start:input_train_end])
+            input_statistics_fingerprint = _hash_array(np.concatenate((
+                self.trainer.fixed_input.mean_, self.trainer.fixed_input.scale_
+            )))
+            _atomic_npz(normalization_path, input_mean=self.trainer.fixed_input.mean_,
+                        input_scale=self.trainer.fixed_input.scale_, resume_id=np.asarray(resume_id),
+                        temporal_rule=np.asarray(json.dumps(temporal_rule, sort_keys=True)))
+            identity_document["input_statistics_fingerprint"] = input_statistics_fingerprint
+            _atomic_json(identity_path, identity_document)
         normalized_path = self.output_dir / "cache" / "normalized_train.npy"
-        normalized = np.lib.format.open_memmap(normalized_path, mode="w+", dtype=np.float32, shape=values.shape)
-        for offset in range(0, len(values), 65536):
-            normalized[offset:offset + 65536] = self.trainer.fixed_input.transform_chunk(values[offset:offset + 65536])
-        normalized.flush()
-        del normalized
+        normalized_valid = False
+        if self.config.resume_from and normalized_path.is_file():
+            normalized = np.load(normalized_path, mmap_mode="r")
+            finite = all(np.isfinite(normalized[offset:offset + 65536]).all()
+                         for offset in range(0, len(normalized), 65536))
+            normalized_valid = normalized.shape == values.shape and finite
+            del normalized
+        if not normalized_valid:
+            normalized_tmp = normalized_path.with_name(normalized_path.name + f".partial-{os.getpid()}.npy")
+            normalized = np.lib.format.open_memmap(normalized_tmp, mode="w+", dtype=np.float32, shape=values.shape)
+            for offset in range(0, len(values), 65536):
+                normalized[offset:offset + 65536] = self.trainer.fixed_input.transform_chunk(values[offset:offset + 65536])
+            normalized.flush()
+            del normalized
+            os.replace(normalized_tmp, normalized_path)
         normalized = np.load(normalized_path, mmap_mode="r")
         stage1_start = time.perf_counter()
         stage1_best = self.trainer.stage1(
@@ -175,14 +258,110 @@ class MNRFLiteV2:
         )
         stage1_seconds = time.perf_counter() - stage1_start
         cache_dir = self.output_dir / "cache"
-        train_path, train_count, train_indices = self.trainer.extract_cache(normalized, ranges["train"], "train", cache_dir, full_segments)
-        validation_path, validation_count, validation_indices = self.trainer.extract_cache(normalized, ranges["validation"], "validation", cache_dir, full_segments)
-        calibration_path, calibration_count, calibration_indices = self.trainer.extract_cache(normalized, ranges["calibration"], "calibration", cache_dir, full_segments)
+        stage2_latest = self.output_dir / "checkpoints" / "stage2_latest.pt"
+        binding_path = self.output_dir / "stage2_binding.json"
+        feature_stats_path = self.output_dir / "feature_statistics.npz"
+        cache_names = ("train", "validation", "calibration")
+        cached_paths = {name: cache_dir / f"{name}_features.npy" for name in cache_names}
+        index_paths = {name: cache_dir / f"{name}_window_end_indices.npy" for name in cache_names}
+        binding = None
+        if self.config.resume_from and stage2_latest.is_file():
+            if not binding_path.is_file() or not feature_stats_path.is_file():
+                raise ValueError("resume rejected: stage-2 frozen-feature binding/statistics are missing; start a new run")
+            binding = json.loads(binding_path.read_text(encoding="utf-8"))
+            if binding.get("resume_id") != resume_id or binding.get("temporal_rule") != temporal_rule:
+                raise ValueError("resume rejected: stage-2 data/time identity differs; start a new run")
+            with np.load(feature_stats_path, allow_pickle=False) as stats:
+                if str(stats["resume_id"].item()) != resume_id:
+                    raise ValueError("resume rejected: feature statistics belong to another run")
+                self.trainer.fixed_feature.mean_ = stats["feature_mean"].astype(np.float32, copy=True)
+                self.trainer.fixed_feature.scale_ = stats["feature_scale"].astype(np.float32, copy=True)
+            encoder_fingerprint = self.trainer.fingerprint()
+            if encoder_fingerprint != binding.get("encoder_fingerprint"):
+                raise ValueError("resume rejected: frozen encoder/input statistics differ; start a new run")
+            expected_stat_hashes = {
+                "input_mean_sha256": _hash_array(self.trainer.fixed_input.mean_),
+                "input_scale_sha256": _hash_array(self.trainer.fixed_input.scale_),
+                "feature_mean_sha256": _hash_array(self.trainer.fixed_feature.mean_),
+                "feature_scale_sha256": _hash_array(self.trainer.fixed_feature.scale_),
+            }
+            if any(binding.get(key) != value for key, value in expected_stat_hashes.items()):
+                raise ValueError("resume rejected: frozen normalization statistics differ; start a new run")
+            for name in cache_names:
+                expected = EndWindowDataset(normalized, *ranges[name], self.config.seq_len,
+                                            intersect_segments(full_segments, *ranges[name])).endpoints
+                if index_paths[name].is_file():
+                    indices = np.load(index_paths[name], mmap_mode="r")
+                    if not np.array_equal(indices, expected):
+                        raise ValueError(f"resume rejected: {name} cache window indices differ; start a new run")
+            actual_cache_hashes = {name: _hash_file(path) if path.is_file() else None
+                                   for name, path in cached_paths.items()}
+            actual_index_hashes = {name: _hash_file(path) if path.is_file() else None
+                                   for name, path in index_paths.items()}
+            cache_complete = (
+                actual_cache_hashes == binding.get("feature_cache_sha256")
+                and actual_index_hashes == binding.get("window_index_sha256")
+            )
+            if not cache_complete:
+                with tempfile.TemporaryDirectory(prefix="stage2-cache-rebuild-", dir=cache_dir) as scratch:
+                    rebuilt = {}
+                    for name in cache_names:
+                        rebuilt[name] = self.trainer.extract_cache(
+                            normalized, ranges[name], name, scratch, full_segments
+                        )
+                    rebuilt_cache_hashes = {name: _hash_file(rebuilt[name][0]) for name in cache_names}
+                    rebuilt_index_hashes = {name: _hash_file(rebuilt[name][2]) for name in cache_names}
+                    if (rebuilt_cache_hashes != binding.get("feature_cache_sha256")
+                            or rebuilt_index_hashes != binding.get("window_index_sha256")):
+                        raise ValueError("resume rejected: rebuilt frozen cache does not match the stage-2 checkpoint binding; start a new run")
+                    for name in cache_names:
+                        os.replace(rebuilt[name][0], cached_paths[name])
+                        os.replace(rebuilt[name][2], index_paths[name])
+            for name in cache_names:
+                indices = np.load(index_paths[name], mmap_mode="r")
+                expected = EndWindowDataset(normalized, *ranges[name], self.config.seq_len,
+                                            intersect_segments(full_segments, *ranges[name])).endpoints
+                if not np.array_equal(indices, expected):
+                    raise ValueError(f"resume rejected: {name} cache window indices differ; start a new run")
+            train_path, validation_path, calibration_path = (cached_paths[name] for name in cache_names)
+            train_indices, validation_indices, calibration_indices = (index_paths[name] for name in cache_names)
+            train_count, validation_count, calibration_count = (len(np.load(cached_paths[name], mmap_mode="r")) for name in cache_names)
+        else:
+            train_path, train_count, train_indices = self.trainer.extract_cache(normalized, ranges["train"], "train", cache_dir, full_segments)
+            validation_path, validation_count, validation_indices = self.trainer.extract_cache(normalized, ranges["validation"], "validation", cache_dir, full_segments)
+            calibration_path, calibration_count, calibration_indices = self.trainer.extract_cache(normalized, ranges["calibration"], "calibration", cache_dir, full_segments)
         train_features = np.load(train_path, mmap_mode="r")
         validation_features = np.load(validation_path, mmap_mode="r")
         calibration_features = np.load(calibration_path, mmap_mode="r")
-        self.trainer.fixed_feature.fit(train_features, chunk_size=self.config.cache_chunk_size)
+        if binding is None:
+            if self.config.resume_from and feature_stats_path.is_file() and binding_path.is_file():
+                with np.load(feature_stats_path, allow_pickle=False) as stats:
+                    self.trainer.fixed_feature.mean_ = stats["feature_mean"].astype(np.float32, copy=True)
+                    self.trainer.fixed_feature.scale_ = stats["feature_scale"].astype(np.float32, copy=True)
+            else:
+                self.trainer.fixed_feature.fit(train_features, chunk_size=self.config.cache_chunk_size)
+                _atomic_npz(feature_stats_path, feature_mean=self.trainer.fixed_feature.mean_,
+                            feature_scale=self.trainer.fixed_feature.scale_, resume_id=np.asarray(resume_id))
         feature_mean, feature_scale = self.trainer.fixed_feature.mean_, self.trainer.fixed_feature.scale_
+        encoder_fingerprint = self.trainer.fingerprint()
+        stage2_identity = {
+            "schema_version": 2,
+            "resume_id": resume_id,
+            "encoder_fingerprint": encoder_fingerprint,
+            "input_mean_sha256": _hash_array(self.trainer.fixed_input.mean_),
+            "input_scale_sha256": _hash_array(self.trainer.fixed_input.scale_),
+            "feature_mean_sha256": _hash_array(feature_mean),
+            "feature_scale_sha256": _hash_array(feature_scale),
+            "feature_definition": ["state", "evolution", "pattern", "relation"],
+            "variable_names": list(self.variable_names),
+            "window_index_sha256": {name: _hash_file(index_paths[name]) for name in cache_names},
+            "feature_cache_sha256": {name: _hash_file(cached_paths[name]) for name in cache_names},
+            "temporal_rule": temporal_rule,
+        }
+        if binding is not None and binding != stage2_identity:
+            raise ValueError("resume rejected: stage-2 encoder/statistics/index binding changed; start a new run")
+        if binding is None:
+            _atomic_json(binding_path, stage2_identity)
         stage2_start = time.perf_counter()
         stage2_best = self.trainer.stage2(
             train_features,
@@ -190,6 +369,7 @@ class MNRFLiteV2:
             self.output_dir / "checkpoints",
             log_path=self.output_dir / "logs" / "training.jsonl",
             resume_id=resume_id,
+            stage2_identity=stage2_identity,
         )
         stage2_seconds = time.perf_counter() - stage2_start
         self.trainer.calibrate(validation_features, calibration_features, self.output_dir / "cache")
@@ -222,6 +402,11 @@ class MNRFLiteV2:
             },
             "purge_gap_points": ranges["gap"],
             "continuity": continuity,
+            "temporal_rule": temporal_rule,
+            "phase_states": {
+                "stage1": _checkpoint_phase_state(self.output_dir / "checkpoints" / "stage1_latest.pt"),
+                "stage2": _checkpoint_phase_state(self.output_dir / "checkpoints" / "stage2_latest.pt"),
+            },
             "continuous_segments": full_segments,
             "internal_segment_window_counts": ranges["window_counts"],
             "window_stability_warnings": stability_warnings,
@@ -259,7 +444,8 @@ class MNRFLiteV2:
             self.training_metadata["cuda_peak_memory_reserved_bytes"] = torch.cuda.max_memory_reserved(self.device)
         _atomic_json(self.output_dir / "cache_manifest.json", {
                 "status": "complete",
-                "architecture_version": "mnrf-lite-v2-tcn6b-2l-r1-segment-v2",
+                "architecture_version": ARCHITECTURE_VERSION,
+                "cache_schema_version": 2,
                 "variable_names": list(self.variable_names),
                 "architecture_config": {key: self.config.to_dict()[key] for key in (
                     "seq_len", "pattern_len", "hidden_dim", "view_dim"
@@ -268,6 +454,7 @@ class MNRFLiteV2:
                 "input_scale": self.trainer.fixed_input.scale_.tolist(),
                 "encoder_fingerprint": self.training_metadata["feature_fingerprint"],
                 "continuity": continuity,
+                "temporal_rule": temporal_rule,
                 "continuous_segments": full_segments,
                 "feature_mean": feature_mean.tolist(),
                 "feature_scale": feature_scale.tolist(),
@@ -301,7 +488,8 @@ class MNRFLiteV2:
         with open(root / "run_metadata.json", "w", encoding="utf-8") as handle:
             json.dump(self.training_metadata, handle, indent=2, default=str)
         artifact = {
-            "architecture_version": "mnrf-lite-v2-tcn6b-2l-r1-segment-v2",
+            "architecture_version": ARCHITECTURE_VERSION,
+            "time_protocol_version": TIME_PROTOCOL_VERSION,
             "config": self.config.to_dict(),
             "variable_names": self.variable_names,
             "encoder_state": self.trainer.encoder.state_dict(),
@@ -314,6 +502,7 @@ class MNRFLiteV2:
             "calibration_center": self.trainer.calibration_center,
             "calibration_scale": self.trainer.calibration_scale,
             "threshold": self.trainer.threshold,
+            "temporal_rule": self.temporal_rule,
             "training_metadata": self.training_metadata,
         }
         temporary = root / f"deployment.pt.tmp-{os.getpid()}"
@@ -322,7 +511,7 @@ class MNRFLiteV2:
 
     def load_checkpoint(self, path):
         artifact = torch.load(path, map_location="cpu", weights_only=False)
-        expected_version = "mnrf-lite-v2-tcn6b-2l-r1-segment-v2"
+        expected_version = ARCHITECTURE_VERSION
         if artifact.get("architecture_version") != expected_version:
             raise ValueError("deployment architecture version is missing or incompatible")
         requested_device = self.config.device
@@ -350,6 +539,9 @@ class MNRFLiteV2:
         self.trainer.calibration_scale = np.asarray(artifact["calibration_scale"], dtype=np.float32)
         self.trainer.threshold = float(artifact["threshold"])
         self.training_metadata = artifact.get("training_metadata", {})
+        self.temporal_rule = artifact.get("temporal_rule")
+        if not self.temporal_rule or self.temporal_rule.get("version") != TIME_PROTOCOL_VERSION:
+            raise ValueError("deployment is missing a compatible frozen time protocol")
         self._fitted = True
         return self
 
@@ -362,8 +554,16 @@ class MNRFLiteV2:
         if names != self.variable_names:
             raise ValueError("test variable names/order do not match training variables")
         total = len(values)
-        segments, continuity = continuous_segments(self._time_index(test_data), total,
-                                                    boundary_ids=self._boundary_ids(test_data))
+        score_time_index = self._time_index(test_data)
+        if ((self.temporal_rule["time_kind"] == "row_order") != (score_time_index.kind == "row_order")
+                or (self.temporal_rule["time_kind"] == "timestamp_naive_ns") != (score_time_index.kind == "timestamp_naive_ns")):
+            raise ValueError("scoring time index protocol differs from the frozen training protocol")
+        segments, continuity = continuous_segments(
+            score_time_index, total,
+            expected_interval=self.temporal_rule["expected_interval_ns"],
+            tolerance=self.temporal_rule["tolerance"],
+            boundary_ids=self._boundary_ids(test_data),
+        )
         valid_mask = np.zeros(total, dtype=bool)
         if total < self.config.seq_len:
             return {
@@ -427,7 +627,22 @@ def load_model(path, device="auto"):
 
 def _hash_array(values, chunk_rows=65536):
     digest = hashlib.sha256()
-    array = np.asarray(values)
+    if isinstance(values, TimeIndex):
+        digest.update(values.kind.encode())
+        array = values.values_ns
+    elif isinstance(values, pd.DatetimeIndex):
+        normalized = normalize_time_index(values)
+        digest.update(normalized.kind.encode())
+        array = normalized.values_ns
+    else:
+        array = np.asarray(values)
+    if array.dtype.kind == "O":
+        serialized = json.dumps(array.tolist(), ensure_ascii=False, sort_keys=True, default=str,
+                                separators=(",", ":")).encode("utf-8")
+        digest.update(str(array.shape).encode())
+        digest.update(b"object-json-v1\0")
+        digest.update(serialized)
+        return digest.hexdigest()
     digest.update(str(array.shape).encode())
     digest.update(str(array.dtype).encode())
     if array.dtype.kind in "mM":
@@ -453,3 +668,26 @@ def _atomic_json(path, payload):
     temporary = path.with_name(path.name + f".tmp-{os.getpid()}")
     temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _atomic_npz(path, **arrays):
+    path = Path(path)
+    temporary = path.with_name(path.name + f".tmp-{os.getpid()}.npz")
+    np.savez(temporary, **arrays)
+    os.replace(temporary, path)
+
+
+def _checkpoint_phase_state(path):
+    try:
+        state = torch.load(path, map_location="cpu", weights_only=False)
+    except Exception:
+        return {"status": "missing_or_invalid"}
+    return {
+        "status": state.get("stage_status", "unknown"),
+        "completion_reason": state.get("completion_reason"),
+        "next_epoch": state.get("next_epoch"),
+        "best_epoch": state.get("best_epoch"),
+        "best_validation": state.get("best"),
+        "patience": state.get("patience"),
+        "completed_steps": state.get("completed_steps"),
+    }

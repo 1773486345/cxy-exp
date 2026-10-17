@@ -70,7 +70,8 @@ class MNRFValidDetect(UnFixedDetectScore):
             predicted=scored["scores"].astype(float),
         )
         predictions = scored["predictions"].astype(np.int64)
-        test_time_index = np.asarray(test_data.index)[local_indices]
+        normalized_test_time = model._time_index(test_data)
+        test_time_index = normalized_test_time.values_ns[local_indices]
         tp = int(((selected_actual == 1) & (predictions == 1)).sum())
         fp = int(((selected_actual == 0) & (predictions == 1)).sum())
         fn = int(((selected_actual == 1) & (predictions == 0)).sum())
@@ -118,6 +119,8 @@ class MNRFValidDetect(UnFixedDetectScore):
             "scores": scored["scores"], "predictions": predictions,
             "time_indices": indices, "local_time_indices": local_indices,
             "time_index_values": test_time_index, "local_valid_mask": valid,
+            "time_index_kind": np.asarray(normalized_test_time.kind),
+            "time_index_source_timezone": np.asarray(normalized_test_time.source_timezone or ""),
             "actual": actual, "threshold": np.asarray(scored["threshold"]),
         }
         global_valid = np.zeros(len(train_data) + len(test_data), dtype=bool)

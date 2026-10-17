@@ -1,4 +1,5 @@
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -148,7 +149,8 @@ def test_stage_one_gradients_and_stage_two_freezing():
 
 def test_small_fit_score_alignment_checkpoint_roundtrip():
     rng = np.random.default_rng(42)
-    frame = pd.DataFrame(rng.normal(size=(430, 3)), columns=("x", "y", "z"))
+    frame = pd.DataFrame(rng.normal(size=(430, 3)), columns=("x", "y", "z"),
+                         index=pd.date_range("2025-01-01", periods=430, freq="min", tz="UTC"))
     with tempfile.TemporaryDirectory() as directory:
         path = f"{directory}/run"
         config = dict(seq_len=32, pattern_len=32, batch_size=32, stage1_epochs=1,
@@ -162,6 +164,17 @@ def test_small_fit_score_alignment_checkpoint_roundtrip():
         assert not scored["valid_mask"][:31].any()
         assert scored["valid_mask"].sum() == 33
         assert np.isfinite(scored["scores"]).all()
+        equivalent_tz = frame.iloc[:64].copy()
+        equivalent_tz.index = equivalent_tz.index.tz_convert("Asia/Shanghai")
+        timezone_score = model.score_with_metadata(equivalent_tz)
+        assert np.array_equal(scored["time_indices"], timezone_score["time_indices"])
+        assert np.allclose(scored["scores"], timezone_score["scores"], atol=1e-6, rtol=1e-6)
+        future = frame.iloc[64:72].copy()
+        future.index = pd.date_range(frame.index[63] + pd.Timedelta(minutes=2), periods=len(future), freq="2min", tz="UTC")
+        extended = pd.concat([frame.iloc[:64], future])
+        extended_score = model.score_with_metadata(extended)
+        assert np.array_equal(scored["time_indices"], extended_score["time_indices"][:len(scored["scores"])])
+        assert np.allclose(scored["scores"], extended_score["scores"][:len(scored["scores"])], atol=1e-6, rtol=1e-6)
         deployed = MNRFLiteV2(device="cpu").load_checkpoint(f"{path}/deployment.pt")
         rescored = deployed.score_with_metadata(frame.iloc[:64])
         assert np.allclose(scored["scores"], rescored["scores"], atol=1e-6, rtol=1e-6)
@@ -170,10 +183,16 @@ def test_small_fit_score_alignment_checkpoint_roundtrip():
         assert np.allclose(scored["scores"], rechunked["scores"], atol=1e-5, rtol=1e-5)
         with pytest.raises(ValueError, match="variable names/order"):
             deployed.detect_score(frame.iloc[:64].loc[:, ["z", "y", "x"]])
+        (Path(path) / "cache" / "normalized_train.npy").unlink()
+        (Path(path) / "cache" / "train_features.npy").unlink()
         resumed = MNRFLiteV2(**{**config, "resume_from": path})
-        resumed.detect_fit(frame)
+        resumed_frame = frame.copy()
+        resumed_frame.index = resumed_frame.index.tz_convert("Asia/Shanghai")
+        resumed.detect_fit(resumed_frame)
         resumed_scores = resumed.score_with_metadata(frame.iloc[:64])
         assert np.allclose(scored["scores"], resumed_scores["scores"], atol=1e-6, rtol=1e-6)
+        assert (Path(path) / "cache" / "normalized_train.npy").is_file()
+        assert (Path(path) / "cache" / "train_features.npy").is_file()
         changed = frame.copy()
         changed.iloc[0, 0] += 1
         with pytest.raises(ValueError, match="resume rejected"):
