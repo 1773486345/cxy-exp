@@ -112,10 +112,16 @@ supplied calibration endpoints, and writes checkpoint/calibration evidence.
 The adapter preserves CATCH's pointwise score contract: the last point of each
 explicit window is scored as pointwise time-domain MSE plus
 `score_lambda * frequency_criterion` (default `score_lambda=0.05`, inference
-patch size 32 and stride 1). The scaler is fitted on the raw rows covered by
-the training windows, never on validation, calibration, or test rows. Split
-windows must be mutually disjoint and cannot cross a timestamp or entity
-boundary.
+patch size 32 and stride 1). The scaler is fitted on the explicit
+`--train-rows` raw training-row file, never on a window-endpoint union or on
+validation, calibration, or test rows. Test windows are filtered per window
+when a timestamp gap or any entity/session boundary is encountered; invalid
+cold-start intervals remain invalid rather than being silently bridged. Split
+windows must be mutually disjoint and cannot cross a timestamp or any declared
+boundary column. The optimizer and mask-generator schedule follow the original
+CATCH adapter: mask gradients use its delayed update interval and OneCycle
+learning rates are adjusted at epoch boundaries. This explicit-split adapter is
+named `CATCH-common`, not presented as the benchmark's internal split.
 The registry refuses empty evidence, missing checkpoints, missing calibration
 scores, cross-run evidence, or hand-edited thresholds. Supplying
 `--common-manifest` to the evaluator is strict and exits nonzero when evidence

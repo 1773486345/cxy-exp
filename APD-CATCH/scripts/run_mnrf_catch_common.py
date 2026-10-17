@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 from ts_benchmark.baselines.catch.CATCH import TransformerConfig
 from ts_benchmark.baselines.catch.models.CATCH_model import CATCHModel
 from ts_benchmark.baselines.catch.utils.fre_rec_loss import frequency_loss, frequency_criterion
+from ts_benchmark.baselines.catch.utils.tools import adjust_learning_rate
 from ts_benchmark.baselines.mnrf_view_probe.evaluation import strict_integer_indices, validate_common_splits
 
 
@@ -35,6 +36,16 @@ def _sha256(path):
     with open(path, "rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _array_identity(values):
+    array = np.asarray(values)
+    digest = hashlib.sha256()
+    digest.update(json.dumps({"shape": list(array.shape), "dtype": str(array.dtype)}, sort_keys=True).encode())
+    flat = array.reshape(-1)
+    for start in range(0, flat.size, 65536):
+        digest.update(np.ascontiguousarray(flat[start:start + 65536]).tobytes())
     return digest.hexdigest()
 
 
@@ -80,27 +91,65 @@ def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start):
         timestamps = pd.to_datetime(frame[timestamp_column], errors="raise", utc=True).view("int64").to_numpy()
         if np.any(np.diff(timestamps) <= 0):
             raise ValueError("timestamps must be strictly increasing for CATCH-common windows")
-        train_rows = rows["train"]
-        train_deltas = np.diff(timestamps[train_rows])
+        train_deltas = np.concatenate([
+            np.diff(timestamps[int(endpoint) - seq_len + 1:int(endpoint) + 1])
+            for endpoint in endpoints_by_name["train"]
+        ])
         train_deltas = train_deltas[train_deltas > 0]
         if not len(train_deltas):
             raise ValueError("cannot infer a positive training sampling interval")
         interval = float(np.median(train_deltas))
-        for name, selected in rows.items():
-            if len(selected) > 1:
-                deltas = np.diff(timestamps[selected])
+        # Check each actual window, never the union of disjoint windows.  A
+        # legal purge or separate entity therefore cannot look like a gap.
+        for name, endpoints in endpoints_by_name.items():
+            for endpoint in endpoints:
+                start = int(endpoint) - seq_len + 1
+                deltas = np.diff(timestamps[start:int(endpoint) + 1])
                 if np.any(np.abs(deltas / interval - 1.0) > 0.05):
                     raise ValueError(f"{name} window crosses a timestamp gap")
-    boundary_column = next((column for column in frame.columns
-                            if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}), None)
-    if boundary_column is not None:
+    boundary_columns = [column for column in frame.columns
+                        if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}]
+    for boundary_column in boundary_columns:
         boundary = frame[boundary_column].to_numpy()
         for name, endpoints in endpoints_by_name.items():
             for endpoint in endpoints:
                 start = int(endpoint) - seq_len + 1
                 if np.any(boundary[start:int(endpoint) + 1] != boundary[start]):
-                    raise ValueError(f"{name} window crosses entity boundary")
+                    raise ValueError(f"{name} window crosses {boundary_column} boundary")
     return rows
+
+
+def _filter_test_endpoints(frame, endpoints, seq_len, train_endpoints):
+    """Keep only complete test windows; gaps create cold-start exclusions."""
+    endpoints = np.asarray(endpoints, dtype=np.int64)
+    timestamp_column = next((column for column in frame.columns
+                             if str(column).lower() in {"timestamp", "date", "time", "datetime"}), None)
+    timestamps = None
+    interval = None
+    if timestamp_column is not None:
+        timestamps = pd.to_datetime(frame[timestamp_column], errors="raise", utc=True).view("int64").to_numpy()
+        train_deltas = np.concatenate([
+            np.diff(timestamps[int(endpoint) - seq_len + 1:int(endpoint) + 1])
+            for endpoint in train_endpoints
+        ])
+        train_deltas = train_deltas[train_deltas > 0]
+        if not len(train_deltas):
+            raise ValueError("cannot infer a positive training sampling interval")
+        interval = float(np.median(train_deltas))
+    boundary_columns = [column for column in frame.columns
+                        if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}]
+    valid = []
+    for endpoint in endpoints:
+        start = int(endpoint) - seq_len + 1
+        if timestamps is not None:
+            deltas = np.diff(timestamps[start:int(endpoint) + 1])
+            if np.any(np.abs(deltas / interval - 1.0) > 0.05):
+                continue
+        if any(np.any(frame[column].to_numpy()[start:int(endpoint) + 1] != frame[column].to_numpy()[start])
+               for column in boundary_columns):
+            continue
+        valid.append(int(endpoint))
+    return np.asarray(valid, dtype=np.int64)
 
 
 def _score_batch(model, batch, frequency_metric, score_lambda):
@@ -139,11 +188,23 @@ def run(args):
     validation_endpoints = strict_integer_indices(validation_indices, "validation endpoints", upper_bound=len(values))
     calibration_endpoints = strict_integer_indices(calibration_indices, "calibration endpoints", upper_bound=len(values))
     test_indices = np.arange(int(args.test_start) + args.seq_len - 1, len(values), dtype=np.int64)
+    test_indices = _filter_test_endpoints(frame, test_indices, args.seq_len, train_indices)
     if len(test_indices) == 0:
         raise ValueError("test interval has no complete windows")
     endpoint_sets = {"train": train_endpoints, "validation": validation_endpoints,
                      "calibration": calibration_endpoints, "test": test_indices}
-    fit_rows = _validate_window_boundaries(frame, endpoint_sets, args.seq_len, args.test_start)["train"]
+    boundary_rows = _validate_window_boundaries(frame, endpoint_sets, args.seq_len, args.test_start)
+    if args.train_rows:
+        fit_rows = strict_integer_indices(np.load(args.train_rows, allow_pickle=False), "raw training rows", upper_bound=len(values))
+        if len(fit_rows) == 0:
+            raise ValueError("raw training rows are empty")
+        if np.any(fit_rows >= int(args.test_start)):
+            raise ValueError("raw training rows must be before test_start")
+        forbidden = np.unique(np.concatenate([boundary_rows[name] for name in ("validation", "calibration", "test")]))
+        if np.intersect1d(fit_rows, forbidden).size:
+            raise ValueError("raw training rows overlap validation, calibration, or test windows")
+    else:
+        raise ValueError("--train-rows is required to distinguish raw training rows from window endpoints")
     scaler = StandardScaler().fit(values[fit_rows])
     normalized = scaler.transform(values).astype(np.float32)
     fit_rows_path = output / "evidence" / "train_fit_rows.npy"
@@ -187,23 +248,28 @@ def run(args):
     best = float("inf")
     best_state = None
     patience_count = 0
+    mask_update_interval = max(1, min(int(len(train_loader) / 10), 100))
+    mask_optimizer.zero_grad()
     for epoch in range(args.epochs):
         model.train()
         losses = []
         for (batch,) in train_loader:
             batch = batch.to(device)
             optimizer.zero_grad(set_to_none=True)
-            mask_optimizer.zero_grad(set_to_none=True)
             reconstruction, complex_output, dc_loss = model(batch)
             normalized_batch = model.revin_layer(batch, "transform")
             loss = criterion(reconstruction, batch) + config.dc_lambda * dc_loss + config.auxi_lambda * aux_loss(complex_output, normalized_batch)
             if not torch.isfinite(loss):
                 raise FloatingPointError("non-finite CATCH-common training loss")
+            # Preserve the original CATCH schedule: mask gradients accumulate
+            # and are stepped only every 10% of an epoch (up to 100 batches),
+            # while the main optimizer updates every batch.  OneCycle's
+            # epoch-level learning-rate adjustment is applied below.
+            if ((len(losses) + 1) % mask_update_interval) == 0:
+                mask_optimizer.step()
+                mask_optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            mask_optimizer.step()
-            scheduler.step()
-            mask_scheduler.step()
             losses.append(float(loss.detach().cpu()))
         model.eval()
         with torch.no_grad():
@@ -222,6 +288,8 @@ def run(args):
                           "patience": patience_count}, sort_keys=True), flush=True)
         if patience_count >= args.patience:
             break
+        adjust_learning_rate(optimizer, scheduler, epoch + 1, config, printout=False)
+        adjust_learning_rate(mask_optimizer, mask_scheduler, epoch + 1, config, printout=False)
     if best_state is None:
         raise RuntimeError("CATCH-common produced no validation checkpoint")
     model.load_state_dict(best_state)
@@ -253,11 +321,21 @@ def run(args):
     np.savez_compressed(output / "results" / "aligned_scores.npz", scores=scores,
                         predictions=predictions, time_indices=test_indices,
                         threshold=np.asarray(threshold), actual=labels[test_indices])
-    data_identity = hashlib.sha256(values.tobytes()).hexdigest()
+    data_identity = _array_identity(values)
+    time_columns = [column for column in frame.columns
+                    if str(column).lower() in {"timestamp", "date", "time", "datetime"}]
+    boundary_columns = [column for column in frame.columns
+                        if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}]
+    time_identity = hashlib.sha256(
+        (frame[time_columns].astype(str).to_csv(index=False) if time_columns else
+         "row-order:" + str(len(frame))).encode("utf-8")).hexdigest()
+    variable_identity = hashlib.sha256(json.dumps(feature_columns).encode("utf-8")).hexdigest()
     run_identity = hashlib.sha256(json.dumps({"task_name": args.task_name, "data_identity": data_identity,
                                                "splits": split_record, "seq_len": args.seq_len}, sort_keys=True).encode()).hexdigest()
     common = {"protocol": "CATCH-common", "status": "complete", "task_name": args.task_name,
               "run_identity": run_identity, "data_identity": data_identity,
+              "time_identity": time_identity, "variable_identity": variable_identity,
+              "boundary_columns": [str(column) for column in boundary_columns],
               "split_identity": split_record, "checkpoint_path": str(checkpoint),
               "checkpoint_sha256": _sha256(checkpoint),
               "normalization_path": str((output / "normalization.npz").resolve()),
@@ -292,6 +370,8 @@ def main():
     parser.add_argument("--train-indices", required=True)
     parser.add_argument("--validation-indices", required=True)
     parser.add_argument("--calibration-indices", required=True)
+    parser.add_argument("--train-rows", required=True,
+                        help="raw training row coordinates used to fit the scaler")
     parser.add_argument("--output", required=True)
     parser.add_argument("--task-name", required=True)
     parser.add_argument("--test-start", type=int, required=True)

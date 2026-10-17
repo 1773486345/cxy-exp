@@ -140,7 +140,8 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
                 return False, "CATCH-common calibration threshold does not reproduce", None
     training = loaded_evidence["training"]
     calibration = loaded_evidence["calibration"]
-    for field in ("protocol", "task_name", "run_identity", "data_identity", "split_identity",
+    for field in ("protocol", "task_name", "run_identity", "data_identity", "time_identity",
+                  "variable_identity", "boundary_columns", "score_protocol", "split_identity",
                   "checkpoint_path", "checkpoint_sha256", "normalization_path", "normalization_sha256",
                   "train_fit_rows_path", "train_fit_rows_sha256"):
         if training.get(field) != calibration.get(field):
@@ -178,6 +179,58 @@ def _read_npz(path):
     result["time_indices"] = indices
     result["scores"] = scores
     return result
+
+
+def _validate_probe_execution(probe_path, probe, common_evidence, split_paths, labels):
+    """Bind the score NPZ to a completed, loadable Probe run in strict mode."""
+    from ts_benchmark.baselines.mnrf_view_probe.probe import load_probe
+    common_evidence = (common_evidence.get("calibration_identity", {}).get("evidence", {})
+                       if isinstance(common_evidence, dict) else {})
+
+    run_root = Path(probe_path).resolve().parent.parent
+    manifest_path = run_root / "probe_manifest.json"
+    status_path = run_root / "run_status.json"
+    if not manifest_path.is_file() or not status_path.is_file():
+        raise ValueError("strict CATCH-common probe artifact is missing its run manifest/status")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    if status.get("status") != "complete" or manifest.get("artifact_type") != "probe_head":
+        raise ValueError("strict CATCH-common probe run is not a completed probe head")
+    if manifest.get("aligned_scores_sha256") != _sha256_file(probe_path):
+        raise ValueError("strict CATCH-common probe score hash is not bound to its manifest")
+    try:
+        restored = load_probe(run_root, device="cpu").score_cached_test()
+    except Exception as error:
+        raise ValueError(f"strict CATCH-common probe artifact cannot be restored: {error}") from error
+    if not np.array_equal(np.asarray(restored["time_indices"], dtype=np.int64), probe["time_indices"]):
+        raise ValueError("strict CATCH-common probe endpoints differ from restored artifact")
+    if not np.allclose(np.asarray(restored["scores"], dtype=np.float64), probe["scores"], rtol=0, atol=1e-12):
+        raise ValueError("strict CATCH-common probe scores differ from restored artifact")
+    declared_threshold = float(np.asarray(probe.get("threshold", np.nan)))
+    restored_threshold = float(restored["threshold"])
+    if not np.isfinite(declared_threshold) or not np.isclose(declared_threshold, restored_threshold, rtol=0, atol=1e-12):
+        raise ValueError("strict CATCH-common probe threshold is not its calibrated threshold")
+    source = manifest.get("source_identity") or {}
+    if not source.get("task_name") or source.get("task_name") != common_evidence.get("task_name"):
+        raise ValueError("strict CATCH-common probe task identity differs")
+    if common_evidence.get("data_identity") and source.get("feature_data_sha256"):
+        if common_evidence.get("data_identity") != source.get("feature_data_sha256"):
+            raise ValueError("strict CATCH-common probe data identity differs")
+    seq_len = common_evidence.get("seq_len")
+    if seq_len is not None and int(manifest.get("config", {}).get("seq_len", -1)) != int(seq_len):
+        raise ValueError("strict CATCH-common probe sequence length differs")
+    ranges = source.get("ranges", {})
+    if split_paths and isinstance(ranges, dict):
+        for name, split_path in zip(("train", "validation", "calibration"), split_paths):
+            values = strict_integer_indices(np.load(split_path, allow_pickle=False), name)
+            start, end = ranges.get(name, [0, 0])
+            if len(values) and (np.any(values < int(start)) or np.any(values >= int(end))):
+                raise ValueError(f"strict CATCH-common {name} split is outside the probe split identity")
+    actual = probe.get("actual")
+    if actual is not None:
+        actual = np.asarray(actual, dtype=np.int64).reshape(-1)
+        if len(actual) != len(probe["time_indices"]) or not np.array_equal(actual, labels[probe["time_indices"]]):
+            raise ValueError("strict CATCH-common probe actual labels are not bound to common labels")
 
 
 def _metric(actual, scores):
@@ -249,6 +302,11 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
         strict_common = bool(common_manifest)
     if strict_common and not evidence_ok:
         raise ValueError(f"strict CATCH-common evidence rejected: {evidence_reason}")
+    if strict_common:
+        _validate_probe_execution(probe_path, probe, evidence, split_paths, labels)
+        if probe_threshold is not None and not np.isclose(float(probe_threshold),
+                                                          float(probe["threshold"]), rtol=0, atol=1e-12):
+            raise ValueError("strict CATCH-common probe threshold override does not match its calibration")
     if evidence_ok:
         calibration_identity = evidence.get("calibration_identity", {})
         calibration_evidence = calibration_identity.get("evidence", {})

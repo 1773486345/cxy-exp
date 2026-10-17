@@ -137,7 +137,14 @@ def register(args):
                                                   (args.train_indices, args.validation_indices, args.calibration_indices))
     calibration_evidence = _load_execution_evidence(args.calibration_evidence, "calibration", args.task_name,
                                                      (args.train_indices, args.validation_indices, args.calibration_indices))
+    with np.load(args.catch, allow_pickle=False) as catch_payload:
+        catch_threshold = catch_payload.get("threshold")
+    if catch_threshold is None or not np.isfinite(float(np.asarray(catch_threshold))):
+        raise ValueError("CATCH score artifact must contain a finite calibrated threshold")
+    if not np.isclose(float(np.asarray(catch_threshold)), float(calibration_evidence["threshold"]), rtol=0, atol=1e-12):
+        raise ValueError("CATCH score threshold does not match its calibration evidence")
     for field in ("protocol", "task_name", "run_identity", "data_identity", "split_identity",
+                  "time_identity", "variable_identity", "boundary_columns", "score_protocol",
                   "checkpoint_path", "checkpoint_sha256", "normalization_path", "normalization_sha256",
                   "train_fit_rows_path", "train_fit_rows_sha256"):
         if training_evidence.get(field) != calibration_evidence.get(field):

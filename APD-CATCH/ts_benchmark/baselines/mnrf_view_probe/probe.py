@@ -119,6 +119,17 @@ def _safe_name(value):
     return "".join(char if char.isalnum() or char in "._-" else "_" for char in str(value))
 
 
+def _all_boundary_ids(frame):
+    """Build one stable boundary identity from every declared boundary column."""
+    columns = [column for column in frame.columns
+               if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}]
+    if not columns:
+        return None, []
+    values = frame[columns].astype(object).where(frame[columns].notna(), "<NA>")
+    combined = values.astype(str).agg("\x1f".join, axis=1).to_numpy(dtype=object)
+    return combined, [str(column) for column in columns]
+
+
 def _select_stratified(endpoints, segments, limit, seed):
     endpoints = np.asarray(endpoints, dtype=np.int64)
     limit = min(int(limit), len(endpoints))
@@ -250,6 +261,13 @@ class MNRFViewProbe:
         """Persist recovery identity before any stage can mutate artifacts."""
         if self.output_dir is None:
             return
+        requested_stage = extra.pop("stage", "created")
+        request_path = self.output_dir / "run_request.json"
+        previous = {}
+        if request_path.is_file():
+            previous = json.loads(request_path.read_text(encoding="utf-8"))
+            if previous.get("run_identity") not in {None, self._run_identity}:
+                raise ValueError("run request identity cannot change during a stage update")
         payload = {
             "schema": PROBE_SCHEMA,
             "run_identity": self._run_identity,
@@ -257,10 +275,17 @@ class MNRFViewProbe:
             "mode": self.config.mode,
             "config": self.config.to_dict(),
             "source_identity": self.source_identity,
-            "stage": extra.pop("stage", "created"),
+            "stage": requested_stage,
         }
+        # Stage transitions are mutable metadata; immutable initialization
+        # identities (notably initial_encoder_sha256) must survive them.
+        payload.update(previous)
+        payload.update({"schema": PROBE_SCHEMA, "run_identity": self._run_identity,
+                        "task_name": self.config.task_name, "mode": self.config.mode,
+                        "config": self.config.to_dict(), "source_identity": self.source_identity})
+        payload["stage"] = requested_stage
         payload.update(extra)
-        _atomic_json(self.output_dir / "run_request.json", payload)
+        _atomic_json(request_path, payload)
 
     @staticmethod
     def _features(frame):
@@ -274,7 +299,7 @@ class MNRFViewProbe:
             raise ValueError("train_length must leave complete purged train/validation/calibration and test windows")
         ranges = purged_ranges(train_length, self.config.seq_len)
         time_index = MNRFLiteV2._time_index(frame)
-        boundary_ids = MNRFLiteV2._boundary_ids(frame)
+        boundary_ids, boundary_columns = _all_boundary_ids(frame)
         a, b = ranges["train"]
         train_time = TimeIndex(time_index.values_ns[a:b], time_index.kind, time_index.source_timezone)
         expected = infer_expected_interval(train_time, b - a, None if boundary_ids is None else boundary_ids[a:b])
@@ -303,7 +328,7 @@ class MNRFViewProbe:
         self.temporal_rule = {
             "version": "train-frozen-cadence-v1", "time_kind": time_index.kind,
             "expected_interval_ns": expected, "tolerance": 0.05,
-            "entity_boundary_columns": [str(c) for c in MNRFLiteV2._boundary_columns(frame)],
+            "entity_boundary_columns": boundary_columns,
             "fit_range": [int(a), int(b)],
         }
         self._current_test_endpoints = np.asarray(test_endpoints, dtype=np.int64)
@@ -311,7 +336,6 @@ class MNRFViewProbe:
         self._time_values_ns = np.asarray(time_index.values_ns, dtype=np.int64)
         self._time_index_kind = time_index.kind
         self._source_timezone = time_index.source_timezone
-        boundary_columns = [str(c) for c in MNRFLiteV2._boundary_columns(frame)]
         self.source_identity = {
             "schema": "mnrf-view-probe-source-identity-v2",
             "task_name": self.config.task_name,
@@ -587,12 +611,17 @@ class MNRFViewProbe:
         for name in ("train", "validation", "calibration", "test"):
             path = source / "cache" / f"{name}_features.npy"
             endpoint_path = source / "cache" / f"{name}_window_end_indices.npy"
+            declared_cache_hash = manifest.get("cache_sha256", {}).get(name)
+            declared_endpoint_hash = manifest.get("endpoint_sha256", {}).get(name)
+            if not declared_cache_hash or not declared_endpoint_hash:
+                raise ValueError(f"view probe source manifest is missing immutable {name} hashes")
             cache[name] = self._validate_cache_entry(
                 path, endpoint_path, name,
-                manifest.get("cache_sha256", {}).get(name),
-                manifest.get("endpoint_sha256", {}).get(name),
+                declared_cache_hash, declared_endpoint_hash,
             )
         declared_sample_hash = manifest.get("gmm_fit_endpoints_sha256")
+        if manifest.get("head_type") == "gmm" and not declared_sample_hash:
+            raise ValueError("view probe source GMM manifest is missing fitting endpoint hash")
         if declared_sample_hash is not None:
             sample_path = source / "heads" / "gmm_fit_endpoints.npy"
             if not sample_path.is_file() or _sha256_file(sample_path) != declared_sample_hash:
@@ -934,13 +963,16 @@ class MNRFViewProbe:
         # interruption. Shape and finite-value checks alone are insufficient.
         if manifest is not None:
             for name in ("train", "validation", "calibration", "test"):
-                cache_path = self.output_dir / "cache" / f"{name}_features.npy"
-                endpoint_path = self.output_dir / "cache" / f"{name}_window_end_indices.npy"
-                declared_cache = manifest.get("cache_sha256", {}).get(name)
-                declared_endpoint = manifest.get("endpoint_sha256", {}).get(name)
-                if declared_cache is not None and (not cache_path.is_file() or _sha256_file(cache_path) != declared_cache):
+                cache_root = (Path(self.config.source_dir).resolve()
+                              if self.config.source_dir else self.output_dir)
+                cache_path = cache_root / "cache" / f"{name}_features.npy"
+                endpoint_path = cache_root / "cache" / f"{name}_window_end_indices.npy"
+                hash_prefix = "source_" if self.config.source_dir else ""
+                declared_cache = manifest.get(hash_prefix + "cache_sha256", {}).get(name)
+                declared_endpoint = manifest.get(hash_prefix + "endpoint_sha256", {}).get(name)
+                if (not declared_cache or not cache_path.is_file() or _sha256_file(cache_path) != declared_cache):
                     raise ValueError(f"resume rejected: cache hash differs for {name}")
-                if declared_endpoint is not None and (not endpoint_path.is_file() or _sha256_file(endpoint_path) != declared_endpoint):
+                if (not declared_endpoint or not endpoint_path.is_file() or _sha256_file(endpoint_path) != declared_endpoint):
                     raise ValueError(f"resume rejected: endpoint hash differs for {name}")
             normalized_path = self.output_dir / "cache" / "normalized_values.npy"
             declared_normalized = manifest.get("normalized_cache_sha256")
@@ -1010,17 +1042,36 @@ class MNRFViewProbe:
         # A completed stage-one source must have its complete source contract.
         if manifest is not None and manifest.get("artifact_type") == ARTIFACT_SOURCE:
             for name in ("initial_encoder.pt", "best_encoder.pt"):
-                if not (self.output_dir / "checkpoints" / name).is_file():
-                    raise ValueError("resume rejected: completed source is missing " + name)
-            if not (self.output_dir / "input_statistics.npz").is_file():
-                raise ValueError("resume rejected: completed source is missing input statistics")
+                checkpoint_path = self.output_dir / "checkpoints" / name
+                declared = manifest.get("checkpoint_sha256", {}).get(name)
+                if not checkpoint_path.is_file() or not declared or _sha256_file(checkpoint_path) != declared:
+                    raise ValueError("resume rejected: completed source checkpoint is missing or changed: " + name)
+                try:
+                    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+                except Exception as error:
+                    raise ValueError("resume rejected: source checkpoint cannot be loaded: " + name) from error
+                if not isinstance(checkpoint, dict) or checkpoint.get("run_identity") != self._run_identity:
+                    raise ValueError("resume rejected: completed source checkpoint identity differs")
+            input_stats_path = self.output_dir / "input_statistics.npz"
+            declared_stats = manifest.get("input_statistics_sha256")
+            if not input_stats_path.is_file() or not declared_stats or _sha256_file(input_stats_path) != declared_stats:
+                raise ValueError("resume rejected: completed source input statistics are missing or changed")
+            normalized_path = self.output_dir / "cache" / "normalized_values.npy"
+            declared_normalized = manifest.get("normalized_cache_sha256")
+            if (not normalized_path.is_file() or not declared_normalized
+                    or _sha256_file(normalized_path) != declared_normalized):
+                raise ValueError("resume rejected: completed source normalized cache is missing or changed")
             # Stage-one exports intentionally have no score/head artifacts;
             # use the source contract above instead of the deployment loader,
             # which also validates final results.
             for name in ("train", "validation", "calibration", "test"):
                 cache_path = self.output_dir / "cache" / f"{name}_features.npy"
                 endpoint_path = self.output_dir / "cache" / f"{name}_window_end_indices.npy"
-                if not cache_path.is_file() or not endpoint_path.is_file():
+                if (not cache_path.is_file() or not endpoint_path.is_file()
+                        or not manifest.get("cache_sha256", {}).get(name)
+                        or not manifest.get("endpoint_sha256", {}).get(name)
+                        or _sha256_file(cache_path) != manifest["cache_sha256"][name]
+                        or _sha256_file(endpoint_path) != manifest["endpoint_sha256"][name]):
                     raise ValueError("resume rejected: completed source cache is incomplete")
             self._resume_stage1_complete = status.get("status") == "stage1_complete"
         gmm_mode = self.config.mode in {"full_gmm", "select_gmm", "random_gmm"}
@@ -1052,7 +1103,9 @@ class MNRFViewProbe:
                     except Exception as error:
                         raise ValueError(f"resume rejected: completed GMM variable {variable} is invalid: {error}") from error
                 sample_path = self.output_dir / "heads" / "gmm_fit_endpoints.npy"
-                train_endpoint_path = self.output_dir / "cache" / "train_window_end_indices.npy"
+                cache_root = (Path(self.config.source_dir).resolve()
+                              if self.config.source_dir else self.output_dir)
+                train_endpoint_path = cache_root / "cache" / "train_window_end_indices.npy"
                 if not sample_path.is_file() or not train_endpoint_path.is_file():
                     raise ValueError("resume rejected: GMM fitting endpoint sample is missing")
                 sample = _strict_integer_indices(np.load(sample_path, mmap_mode="r"), "GMM fitting endpoint sample")
@@ -1063,7 +1116,7 @@ class MNRFViewProbe:
                 if np.any(positions >= len(train_endpoints)) or not np.array_equal(train_endpoints[positions], sample):
                     raise ValueError("resume rejected: GMM fitting sample is not a train-endpoint subset")
                 declared_sample = (manifest or {}).get("gmm_fit_endpoints_sha256")
-                if declared_sample is not None and _sha256_file(sample_path) != declared_sample:
+                if not declared_sample or _sha256_file(sample_path) != declared_sample:
                     raise ValueError("resume rejected: GMM fitting sample hash differs")
                 noise_path = self.output_dir / "heads" / "fixed_noise.npy"
                 if not noise_path.is_file():
@@ -1442,11 +1495,17 @@ def load_probe(path, device="cpu"):
                 or not source_is_frozen
                 or source_manifest.get("source_identity") != manifest.get("source_identity")):
             raise ValueError("view probe source identity does not match the loaded artifact")
-        for name, declared_hash in manifest.get("source_cache_sha256", {}).items():
+        source_cache_hashes = manifest.get("source_cache_sha256", {})
+        source_endpoint_hashes = manifest.get("source_endpoint_sha256", {})
+        if any(name not in source_cache_hashes for name in ("train", "validation", "calibration", "test")):
+            raise ValueError("view probe source cache hashes are incomplete")
+        if any(name not in source_endpoint_hashes for name in ("train", "validation", "calibration", "test")):
+            raise ValueError("view probe source endpoint hashes are incomplete")
+        for name, declared_hash in source_cache_hashes.items():
             cache_path = source / "cache" / f"{name}_features.npy"
             if not cache_path.is_file() or _sha256_file(cache_path) != declared_hash:
                 raise ValueError(f"view probe source cache hash mismatch: {name}")
-        for name, declared_hash in manifest.get("source_endpoint_sha256", {}).items():
+        for name, declared_hash in source_endpoint_hashes.items():
             endpoint_path = source / "cache" / f"{name}_window_end_indices.npy"
             if not endpoint_path.is_file() or _sha256_file(endpoint_path) != declared_hash:
                 raise ValueError(f"view probe source endpoint hash mismatch: {name}")

@@ -113,7 +113,7 @@ The explicit-split CATCH-common adapter (short synthetic or one manually
 selected task; this command is prepared, not run by this repository change):
 
 ```bash
-conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/run_mnrf_catch_common.py --data-csv /absolute/task.csv --train-indices /absolute/train_endpoints.npy --validation-indices /absolute/validation_endpoints.npy --calibration-indices /absolute/calibration_endpoints.npy --test-start 430 --task-name TASK.csv --output /absolute/catch-common-run
+conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/run_mnrf_catch_common.py --data-csv /absolute/task.csv --train-indices /absolute/train_endpoints.npy --validation-indices /absolute/validation_endpoints.npy --calibration-indices /absolute/calibration_endpoints.npy --train-rows /absolute/train_rows.npy --test-start 430 --task-name TASK.csv --output /absolute/catch-common-run
 ```
 
 The adapter defaults match the CATCH score path (`score_lambda=0.05`,
