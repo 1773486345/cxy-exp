@@ -18,6 +18,7 @@ from .config import MNRFConfig
 from .fusion import AlternatingAffineFlow
 from .normalization import FixedFeatureStandardizer, FixedInputStandardizer
 from .views import FourViewEncoder
+from .windows import intersect_segments, window_endpoints
 
 
 def purged_ranges(length, window):
@@ -52,17 +53,18 @@ def purged_ranges(length, window):
 
 
 class EndWindowDataset(Dataset):
-    def __init__(self, values, start, end, window):
+    def __init__(self, values, start, end, window, segments=None):
         self.values = values
         self.start, self.end, self.window = int(start), int(end), int(window)
-        self.endpoints = np.arange(self.start + self.window - 1, self.end, dtype=np.int64)
+        selected = segments if segments is not None else [(self.start, self.end)]
+        self.endpoints = window_endpoints(intersect_segments(selected, self.start, self.end), self.window)
 
     def __len__(self):
         return len(self.endpoints)
 
     def __getitem__(self, index):
         endpoint = int(self.endpoints[index])
-        return torch.from_numpy(np.asarray(self.values[endpoint - self.window + 1:endpoint + 1], dtype=np.float32)), endpoint
+        return torch.from_numpy(np.array(self.values[endpoint - self.window + 1:endpoint + 1], dtype=np.float32, copy=True)), endpoint
 
 
 class GaussianAuxiliaryDecoder(nn.Module):
@@ -109,10 +111,11 @@ class MNRFTrainer:
         self.threshold = None
         self.history = {"stage1": [], "stage2": []}
         self.split_info = None
+        self.cache_sha256 = {}
 
-    def _windows(self, values, segment, shuffle, seed=None):
+    def _windows(self, values, segment, shuffle, seed=None, segments=None):
         start, end = segment
-        dataset = EndWindowDataset(values, start, end, self.config.seq_len)
+        dataset = EndWindowDataset(values, start, end, self.config.seq_len, segments=segments)
         generator = None
         if seed is not None:
             generator = torch.Generator().manual_seed(int(seed))
@@ -141,10 +144,10 @@ class MNRFTrainer:
         return self.auxiliary.loss(z, target, relative, self.encoder.point.variable_identity, task_index)
 
     @torch.no_grad()
-    def _validation_stage1(self, values, segment):
+    def _validation_stage1(self, values, segment, segments=None):
         self.encoder.eval()
         self.auxiliary.eval()
-        loader = self._windows(values, segment, shuffle=False)
+        loader = self._windows(values, segment, shuffle=False, segments=segments)
         per_task = {name: [0.0, 0] for name in ("evolution", "pattern", "relation")}
         for windows, endpoints in loader:
             endpoints_np = endpoints.numpy()
@@ -157,17 +160,34 @@ class MNRFTrainer:
         self.auxiliary.train()
         return float(np.mean(task_losses))
 
-    def stage1(self, values, train_segment, validation_segment, out_dir):
+    def stage1(self, values, train_segment, validation_segment, out_dir, segments=None, log_path=None, resume_id=None):
         optimizer = torch.optim.AdamW(
             list(self.encoder.parameters()) + list(self.auxiliary.parameters()),
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
         )
-        train_loader = self._windows(values, train_segment, shuffle=True, seed=self.config.seed)
+        train_loader = self._windows(values, train_segment, shuffle=True, seed=self.config.seed, segments=segments)
         best = float("inf")
         best_state = None
         patience = 0
-        for epoch in range(self.config.stage1_epochs):
+        start_epoch = 0
+        completed_steps = 0
+        latest_path = Path(out_dir) / "stage1_latest.pt"
+        if self.config.resume_from and not latest_path.is_file():
+            raise FileNotFoundError("explicit resume run has no stage1 epoch checkpoint")
+        if self.config.resume_from and latest_path.is_file():
+            state = torch.load(latest_path, map_location="cpu", weights_only=False)
+            _validate_resume_state(state, "stage1", resume_id)
+            self.encoder.load_state_dict(state["encoder"])
+            self.auxiliary.load_state_dict(state["auxiliary"])
+            optimizer.load_state_dict(state["optimizer"])
+            train_loader.generator.set_state(state["loader_rng"])
+            _restore_rng(state["rng"])
+            start_epoch, best, best_state, patience = state["next_epoch"], state["best"], state["best_state"], state["patience"]
+            completed_steps = state.get("completed_steps", 0)
+            self.history["stage1"] = state.get("history", [])
+        for epoch in range(start_epoch, self.config.stage1_epochs):
+            epoch_start = time.perf_counter()
             self.encoder.train()
             self.auxiliary.train()
             task_losses = []
@@ -180,7 +200,8 @@ class MNRFTrainer:
                 loss.backward()
                 optimizer.step()
                 task_losses.append(float(loss.detach().cpu()))
-            validation_loss = self._validation_stage1(values, validation_segment)
+                completed_steps += 1
+            validation_loss = self._validation_stage1(values, validation_segment, segments=segments)
             self.history["stage1"].append({
                 "epoch": epoch + 1,
                 "steps": len(task_losses),
@@ -193,11 +214,27 @@ class MNRFTrainer:
                     "encoder": {k: v.detach().cpu().clone() for k, v in self.encoder.state_dict().items()},
                     "auxiliary": {k: v.detach().cpu().clone() for k, v in self.auxiliary.state_dict().items()},
                 }
+                atomic_torch_save(best_state, Path(out_dir) / "best_encoder.pt")
+                atomic_torch_save(best_state, Path(out_dir) / "best_stage1.pt")
                 patience = 0
             else:
                 patience += 1
-                if patience >= self.config.patience:
-                    break
+            checkpoint = {
+                "stage": "stage1", "resume_id": resume_id, "next_epoch": epoch + 1,
+                "encoder": self.encoder.state_dict(), "auxiliary": self.auxiliary.state_dict(),
+                "optimizer": optimizer.state_dict(), "loader_rng": train_loader.generator.get_state(),
+                "rng": _capture_rng(), "best": best, "best_state": best_state,
+                "patience": patience, "history": self.history["stage1"], "completed_steps": completed_steps,
+            }
+            atomic_torch_save(checkpoint, latest_path)
+            record = {**self.history["stage1"][-1], "stage": "stage1", "completed_steps": completed_steps, "best_validation": best,
+                      "patience": patience, "elapsed_seconds": time.perf_counter() - epoch_start}
+            _append_log(log_path, record)
+            print(f"MNRF stage1 epoch={epoch + 1} epoch_steps={record['steps']} completed_steps={completed_steps} train_nll={record['train_nll']:.6g} "
+                  f"validation={validation_loss:.6g} best={best:.6g} patience={patience} "
+                  f"seconds={record['elapsed_seconds']:.2f}", flush=True)
+            if patience >= self.config.patience:
+                break
         if best_state is None:
             raise RuntimeError("stage1 did not produce a finite validation checkpoint")
         self.encoder.load_state_dict(best_state["encoder"])
@@ -207,31 +244,48 @@ class MNRFTrainer:
         self.encoder.eval()
         # The temporary auxiliary decoder is deliberately excluded from deployment.
         del self.auxiliary
-        torch.save(best_state["encoder"], Path(out_dir) / "best_encoder.pt")
+        if log_path:
+            Path(log_path).parent.mkdir(parents=True, exist_ok=True)
         return best
 
     @torch.no_grad()
-    def extract_cache(self, values, segment, name, cache_dir):
+    def extract_cache(self, values, segment, name, cache_dir, segments=None):
         start, end = segment
-        dataset = EndWindowDataset(values, start, end, self.config.seq_len)
+        dataset = EndWindowDataset(values, start, end, self.config.seq_len, segments=segments)
         count = len(dataset)
         path = Path(cache_dir) / f"{name}_features.npy"
+        temporary_path = path.with_name(path.name + f".partial-{os.getpid()}")
         indices_path = Path(cache_dir) / f"{name}_window_end_indices.npy"
-        np.save(indices_path, dataset.endpoints)
+        tmp_indices = str(indices_path) + ".tmp.npy"
+        np.save(tmp_indices, dataset.endpoints)
+        os.replace(tmp_indices, indices_path)
         mmap = np.lib.format.open_memmap(
-            path, mode="w+", dtype=np.float32,
+            temporary_path, mode="w+", dtype=np.float32,
             shape=(count, self.variables, 25),
         )
         self.encoder.eval()
         cursor = 0
-        for offset in range(0, count, self.config.cache_chunk_size):
-            batch = [dataset[i][0] for i in range(offset, min(count, offset + self.config.cache_chunk_size))]
+        encode_batch = min(self.config.batch_size, self.config.encoding_batch_size or self.config.batch_size)
+        io_chunks = max(1, math.ceil(count / self.config.cache_chunk_size))
+        next_progress = min(count, self.config.cache_chunk_size)
+        io_number = 1
+        for offset in range(0, count, encode_batch):
+            batch = [dataset[i][0] for i in range(offset, min(count, offset + encode_batch))]
             tensor = torch.stack(batch).to(self.device)
             feature = self.encoder.encode_views(tensor)["features"]
             size = feature.size(0)
-            mmap[cursor:cursor + size] = feature.cpu().numpy()
+            feature_array = np.ascontiguousarray(feature.cpu().numpy())
+            mmap[cursor:cursor + size] = feature_array
             cursor += size
+            if cursor >= next_progress or cursor == count:
+                print(f"MNRF cache={name} windows={cursor}/{count} io_chunk={io_number}/{io_chunks} "
+                      f"gpu_batch<={encode_batch}", flush=True)
+                io_number += 1
+                next_progress = min(count, next_progress + self.config.cache_chunk_size)
         mmap.flush()
+        del mmap
+        os.replace(temporary_path, path)
+        self.cache_sha256[name] = _file_sha256(path)
         return str(path), count, str(indices_path)
 
     def _fixed_noises(self):
@@ -248,13 +302,19 @@ class MNRFTrainer:
         return self.flow(features, identity)["nll"]
 
     @torch.no_grad()
+    def _normalized_feature_batch(self, features, indices):
+        batch = np.asarray(features[indices], dtype=np.float32)
+        return (batch - self.fixed_feature.mean_) / self.fixed_feature.scale_
+
     def _stage2_validation(self, features):
         self.flow.eval()
         noises = self._fixed_noises()
         total_loss = 0.0
         total_count = 0
         for offset in range(0, len(features), self.config.batch_size):
-            batch = torch.as_tensor(np.asarray(features[offset:offset + self.config.batch_size]), device=self.device)
+            batch = torch.as_tensor(self._normalized_feature_batch(
+                features, slice(offset, offset + self.config.batch_size)
+            ), device=self.device)
             values = [self._flow_nll(batch, noise).mean() for noise in noises]
             size = len(batch)
             total_loss += float(torch.stack(values).mean().cpu()) * size
@@ -262,7 +322,7 @@ class MNRFTrainer:
         self.flow.train()
         return total_loss / max(total_count, 1)
 
-    def stage2(self, train_features, validation_features, out_dir):
+    def stage2(self, train_features, validation_features, out_dir, log_path=None, resume_id=None):
         for parameter in self.encoder.parameters():
             parameter.requires_grad_(False)
             parameter.grad = None
@@ -275,15 +335,29 @@ class MNRFTrainer:
         best = float("inf")
         best_state = None
         patience = 0
+        completed_steps = 0
         generator = torch.Generator(device="cpu").manual_seed(self.config.seed + 17)
         self._fixed_noises()
-        for epoch in range(self.config.stage2_epochs):
+        start_epoch = 0
+        latest_path = Path(out_dir) / "stage2_latest.pt"
+        if self.config.resume_from and latest_path.is_file():
+            state = torch.load(latest_path, map_location="cpu", weights_only=False)
+            _validate_resume_state(state, "stage2", resume_id)
+            self.flow.load_state_dict(state["flow"])
+            optimizer.load_state_dict(state["optimizer"])
+            generator.set_state(state["sampler_rng"])
+            _restore_rng(state["rng"])
+            start_epoch, best, best_state, patience = state["next_epoch"], state["best"], state["best_state"], state["patience"]
+            completed_steps = state.get("completed_steps", 0)
+            self.history["stage2"] = state.get("history", [])
+        for epoch in range(start_epoch, self.config.stage2_epochs):
+            epoch_start = time.perf_counter()
             self.flow.train()
             indices = torch.randperm(len(train_features), generator=generator).numpy()
             losses = []
             for start in range(0, len(indices), self.config.batch_size):
                 selection = indices[start:start + self.config.batch_size]
-                feature = torch.as_tensor(np.asarray(train_features[selection]), device=self.device)
+                feature = torch.as_tensor(self._normalized_feature_batch(train_features, selection), device=self.device)
                 noise = torch.randn(
                     feature.size(0), 1, 25, device=self.device
                 ) * self.config.train_noise_std
@@ -295,6 +369,7 @@ class MNRFTrainer:
                 loss.backward()
                 optimizer.step()
                 losses.append(float(loss.detach().cpu()))
+                completed_steps += 1
             validation_loss = self._stage2_validation(validation_features)
             self.history["stage2"].append({
                 "epoch": epoch + 1,
@@ -305,45 +380,132 @@ class MNRFTrainer:
             if validation_loss < best:
                 best = validation_loss
                 best_state = {k: v.detach().cpu().clone() for k, v in self.flow.state_dict().items()}
+                atomic_torch_save(best_state, Path(out_dir) / "best_fusion.pt")
                 patience = 0
             else:
                 patience += 1
-                if patience >= self.config.patience:
-                    break
+            checkpoint = {
+                "stage": "stage2", "resume_id": resume_id, "next_epoch": epoch + 1,
+                "flow": self.flow.state_dict(), "optimizer": optimizer.state_dict(),
+                "sampler_rng": generator.get_state(), "rng": _capture_rng(),
+                "best": best, "best_state": best_state, "patience": patience,
+                "history": self.history["stage2"], "completed_steps": completed_steps,
+            }
+            atomic_torch_save(checkpoint, latest_path)
+            record = {**self.history["stage2"][-1], "stage": "stage2", "completed_steps": completed_steps, "best_validation": best,
+                      "patience": patience, "elapsed_seconds": time.perf_counter() - epoch_start}
+            _append_log(log_path, record)
+            print(f"MNRF stage2 epoch={epoch + 1} epoch_steps={record['steps']} completed_steps={completed_steps} train_nll={record['train_nll']:.6g} "
+                  f"validation={validation_loss:.6g} best={best:.6g} patience={patience} "
+                  f"seconds={record['elapsed_seconds']:.2f}", flush=True)
+            if patience >= self.config.patience:
+                break
         if best_state is None:
             raise RuntimeError("stage2 did not produce a finite validation checkpoint")
         self.flow.load_state_dict(best_state)
-        torch.save(best_state, Path(out_dir) / "best_fusion.pt")
         return best
 
     @torch.no_grad()
-    def per_variable_scores(self, features):
+    def per_variable_scores(self, features, output_path=None):
         noises = self._fixed_noises()
-        results = []
+        output = None
+        if output_path is not None:
+            output = np.lib.format.open_memmap(output_path, mode="w+", dtype=np.float32,
+                                                shape=(len(features), self.variables))
+        results = [] if output is None else None
         self.encoder.eval()
         self.flow.eval()
         for offset in range(0, len(features), self.config.batch_size):
-            batch = torch.as_tensor(np.asarray(features[offset:offset + self.config.batch_size]), device=self.device)
+            batch = torch.as_tensor(self._normalized_feature_batch(
+                features, slice(offset, offset + self.config.batch_size)
+            ), device=self.device)
             scores = torch.stack([self._flow_nll(batch, noise) for noise in noises]).mean(dim=0)
-            results.append(scores.cpu().numpy())
+            values = scores.cpu().numpy()
+            if output is None:
+                results.append(values)
+            else:
+                output[offset:offset + len(values)] = values
+        if output is not None:
+            output.flush()
+            return output
         return np.concatenate(results, axis=0)
 
-    def calibrate(self, validation_features, calibration_features):
-        validation_scores = self.per_variable_scores(validation_features)
-        self.calibration_center = np.median(validation_scores, axis=0).astype(np.float32)
-        mad = np.median(np.abs(validation_scores - self.calibration_center), axis=0)
+    def calibrate(self, validation_features, calibration_features, work_dir=None):
+        work = Path(work_dir or ".")
+        work.mkdir(parents=True, exist_ok=True)
+        validation_scores = self.per_variable_scores(validation_features, work / "validation_nll.npy")
+        self.calibration_center = np.asarray([np.median(validation_scores[:, d]) for d in range(self.variables)], dtype=np.float32)
+        mad = np.asarray([np.median(np.abs(validation_scores[:, d] - self.calibration_center[d]))
+                          for d in range(self.variables)], dtype=np.float32)
         self.calibration_scale = np.maximum(1.4826 * mad, self.config.score_mad_floor).astype(np.float32)
-        calibration_scores = self.per_variable_scores(calibration_features)
-        aggregate = np.max((calibration_scores - self.calibration_center) / self.calibration_scale, axis=1)
+        calibration_scores = self.per_variable_scores(calibration_features, work / "calibration_nll.npy")
+        aggregate = np.empty(len(calibration_scores), dtype=np.float32)
+        for start in range(0, len(aggregate), self.config.batch_size):
+            stop = min(len(aggregate), start + self.config.batch_size)
+            aggregate[start:stop] = np.max(
+                (calibration_scores[start:stop] - self.calibration_center) / self.calibration_scale, axis=1
+            )
         self.threshold = float(np.quantile(aggregate, self.config.calibration_quantile))
 
     def fingerprint(self):
         digest = hashlib.sha256()
-        for module in (self.encoder, self.flow):
-            for key, value in sorted(module.state_dict().items()):
-                digest.update(key.encode("utf-8"))
-                digest.update(value.detach().cpu().contiguous().numpy().tobytes())
+        digest.update(json.dumps({"variables": self.variables, "hidden_dim": self.config.hidden_dim,
+                                 "view_dim": self.config.view_dim, "seq_len": self.config.seq_len,
+                                 "pattern_len": self.config.pattern_len}, sort_keys=True).encode())
+        for key, value in sorted(self.encoder.state_dict().items()):
+            digest.update(key.encode("utf-8"))
+            digest.update(value.detach().cpu().contiguous().numpy().tobytes())
+        for value in (self.fixed_input.mean_, self.fixed_input.scale_):
+            digest.update(np.asarray(value, dtype=np.float32).tobytes())
         return digest.hexdigest()
+
+
+def atomic_torch_save(value, path):
+    path = Path(path)
+    temporary = path.with_name(path.name + f".tmp-{os.getpid()}")
+    torch.save(value, temporary)
+    os.replace(temporary, path)
+
+
+def _file_sha256(path, chunk_size=1024 * 1024):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _capture_rng():
+    state = {"python": random.getstate(), "numpy": np.random.get_state(), "torch": torch.get_rng_state()}
+    if torch.cuda.is_available():
+        state["cuda"] = torch.cuda.get_rng_state_all()
+    return state
+
+
+def _restore_rng(state):
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"])
+    if "cuda" in state and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(state["cuda"])
+
+
+def _validate_resume_state(state, stage, resume_id):
+    if state.get("stage") != stage or state.get("resume_id") != resume_id:
+        raise ValueError(f"{stage} checkpoint is incompatible with current run identity")
+
+
+def _append_log(path, record):
+    if path is None:
+        return
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+        handle.flush()
 
 
 def seed_all(seed):

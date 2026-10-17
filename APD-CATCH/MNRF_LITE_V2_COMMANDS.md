@@ -1,8 +1,10 @@
 # MNRF-Lite V2 task commands
 
-Each command runs exactly one task. Execute them manually and sequentially;
-there is no run-all or background runner. A preflight does not train or create
-feature caches.
+Each command runs exactly one task inside the registered `catch_env` Conda
+environment. Execute them manually and sequentially; there is no run-all or
+background runner. A preflight reads only the selected task, does not train or
+create feature caches, and must be checked per task because gaps/boundaries
+change usable window counts.
 
 ## Internal (`large_detect`)
 
@@ -55,11 +57,30 @@ bash ./scripts/multivariate_detection/detect_score/MTSB_SWAN_SF_script/MNRFLiteV
 bash ./scripts/multivariate_detection/detect_score/MetroPT3_script/MNRFLiteV2.sh
 ```
 
-Not available with the frozen L=128/purge protocol: MTSB Occupancy 01 and 02,
-because their official training segments are too short to supply three
-independent segments with at least one complete window each. The preflight
-command for the suggested first task is:
+The listed wrappers are candidates only. A task is available only if its
+preflight confirms nonempty continuous-segment windows for each internal split
+and test. The preflight command for the suggested first task is:
 
 ```bash
-python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect
+conda run --no-capture-output -n catch_env python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect
 ```
+
+First single-task command, prepared but not launched here:
+
+```bash
+GPU_ID=0 conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+```
+
+On the shared GPU, manually set `BATCH_SIZE` and optionally a smaller
+`ENCODING_BATCH_SIZE`; encoding never exceeds training batch. `CACHE_CHUNK_SIZE`
+controls disk I/O grouping only. Use `GPU_ID=cpu` only when explicitly choosing
+CPU. GPU mode preserves caller visibility and selects its `cuda:0`.
+
+Resume an existing epoch-boundary run explicitly:
+
+```bash
+GPU_ID=0 MNRF_RESUME_FROM=score/MNRF-Lite-V2/PSM/run-<UTC>-<PID> conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+```
+
+Resume validates task/configuration, variables, raw values, and time/index
+fingerprints before restoring optimizer and RNG/sampler state.

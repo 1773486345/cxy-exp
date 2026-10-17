@@ -7,6 +7,18 @@ import torch.nn.functional as F
 from .backbone import PointEmbedding, CausalResidualTCN
 
 
+def mask_pattern_values(local, local_valid, starts, span=8):
+    """Vectorized per-sample/per-variable contiguous masking before differencing."""
+    count, length, variables = local.shape
+    starts = starts.to(device=local.device, dtype=torch.long)
+    offsets = torch.arange(span, device=local.device).view(1, 1, span)
+    positions = starts.unsqueeze(-1) + offsets
+    target = local.gather(1, positions.permute(0, 2, 1))
+    time = torch.arange(length, device=local.device).view(1, length, 1)
+    masked = (time >= starts.unsqueeze(1)) & (time < starts.unsqueeze(1) + span)
+    return local.masked_fill(masked, 0), local_valid & ~masked, target.permute(0, 2, 1), (positions.to(local.dtype) / 31.0)
+
+
 class FourViewEncoder(nn.Module):
     def __init__(self, variables: int, width: int = 32, view_dim: int = 8):
         super().__init__()
@@ -59,17 +71,7 @@ class FourViewEncoder(nn.Module):
         identity = self.point.variable_identity.view(1, self.variables, self.width).expand(values.size(0), -1, -1)
         source_input = torch.cat((h_hist, current_phi, identity), dim=-1)
         source = F.gelu(self.relation_source(source_input))
-        queries = self.relation_query(identity).unsqueeze(2)
-        sources = source.unsqueeze(1).expand(-1, self.variables, -1, -1)
-        flat_query = queries.reshape(-1, 1, self.width)
-        flat_source = sources.reshape(-1, self.variables, self.width)
-        self_mask = torch.eye(self.variables, dtype=torch.bool, device=values.device).repeat(values.size(0), 1)
-        attended, _ = self.relation_attention(
-            flat_query, flat_source, flat_source,
-            key_padding_mask=self_mask,
-            need_weights=False,
-        )
-        relation = self.relation_adapter(attended[:, 0].reshape(values.size(0), self.variables, self.width))
+        relation = self._relation_from_source(source, identity)
         features = torch.cat((state, evolution, pattern, relation), dim=-1)
         if features.size(-1) != 25:
             raise RuntimeError("four-view layout must be [S,E,P,R] with 25 coordinates")
@@ -101,17 +103,10 @@ class FourViewEncoder(nn.Module):
             local = values[:, -32:, :].clone()
             local_valid = valid[:, -32:, :].clone()
             target = torch.zeros(count, variables, 8, device=values.device, dtype=values.dtype)
-            for n in range(count):
-                for d in range(variables):
-                    start = int(starts[n, d])
-                    target[n, d] = local[n, start:start + 8, d]
-                    local[n, start:start + 8, d] = 0
-                    local_valid[n, start:start + 8, d] = False
+            local, local_valid, target, relative_positions = mask_pattern_values(local, local_valid, starts)
             h = self._encode_sequence(local, local_valid)
             z = self.pattern_adapter(torch.cat((h.mean(dim=1), h.max(dim=1).values, h[:, -1]), dim=-1))
-            offsets = torch.arange(8, device=values.device, dtype=values.dtype).view(1, 1, 8)
-            rel = (starts.to(values.dtype).unsqueeze(-1) + offsets) / 31.0
-            return z, target, rel
+            return z, target, relative_positions
 
         hist = values[:, :-1, :]
         hist_valid = valid[:, :-1, :]
@@ -121,11 +116,14 @@ class FourViewEncoder(nn.Module):
         current_phi = F.gelu(self.point.projection(fields))
         identity = self.point.variable_identity.view(1, variables, self.width).expand(values.size(0), -1, -1)
         source = F.gelu(self.relation_source(torch.cat((h_hist, current_phi, identity), dim=-1)))
-        q = self.relation_query(identity).unsqueeze(2)
-        kv = source.unsqueeze(1).expand(-1, variables, -1, -1)
-        flat_q = q.reshape(-1, 1, self.width)
-        flat_kv = kv.reshape(-1, variables, self.width)
-        mask = torch.eye(variables, dtype=torch.bool, device=values.device).repeat(values.size(0), 1)
-        attended, _ = self.relation_attention(flat_q, flat_kv, flat_kv, key_padding_mask=mask, need_weights=False)
-        z = self.relation_adapter(attended[:, 0].reshape(values.size(0), variables, self.width))
+        z = self._relation_from_source(source, identity)
         return z, values[:, -1, :], torch.zeros(values.size(0), variables, device=values.device)
+
+    def _relation_from_source(self, source, identity):
+        # MHA's boolean attn_mask uses True for disallowed query-key pairs.
+        query = self.relation_query(identity)
+        diagonal_block = torch.eye(self.variables, dtype=torch.bool, device=source.device)
+        attended, _ = self.relation_attention(
+            query, source, source, attn_mask=diagonal_block, need_weights=False
+        )
+        return self.relation_adapter(attended)

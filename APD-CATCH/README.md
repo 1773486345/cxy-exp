@@ -62,12 +62,14 @@ repository root:
 bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
 ```
 
-Use `GPU_ID=cpu` for CPU, or override `BATCH_SIZE`, `SEED`, stage epoch limits,
-cache chunk size, and `MNRF_SAVE_PATH` explicitly. Check task availability and
-the exact plan without training:
+Use `GPU_ID=0` for the first already-visible GPU or `GPU_ID=cpu` for explicit
+CPU mode; existing `CUDA_VISIBLE_DEVICES` restrictions are preserved. Override
+`BATCH_SIZE`, `ENCODING_BATCH_SIZE`, stage epoch limits, the I/O-only cache
+chunk size, and `MNRF_SAVE_PATH` explicitly. Check per-task continuity and
+post-purge windows without training:
 
 ```bash
-python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect
+conda run --no-capture-output -n catch_env python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect
 ```
 
 See [MNRF_LITE_V2.md](MNRF_LITE_V2.md) for the model, training, scoring

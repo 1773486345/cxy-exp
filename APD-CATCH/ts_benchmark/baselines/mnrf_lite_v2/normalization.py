@@ -4,23 +4,36 @@ import numpy as np
 
 
 class FixedInputStandardizer:
-    def fit(self, values: np.ndarray) -> "FixedInputStandardizer":
-        values = np.asarray(values, dtype=np.float64)
+    def fit(self, values: np.ndarray, chunk_size: int = 65536) -> "FixedInputStandardizer":
         if values.ndim != 2 or values.shape[1] < 2:
             raise ValueError("MNRF-Lite V2 requires [time, variables] with D >= 2")
-        if not np.isfinite(values).all():
-            raise ValueError("input contains non-finite values")
-        self.mean_ = values.mean(axis=0).astype(np.float32)
-        self.scale_ = np.maximum(values.std(axis=0), 1e-6).astype(np.float32)
+        count = 0
+        total = np.zeros(values.shape[1], dtype=np.float64)
+        total_sq = np.zeros_like(total)
+        for start in range(0, len(values), chunk_size):
+            chunk = np.asarray(values[start:start + chunk_size], dtype=np.float64)
+            if not np.isfinite(chunk).all():
+                raise ValueError("input contains non-finite values")
+            count += len(chunk)
+            total += chunk.sum(axis=0)
+            total_sq += np.square(chunk).sum(axis=0)
+        if count == 0:
+            raise ValueError("cannot fit input statistics on an empty segment")
+        mean = total / count
+        self.mean_ = mean.astype(np.float32)
+        self.scale_ = np.maximum(np.sqrt(np.maximum(total_sq / count - mean ** 2, 0)), 1e-6).astype(np.float32)
         return self
 
-    def transform(self, values: np.ndarray) -> np.ndarray:
+    def transform_chunk(self, values: np.ndarray) -> np.ndarray:
         values = np.asarray(values, dtype=np.float32)
         if values.ndim != 2 or values.shape[1] != self.mean_.shape[0]:
             raise ValueError("input variable count/order does not match fitted input statistics")
         if not np.isfinite(values).all():
             raise ValueError("input contains non-finite values")
         return ((values - self.mean_) / self.scale_).astype(np.float32, copy=False)
+
+    def transform(self, values: np.ndarray) -> np.ndarray:
+        return self.transform_chunk(values)
 
 
 class FixedFeatureStandardizer:
@@ -51,3 +64,6 @@ class FixedFeatureStandardizer:
         if features.shape[-2:] != self.mean_.shape:
             raise ValueError("feature shape does not match fitted feature statistics")
         return ((features - self.mean_) / self.scale_).astype(np.float32, copy=False)
+
+    def transform_chunk(self, features: np.ndarray) -> np.ndarray:
+        return self.transform(features)

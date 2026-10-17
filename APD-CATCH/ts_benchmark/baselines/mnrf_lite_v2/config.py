@@ -23,8 +23,11 @@ class MNRFConfig:
     score_mad_floor: float = 0.001
     calibration_quantile: float = 0.995
     cache_chunk_size: int = 256
+    encoding_batch_size: int = 0
     device: str = "auto"
     output_dir: str = ""
+    resume_from: str = ""
+    task_name: str = ""
 
     @classmethod
     def from_kwargs(cls, **kwargs: Any) -> "MNRFConfig":
@@ -47,6 +50,8 @@ class MNRFConfig:
             raise ValueError("learning_rate must be positive and weight_decay non-negative")
         if self.cache_chunk_size < 1:
             raise ValueError("cache_chunk_size must be positive")
+        if self.encoding_batch_size < 0:
+            raise ValueError("encoding_batch_size must be zero (use training batch) or positive")
         if not 0.0 < self.calibration_quantile < 1.0:
             raise ValueError("calibration_quantile must be in (0,1)")
 

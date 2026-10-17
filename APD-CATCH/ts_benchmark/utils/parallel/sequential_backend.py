@@ -42,7 +42,8 @@ class SequentialBackend:
 
     def init(self) -> NoReturn:
         self.storage = SequentialSharedStorage()
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, self.gpu_devices))
+        if os.environ.get("TS_BENCHMARK_PRESERVE_CUDA_VISIBLE_DEVICES") != "1":
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, self.gpu_devices))
 
     def schedule(self, fn: Callable, args: Tuple, timeout: float = -1) -> SequentialResult:
         if timeout != -1:

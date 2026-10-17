@@ -139,6 +139,7 @@ def test_stage_one_gradients_and_stage_two_freezing():
         parameter.grad = None
     before = {name: value.detach().clone() for name, value in trainer.encoder.state_dict().items()}
     features = np.random.default_rng(2).normal(size=(12, 2, 25)).astype(np.float32)
+    trainer.fixed_feature.fit(features[:8])
     with tempfile.TemporaryDirectory() as directory:
         trainer.stage2(features[:8], features[8:], directory)
     assert all(torch.equal(before[name], value) for name, value in trainer.encoder.state_dict().items())
@@ -169,6 +170,14 @@ def test_small_fit_score_alignment_checkpoint_roundtrip():
         assert np.allclose(scored["scores"], rechunked["scores"], atol=1e-5, rtol=1e-5)
         with pytest.raises(ValueError, match="variable names/order"):
             deployed.detect_score(frame.iloc[:64].loc[:, ["z", "y", "x"]])
+        resumed = MNRFLiteV2(**{**config, "resume_from": path})
+        resumed.detect_fit(frame)
+        resumed_scores = resumed.score_with_metadata(frame.iloc[:64])
+        assert np.allclose(scored["scores"], resumed_scores["scores"], atol=1e-6, rtol=1e-6)
+        changed = frame.copy()
+        changed.iloc[0, 0] += 1
+        with pytest.raises(ValueError, match="resume rejected"):
+            MNRFLiteV2(**{**config, "resume_from": path}).detect_fit(changed)
 
 
 def test_benchmark_model_import():

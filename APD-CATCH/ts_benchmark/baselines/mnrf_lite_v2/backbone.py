@@ -43,17 +43,26 @@ class CausalDepthwiseLayer(nn.Module):
         update = self.depthwise(F.pad(x, (self.left, 0)))
         update = self.pointwise(update).transpose(1, 2)
         update = self.norm(update).transpose(1, 2)
-        return x + F.gelu(update)
+        return F.gelu(update)
+
+
+class CausalResidualBlock(nn.Module):
+    def __init__(self, width: int, dilation: int):
+        super().__init__()
+        self.layers = nn.Sequential(
+            CausalDepthwiseLayer(width, dilation),
+            CausalDepthwiseLayer(width, dilation),
+        )
+
+    def forward(self, x):
+        return x + self.layers(x)
 
 
 class CausalResidualTCN(nn.Module):
     def __init__(self, width: int = 32):
         super().__init__()
         self.dilations = (1, 2, 4, 8, 16, 32)
-        self.blocks = nn.ModuleList(
-            nn.ModuleList((CausalDepthwiseLayer(width, dilation), CausalDepthwiseLayer(width, dilation)))
-            for dilation in self.dilations
-        )
+        self.blocks = nn.ModuleList(CausalResidualBlock(width, dilation) for dilation in self.dilations)
 
     @property
     def receptive_field(self):
@@ -64,6 +73,5 @@ class CausalResidualTCN(nn.Module):
         batch, time, variables, width = x.shape
         hidden = x.permute(0, 2, 3, 1).reshape(batch * variables, width, time)
         for block in self.blocks:
-            for layer in block:
-                hidden = layer(hidden)
+            hidden = block(hidden)
         return hidden.reshape(batch, variables, width, time).permute(0, 3, 1, 2)

@@ -1,109 +1,124 @@
 # MNRF-Lite V2
 
-This is an independent detector under `ts_benchmark/baselines/mnrf_lite_v2`.
-It does not change original CATCH, TypeFusion v1/v2, or their scripts. The
-implementation follows the fixed first-version design below; it is not a
-performance claim.
+Independent two-stage model at `ts_benchmark/baselines/mnrf_lite_v2`. The
+implementation does not change original CATCH, TypeFusion v1/v2, their scripts,
+or the fixed research design. No performance conclusion follows from smoke tests.
 
-## Model Architecture
+## Architecture
 
-Input is standardized per variable using statistics fitted only on the internal
-training subset. There is no window normalization. A shared point embedding
-consumes value, valid adjacent difference, observation mask, and difference
-mask. A six-block depthwise-separable causal TCN (dilations 1, 2, 4, 8, 16,
-32; two kernel-3 layers per block; width 32) is applied independently to each
-variable. Each layer has left-only padding and per-time LayerNorm.
+Input values use per-variable statistics fitted on the internal train subset.
+A shared point embedding represents value, valid adjacent difference,
+observation mask, and difference mask. The shared TCN has six residual blocks
+with dilations `[1,2,4,8,16,32]`, width 32, two depthwise-separable kernel-3
+layers per block, left-only padding, per-time LayerNorm, and GELU. Layers have
+no residual; each block computes `x + layer2(layer1(x))` once. Its receptive
+field is 253 points.
 
-The four variable-preserving views are concatenated in `[S,E,P,R]` order to
-make 25 coordinates per variable: current state (1), causal evolution (8),
-last-32-point pattern (8), and cross-variable relation (8). Evolution reads
-only the preceding 127 samples. Relation source tokens are built independently
-per variable and target self-attention is masked before a single cross-variable
-attention operation. The target relation therefore receives no self source.
-
-Features are standardized with training-cache statistics. The density model is
-four alternating attention-conditioned affine coupling blocks. Mechanism A is
-`(S,R)` and B is `(E,P)`; blocks update B, A, B, A. The 25-D coordinate path is
-not compressed. The sole detector score is the four-noise mean Gaussian-base
-negative log likelihood after log-determinant correction.
+The four views are `[S,E,P,R]` with 25 features per variable: current state,
+causal evolution, 32-point pattern, and cross-variable relation. E excludes the
+target value. R constructs source tokens independently and uses identity-only
+target queries; a batched MHA call blocks the diagonal, so no target's own
+current/history source enters its relation representation. Features condition
+four alternating attention-conditioned affine coupling blocks. Mechanisms A
+and B are `(S,R)` and `(E,P)`, updated B/A/B/A. The only detector score is the
+four-fixed-noise mean Gaussian-base joint NLL with log-determinant correction.
 
 ## Training
 
-The single benchmark invocation performs all steps. The adapter uses the
-dataset's official train/test boundary and splits only the training segment:
-after two purges of `L-1` points, remaining points are assigned 80/10/10 to
-train, validation, and calibration. Windows never cross these boundaries.
+One task command performs the complete protocol. The dataset's official
+train/test boundary is kept. The training side is internally purged by `L-1`
+points at each split boundary, then divided 80/10/10 into train/validation/
+calibration. Each split is intersected with continuous record segments.
+Windows must fit wholly inside one segment and one split; the first `L-1`
+points of every new segment are cold-start invalid.
 
-Stage 1 randomly trains one of E/P/R per batch using a temporary shared
-conditional Gaussian decoder. P masks eight consecutive values before point
-embedding and recomputes valid differences. Early stopping uses the equally
-weighted validation macro-NLL over E/P/R; the best encoder is restored.
-The encoder is then frozen, kept in eval mode, and its complete unmasked
-features are streamed into chunked `.npy` memmaps. The feature standardizer is
-fit only on train features.
+Timestamp indexes are checked for order and duplicates. Within each contiguous
+entity/session block the median positive interval is the inferred normal
+cadence. Integer-multiple intervals within 5% are interpreted as missing
+observations and split the sequence; unexplained non-integer intervals fail
+preflight/fit. Explicit `entity_id`, `session_id`, `record_id`, or `scenario_id`
+changes also split the sequence. The implementation never sorts, interpolates,
+or resamples. If only row indices exist, metadata records the declared row-order
+protocol and does not invent time information.
 
-Stage 2 trains only the four coupling blocks with AdamW. It restores the best
-fixed-four-noise validation checkpoint. The validation segment estimates each
-variable's score median and MAD scale. An independent calibration segment
-sets the 0.995 quantile threshold. Test labels are not used for training,
-selection, or threshold choice. Defaults are seed 2021, L=128, pattern length
-32, width 32, batch 64, stage limits 50/30 epochs, patience 5, learning rate
-0.001, weight decay 0.0001, feature scale floor 0.05, and training noise
-standard deviation 0.01.
+Stage 1 samples E/P/R auxiliary prediction tasks and uses an auxiliary Gaussian
+head only for training. P masks eight consecutive raw values and validity flags
+before recomputing differences. Validation masking is deterministic from stable
+window end indices. The best encoder and auxiliary state are saved; the encoder
+is then frozen. Stage 2 trains only the four affine coupling blocks. Validation
+NLL supplies per-variable median/MAD scales; an independent calibration split
+sets the fixed 0.995 score quantile. Test labels do not select parameters or the
+threshold. Default settings: seed 2021, `L=128`, pattern length 32, width 32,
+view dimension 8, train batch 64, stage limits 50/30 epochs, patience 5,
+AdamW lr 0.001, weight decay 0.0001, feature scale floor 0.05, and training
+noise std 0.01.
 
-## Inference and Scoring
+## Memory, Progress, and Recovery
 
-Each stride-one complete test window produces one score at its end timestamp.
-The first `L-1` test samples are invalid and excluded from evaluation; they are
-not padded or assigned fabricated scores. `results/*_aligned_scores.npz`
-records the score, prediction, aligned time indices, original valid mask,
-labels, and per-variable diagnostic values. Metrics include AUROC, average
-precision (AUPRC), calibrated-threshold precision/recall/F1, and normal false
-alarm rate. A one-class valid test segment has undefined AUC and the run is
-marked failed by the shell validator rather than treated as a valid result.
+Input statistics and feature statistics are accumulated in chunks. The
+standardized training sequence and frozen feature views are `.npy` memmaps.
+Stage 2, validation, calibration, and test scoring standardize and transfer
+only a current batch; features are never materialized as another full ndarray
+or placed wholesale on the GPU. `CACHE_CHUNK_SIZE` controls disk I/O grouping
+only. `ENCODING_BATCH_SIZE` controls encoder GPU batch and is capped by
+`BATCH_SIZE`; by default it equals the training batch. Exact calibration
+medians/MADs use per-variable reads from disk-backed NLL arrays.
 
-## Configuration and Limitations
+Each epoch prints and flushes stage, epoch, optimizer steps, train NLL,
+validation NLL, best value, patience, and elapsed seconds to stdout and
+`logs/training.jsonl`. Cache extraction reports bounded progress. Atomic
+checkpoints are under `checkpoints/`: `best_encoder.pt`, `best_stage1.pt`,
+`stage1_latest.pt`, `best_fusion.pt`, and `stage2_latest.pt`. A normal launch
+creates an independent `run-<UTC>-<PID>` directory. `MNRF_RESUME_FROM` is
+explicit; resume verifies task, architecture/configuration, variable order,
+raw-data and time-index fingerprints. It restores optimizer, RNG/sampler state,
+best state and patience from an epoch boundary; mid-epoch exact recovery is not
+claimed. The deployment package is versioned `deployment.pt` and excludes the
+auxiliary head. Caches, statistics, manifests, aligned scores, metrics and the
+benchmark report remain inside that run directory. The run validator fails on
+missing, malformed, cross-task, or inconsistent artifacts.
 
-The dedicated config is `config/mnrf_lite_v2_unfixed_detect_score.json`; the
-dedicated `mnrf_valid_detect` strategy preserves the complete-window index and
-does not use the generic anomaly strategy's padding behavior. The individual
-task scripts select `large_detect` or `external_detect` explicitly. Defaults
-can be overridden with `GPU_ID`, `BATCH_SIZE`, `SEED`, `STAGE1_EPOCHS`,
-`STAGE2_EPOCHS`, `CACHE_CHUNK_SIZE`, and `MNRF_SAVE_PATH` relative to the
-repository's `result/` directory.
-Set `GPU_ID=cpu` to force CPU, or provide a physical GPU index to select it via
-`CUDA_VISIBLE_DEVICES`.
+## Scoring and Task Status
 
-The current supported list is based on metadata, available CSVs, D>=2, and
-whether the 80/10/10 split can provide at least one complete L=128 window in
-each segment. Internal tasks: ASD_dataset_1..12, CICIDS, CalIt2, Creditcard,
-GECCO, Genesis, MSL, NYC, PSM, SMAP, SMD, SWAT. External tasks: BATADAL,
-HAI20_07, MTSB_METRO, MTSB_OPPORTUNITY_01..13, MTSB_SWAN_SF, MetroPT3.
-MTSB_OCCUPANCY_01 and MTSB_OCCUPANCY_02 are not supported under the frozen
-split because their train segments are too short after the purge gaps.
+Each stride-one complete window contributes a score only at its endpoint.
+Invalid cold-start points receive no score; there is no padding, repeated score,
+or future-window backfill. Saved `time_indices` are full-series positions and
+`local_time_indices` address the test-label vector; both masks and label
+selection are checked against these indices. The aligned result stores the
+full-series valid mask, test-local mask, labels, predictions, scores, threshold,
+and timestamps. Optional per-variable test NLL diagnostics are off by default.
+A one-class valid test interval keeps its undefined-metric reason and is not
+reported as a complete evaluation.
 
-Before a formal run, the preflight checks paths, metadata, feature count,
-split feasibility, and configuration without training or creating a cache:
+The 23 internal and 18 external wrappers are candidate task entries, not an
+assertion that all 41 remain supported after temporal segmentation. Run
+preflight per task: it reads only that task and prints official boundary,
+segments, cadence/gaps, post-purge train/validation/calibration window counts,
+and test windows. Empty splits fail. A validation or calibration count of one
+is called out as too small for stable scale/high-quantile estimation. No task
+is silently kept supported by shortening `L` or dropping purge.
 
 ```bash
-python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect
+conda run --no-capture-output -n catch_env python scripts/mnrf_lite_v2_preflight.py --task PSM --data-source large_detect
 ```
 
-Suggested first formal command (not run during implementation):
+The dedicated `mnrf_valid_detect` strategy owns exact score/label alignment.
+For the first real single task, after reviewing preflight:
 
 ```bash
-bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+GPU_ID=0 conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
 ```
 
-From another directory, using the registered global Conda environment name
-`catch_env`:
+The launcher defaults to the first GPU already visible as `cuda:0`; it preserves
+an existing `CUDA_VISIBLE_DEVICES` restriction and prints the final device and
+mask. Use `GPU_ID=cpu` for explicit CPU mode. Shared-GPU memory overrides are
+manual, for example `BATCH_SIZE=16 ENCODING_BATCH_SIZE=4`; no automatic OOM
+retry or batch adjustment exists. `MNRF_SAVE_PATH` sets a new relative path
+under `result/`. To resume a verified epoch-boundary run:
 
 ```bash
-conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
+GPU_ID=0 MNRF_RESUME_FROM=score/MNRF-Lite-V2/PSM/run-<UTC>-<PID> conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
 ```
 
-All task commands are listed in [MNRF_LITE_V2_COMMANDS.md](MNRF_LITE_V2_COMMANDS.md).
-Each run stores reports, logs, checkpoints, feature caches, deployment bundle,
-metadata, and aligned test output in
-`result/score/MNRF-Lite-V2/<task>/run-<UTC>-<PID>/`. Smoke tests use only small
-synthetic data; no formal task was trained as part of implementation.
+No formal task training or benchmark was launched during implementation.
+Commands for candidate tasks are in [MNRF_LITE_V2_COMMANDS.md](MNRF_LITE_V2_COMMANDS.md).
