@@ -1,5 +1,6 @@
 import hashlib
 import json
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -140,6 +141,30 @@ def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
             gmm_fit_max_windows=32,
         ).fit(changed_frame, 480, np.zeros(len(changed_frame) - 480, dtype=np.int64))
     assert selected_status.read_bytes() == before_resume
+
+    # A modified immutable cache must be rejected before resume writes any
+    # status, manifest, progress, or checkpoint artifact.
+    damaged_dir = tmp_path / "damaged-resume"
+    shutil.copytree(source_dir, damaged_dir)
+    damaged_status = json.loads((damaged_dir / "run_status.json").read_text())
+    damaged_status["status"] = "gmm_fitting"
+    (damaged_dir / "run_status.json").write_text(json.dumps(damaged_status, sort_keys=True))
+    cache_path = damaged_dir / "cache" / "train_features.npy"
+    cache = np.load(cache_path, mmap_mode="r+")
+    cache[0, 0, 0] += 50.0
+    cache.flush()
+    before_files = sorted(path.relative_to(damaged_dir).as_posix() for path in damaged_dir.rglob("*") if path.is_file())
+    before_hashes = {name: hashlib.sha256((damaged_dir / name).read_bytes()).hexdigest() for name in before_files}
+    with pytest.raises(ValueError, match="cache hash differs"):
+        MNRFViewProbe(
+            seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1, patience=1,
+            device="cpu", output_dir=str(damaged_dir), resume_from=str(damaged_dir),
+            mode="full_gmm", gmm_fit_max_windows=32,
+        ).fit(frame, train_length, labels)
+    after_files = sorted(path.relative_to(damaged_dir).as_posix() for path in damaged_dir.rglob("*") if path.is_file())
+    after_hashes = {name: hashlib.sha256((damaged_dir / name).read_bytes()).hexdigest() for name in after_files}
+    assert after_files == before_files
+    assert after_hashes == before_hashes
 
 
 def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):

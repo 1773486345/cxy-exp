@@ -111,7 +111,9 @@ def _load_execution_evidence(path, kind, task_name, split_paths):
             raise ValueError("calibration threshold does not reproduce from calibration scores")
     for split_name, split_path in zip(("train", "validation", "calibration"), split_paths):
         key = f"{split_name}_indices_sha256"
-        if key in evidence and evidence[key] != _array_sha256(split_path):
+        if key not in evidence:
+            raise ValueError(f"{kind} evidence is missing {key}")
+        if evidence[key] != _array_sha256(split_path):
             raise ValueError(f"{kind} evidence {split_name} split hash mismatch")
     return evidence
 
@@ -135,6 +137,11 @@ def register(args):
                                                   (args.train_indices, args.validation_indices, args.calibration_indices))
     calibration_evidence = _load_execution_evidence(args.calibration_evidence, "calibration", args.task_name,
                                                      (args.train_indices, args.validation_indices, args.calibration_indices))
+    for field in ("protocol", "task_name", "run_identity", "data_identity", "split_identity",
+                  "checkpoint_path", "checkpoint_sha256", "normalization_path", "normalization_sha256",
+                  "train_fit_rows_path", "train_fit_rows_sha256"):
+        if training_evidence.get(field) != calibration_evidence.get(field):
+            raise ValueError(f"training/calibration evidence {field} mismatch")
     manifest = {
         "schema": "mnrf-view-probe-catch-common-v1",
         "protocol": "CATCH-common",

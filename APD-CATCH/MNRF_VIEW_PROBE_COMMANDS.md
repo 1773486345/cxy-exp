@@ -101,6 +101,12 @@ unregistered pair is reported as `index_intersection_reference`:
 
 ```bash
 conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/register_mnrf_catch_common.py --probe /absolute/probe/results/aligned_scores.npz --catch /absolute/catch/aligned_scores.npz --labels /absolute/labels.npy --train-indices /absolute/train.npy --validation-indices /absolute/validation.npy --calibration-indices /absolute/calibration.npy --training-evidence /absolute/catch_training_evidence.json --calibration-evidence /absolute/catch_calibration_evidence.json --output /absolute/catch_common_manifest.json
+
+For a registered comparison, add the three split files and
+`--common-manifest /absolute/catch_common_manifest.json`; invalid evidence or
+a threshold different from the calibration artifact exits nonzero. Add
+`--reference-mode` only for an intentionally unregistered
+`index_intersection_reference` comparison.
 ```
 
 The explicit-split CATCH-common adapter (short synthetic or one manually
@@ -109,6 +115,12 @@ selected task; this command is prepared, not run by this repository change):
 ```bash
 conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/run_mnrf_catch_common.py --data-csv /absolute/task.csv --train-indices /absolute/train_endpoints.npy --validation-indices /absolute/validation_endpoints.npy --calibration-indices /absolute/calibration_endpoints.npy --test-start 430 --task-name TASK.csv --output /absolute/catch-common-run
 ```
+
+The adapter defaults match the CATCH score path (`score_lambda=0.05`,
+inference patch size 32, stride 1); override them only as an explicitly named
+protocol variant. The endpoint arrays must be purged, mutually window-disjoint
+coordinates. The scaler fit rows are derived from the raw rows covered by the
+training windows and are recorded in the run evidence.
 
 To resume a ViewProbe run, pass its exact existing directory through
 `VIEW_PROBE_RESUME_FROM` and use the same data, layout, source and GMM/Flow

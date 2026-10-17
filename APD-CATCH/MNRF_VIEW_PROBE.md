@@ -109,5 +109,15 @@ For an explicit CATCH-common run, use
 `scripts/run_mnrf_catch_common.py`. It trains CATCH on supplied train
 endpoints, validates on supplied validation endpoints, calibrates only on the
 supplied calibration endpoints, and writes checkpoint/calibration evidence.
+The adapter preserves CATCH's pointwise score contract: the last point of each
+explicit window is scored as pointwise time-domain MSE plus
+`score_lambda * frequency_criterion` (default `score_lambda=0.05`, inference
+patch size 32 and stride 1). The scaler is fitted on the raw rows covered by
+the training windows, never on validation, calibration, or test rows. Split
+windows must be mutually disjoint and cannot cross a timestamp or entity
+boundary.
 The registry refuses empty evidence, missing checkpoints, missing calibration
-scores, or hand-edited thresholds.
+scores, cross-run evidence, or hand-edited thresholds. Supplying
+`--common-manifest` to the evaluator is strict and exits nonzero when evidence
+is invalid; use `--reference-mode` only when an explicit
+`index_intersection_reference` result is intended.

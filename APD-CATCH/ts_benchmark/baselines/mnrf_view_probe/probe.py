@@ -471,6 +471,10 @@ class MNRFViewProbe:
             "cache_feature_dim": int(next(iter(cache.values())).shape[-1]),
             "input_statistics_sha256": _sha256_file(self.output_dir / "input_statistics.npz"),
             "raw_input_statistics_sha256": _sha256_file(self.output_dir / "input_statistics.npz"),
+            "normalized_cache_sha256": (
+                _sha256_file(self.output_dir / "cache" / "normalized_values.npy")
+                if (self.output_dir / "cache" / "normalized_values.npy").is_file() else None
+            ),
             "checkpoint_sha256": {
                 name: _sha256_file(self.output_dir / "checkpoints" / name)
                 for name in ("initial_encoder.pt", "best_encoder.pt")
@@ -620,6 +624,11 @@ class MNRFViewProbe:
             computed_mean = np.asarray(self.trainer.fixed_feature.mean_, dtype=np.float32)
             computed_scale = np.asarray(self.trainer.fixed_feature.scale_, dtype=np.float32)
             np.savez(statistics_path, mean=computed_mean, scale=computed_scale)
+        manifest_path = self.output_dir / "probe_manifest.json"
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text())
+            manifest["feature_statistics_sha256"] = _sha256_file(statistics_path)
+            _atomic_json(manifest_path, manifest)
         selected = np.asarray(self.config.selected_indices, dtype=np.int64)
         endpoints_path = self.output_dir / "cache" / "train_window_end_indices.npy"
         if source_manifest is not None:
@@ -641,6 +650,12 @@ class MNRFViewProbe:
         sample_hash = _sha256_file(sample_path)
         self._noise_vectors = self._fixed_noise_vectors()
         np.save(self.output_dir / "heads" / "fixed_noise.npy", self._noise_vectors)
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text())
+            manifest["gmm_fit_endpoints_sha256"] = sample_hash
+            manifest["gmm_fit_endpoint_count"] = int(len(fit_indices))
+            manifest["fixed_noise_sha256"] = _sha256_file(self.output_dir / "heads" / "fixed_noise.npy")
+            _atomic_json(manifest_path, manifest)
         variable_dir = self.output_dir / "heads" / "gmm_variables"
         variable_dir.mkdir(exist_ok=True)
         progress_path = self.output_dir / "heads" / "gmm_progress.json"
@@ -915,6 +930,30 @@ class MNRFViewProbe:
                           else source_manifest.get("feature_fingerprint"))
                 if expected != actual:
                     raise ValueError(f"resume rejected: source {field} differs")
+        # Verify immutable local artifacts against hashes recorded before the
+        # interruption. Shape and finite-value checks alone are insufficient.
+        if manifest is not None:
+            for name in ("train", "validation", "calibration", "test"):
+                cache_path = self.output_dir / "cache" / f"{name}_features.npy"
+                endpoint_path = self.output_dir / "cache" / f"{name}_window_end_indices.npy"
+                declared_cache = manifest.get("cache_sha256", {}).get(name)
+                declared_endpoint = manifest.get("endpoint_sha256", {}).get(name)
+                if declared_cache is not None and (not cache_path.is_file() or _sha256_file(cache_path) != declared_cache):
+                    raise ValueError(f"resume rejected: cache hash differs for {name}")
+                if declared_endpoint is not None and (not endpoint_path.is_file() or _sha256_file(endpoint_path) != declared_endpoint):
+                    raise ValueError(f"resume rejected: endpoint hash differs for {name}")
+            normalized_path = self.output_dir / "cache" / "normalized_values.npy"
+            declared_normalized = manifest.get("normalized_cache_sha256")
+            if declared_normalized is not None and (not normalized_path.is_file() or _sha256_file(normalized_path) != declared_normalized):
+                raise ValueError("resume rejected: normalized cache hash differs")
+            input_stats_path = self.output_dir / "input_statistics.npz"
+            declared_input_stats = manifest.get("input_statistics_sha256")
+            if declared_input_stats is not None and (not input_stats_path.is_file() or _sha256_file(input_stats_path) != declared_input_stats):
+                raise ValueError("resume rejected: input statistics hash differs")
+            feature_stats_path = self.output_dir / "heads" / "feature_statistics.npz"
+            declared_feature_stats = manifest.get("feature_statistics_sha256")
+            if declared_feature_stats is not None and (not feature_stats_path.is_file() or _sha256_file(feature_stats_path) != declared_feature_stats):
+                raise ValueError("resume rejected: feature statistics hash differs")
         # Validate the immutable initialization contract before fit() is
         # allowed to update run_status, normalized arrays, or checkpoints.
         # Source-backed and direct S-only heads intentionally have no local
@@ -937,6 +976,34 @@ class MNRFViewProbe:
             saved = payload.get("encoder", payload)
             if set(saved) != set(expected) or any(tuple(saved[name].shape) != tuple(expected[name].shape) for name in expected):
                 raise ValueError("resume rejected: initial encoder state shape differs")
+            if status.get("status") == "stage1_training" or (request or {}).get("stage") in {
+                    "running", "initial_encoder_saved", "stage1_training"}:
+                latest_path = self.output_dir / "checkpoints" / "stage1_latest.pt"
+                if not latest_path.is_file():
+                    raise ValueError("resume rejected: stage1 epoch checkpoint is missing")
+                latest = torch.load(latest_path, map_location="cpu", weights_only=False)
+                required = {"schema_version", "stage", "resume_id", "next_epoch", "stage_status",
+                            "encoder", "auxiliary", "optimizer", "loader_rng", "rng", "best",
+                            "best_state", "patience", "history", "completed_steps"}
+                if (not required.issubset(latest) or latest.get("schema_version") != 2
+                        or latest.get("stage") != "stage1" or latest.get("resume_id") != self._run_identity
+                        or not isinstance(latest.get("next_epoch"), int) or latest["next_epoch"] < 1
+                        or latest.get("stage_status") not in {"in_progress", "completed"}
+                        or not isinstance(latest.get("optimizer"), dict)
+                        or not isinstance(latest.get("best_state"), dict)
+                        or not isinstance(latest.get("history"), list)
+                        or not isinstance(latest.get("completed_steps"), int)):
+                    raise ValueError("resume rejected: stage1 epoch checkpoint contract is invalid")
+                trainer = self._make_trainer(len(self.variable_names))
+                for state_name, module in (("encoder", trainer.encoder), ("auxiliary", trainer.auxiliary)):
+                    state = latest.get(state_name)
+                    expected_state = module.state_dict()
+                    if (not isinstance(state, dict) or set(state) != set(expected_state)
+                            or any(tuple(state[name].shape) != tuple(expected_state[name].shape) for name in expected_state)):
+                        raise ValueError(f"resume rejected: stage1 {state_name} checkpoint shape differs")
+                best_state = latest.get("best_state")
+                if not {"encoder", "auxiliary"}.issubset(best_state):
+                    raise ValueError("resume rejected: stage1 best state is incomplete")
         if manifest is not None and manifest.get("artifact_type") == ARTIFACT_HEAD and not self.config.source_dir and self.config.mode != "s_only":
             if not (self.output_dir / "input_statistics.npz").is_file():
                 raise ValueError("resume rejected: local head is missing input statistics")
@@ -956,7 +1023,7 @@ class MNRFViewProbe:
                 if not cache_path.is_file() or not endpoint_path.is_file():
                     raise ValueError("resume rejected: completed source cache is incomplete")
             self._resume_stage1_complete = status.get("status") == "stage1_complete"
-        gmm_mode = self.config.mode in {"full_gmm", "select_gmm", "random_gmm", "s_only"}
+        gmm_mode = self.config.mode in {"full_gmm", "select_gmm", "random_gmm"}
         if ((manifest is not None and manifest.get("artifact_type") == ARTIFACT_HEAD
              and manifest.get("head_type") == "gmm") or gmm_mode):
             progress_path = self.output_dir / "heads" / "gmm_progress.json"
@@ -964,6 +1031,8 @@ class MNRFViewProbe:
                 raise ValueError("resume rejected: GMM progress manifest is missing")
             if progress_path.is_file():
                 progress = json.loads(progress_path.read_text())
+                if progress.get("schema") != PROBE_SCHEMA or not progress.get("identity"):
+                    raise ValueError("resume rejected: GMM progress identity is invalid")
                 completed = progress.get("completed", {})
                 if not isinstance(completed, dict):
                     raise ValueError("resume rejected: GMM progress completed map is invalid")
@@ -982,6 +1051,47 @@ class MNRFViewProbe:
                             raise ValueError("model is not converged")
                     except Exception as error:
                         raise ValueError(f"resume rejected: completed GMM variable {variable} is invalid: {error}") from error
+                sample_path = self.output_dir / "heads" / "gmm_fit_endpoints.npy"
+                train_endpoint_path = self.output_dir / "cache" / "train_window_end_indices.npy"
+                if not sample_path.is_file() or not train_endpoint_path.is_file():
+                    raise ValueError("resume rejected: GMM fitting endpoint sample is missing")
+                sample = _strict_integer_indices(np.load(sample_path, mmap_mode="r"), "GMM fitting endpoint sample")
+                train_endpoints = _strict_integer_indices(np.load(train_endpoint_path, mmap_mode="r"), "GMM train endpoints")
+                if len(sample) == 0 or len(sample) > self.config.gmm_fit_max_windows:
+                    raise ValueError("resume rejected: GMM fitting sample size is invalid")
+                positions = np.searchsorted(train_endpoints, sample)
+                if np.any(positions >= len(train_endpoints)) or not np.array_equal(train_endpoints[positions], sample):
+                    raise ValueError("resume rejected: GMM fitting sample is not a train-endpoint subset")
+                declared_sample = (manifest or {}).get("gmm_fit_endpoints_sha256")
+                if declared_sample is not None and _sha256_file(sample_path) != declared_sample:
+                    raise ValueError("resume rejected: GMM fitting sample hash differs")
+                noise_path = self.output_dir / "heads" / "fixed_noise.npy"
+                if not noise_path.is_file():
+                    raise ValueError("resume rejected: fixed noise artifact is missing")
+                noise = np.asarray(np.load(noise_path, allow_pickle=False))
+                generator = torch.Generator(device="cpu").manual_seed(self.config.noise_seed)
+                expected_noise = (torch.randn(4, self.config.layout.total_dim,
+                                               generator=generator, dtype=torch.float32)
+                                  * self.config.train_noise_std).numpy()
+                if noise.dtype != np.float32 or noise.shape != expected_noise.shape or not np.array_equal(noise, expected_noise):
+                    raise ValueError("resume rejected: fixed noise artifact differs")
+                fit_config = self.config.to_dict()
+                fit_config.pop("output_dir", None)
+                fit_config.pop("resume_from", None)
+                source_cache_identity = None if not self.config.source_dir else {
+                    "source_dir": str(Path(self.config.source_dir).resolve()),
+                    "source_identity": self.source_identity,
+                    "cache_sha256": (manifest or {}).get("source_cache_sha256"),
+                    "endpoint_sha256": (manifest or {}).get("source_endpoint_sha256"),
+                }
+                expected_progress_identity = _json_hash({
+                    "config": fit_config,
+                    "sample_hash": _sha256_file(sample_path),
+                    "selected_indices": self.config.selected_indices,
+                    "source": source_cache_identity,
+                })
+                if progress.get("identity") != expected_progress_identity:
+                    raise ValueError("resume rejected: GMM progress identity differs")
 
     def fit(self, frame, train_length, labels=None):
         self._fit_started = time.perf_counter()
@@ -1061,6 +1171,7 @@ class MNRFViewProbe:
             if mode in {"random_gmm", "stage1", "full_gmm"}:
                 if mode != "random_gmm":
                     self._set_run_status("stage1_training")
+                    self._save_run_request(stage="stage1_training")
                     self.trainer.stage1(
                         normalized, self.ranges["train"], self.ranges["validation"],
                         self.output_dir / "checkpoints", self.segments,

@@ -87,6 +87,7 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
     calibration_identity = manifest.get("calibration_identity")
     if not isinstance(train_identity, dict) or not isinstance(calibration_identity, dict):
         return False, "CATCH-common training/calibration identities are missing", None
+    loaded_evidence = {}
     for name, identity in (("training", train_identity), ("calibration", calibration_identity)):
         evidence_path = identity.get("path")
         if not evidence_path or not identity.get("file_sha256") or not Path(evidence_path).is_file():
@@ -97,8 +98,10 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
             evidence = json.loads(Path(evidence_path).read_text(encoding="utf-8"))
         except Exception:
             return False, f"CATCH-common {name} evidence is not valid JSON", None
-        if not isinstance(evidence, dict) or evidence.get("status") != "complete":
+        if (not isinstance(evidence, dict) or evidence.get("status") != "complete"
+                or evidence.get("protocol") not in {"CATCH-common", "CATCH-common-v1"}):
             return False, f"CATCH-common {name} evidence is incomplete", None
+        loaded_evidence[name] = evidence
         if manifest.get("task_name") and evidence.get("task_name") != manifest.get("task_name"):
             return False, f"CATCH-common {name} evidence task differs", None
         if not evidence.get("run_identity") or not evidence.get("data_identity") or not evidence.get("split_identity"):
@@ -108,6 +111,8 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
             checkpoint = evidence["checkpoint"].get("path")
         if not checkpoint or not Path(checkpoint).is_file():
             return False, f"CATCH-common {name} checkpoint is missing", None
+        if evidence.get("checkpoint_sha256") != _sha256_file(checkpoint):
+            return False, f"CATCH-common {name} checkpoint hash mismatch", None
         try:
             import torch
             checkpoint_payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -133,6 +138,22 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
                 return False, "CATCH-common calibration scores or quantile are invalid", None
             if not np.isclose(float(threshold), float(np.quantile(values, quantile)), rtol=0, atol=1e-12):
                 return False, "CATCH-common calibration threshold does not reproduce", None
+    training = loaded_evidence["training"]
+    calibration = loaded_evidence["calibration"]
+    for field in ("protocol", "task_name", "run_identity", "data_identity", "split_identity",
+                  "checkpoint_path", "checkpoint_sha256", "normalization_path", "normalization_sha256",
+                  "train_fit_rows_path", "train_fit_rows_sha256"):
+        if training.get(field) != calibration.get(field):
+            return False, f"CATCH-common training/calibration {field} mismatch", None
+    normalization = calibration.get("normalization_path")
+    if not normalization or not Path(normalization).is_file():
+        return False, "CATCH-common normalization artifact is missing", None
+    if calibration.get("normalization_sha256") != _sha256_file(normalization):
+        return False, "CATCH-common normalization hash mismatch", None
+    fit_rows = calibration.get("train_fit_rows_path")
+    if (not fit_rows or not Path(fit_rows).is_file()
+            or calibration.get("train_fit_rows_sha256") != _sha256_file(fit_rows)):
+        return False, "CATCH-common training-row binding is missing or changed", None
     return True, None, manifest
 
 
@@ -184,7 +205,7 @@ def _metric(actual, scores):
 
 def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
              catch_threshold=None, boundary_path=None, split_paths=None,
-             common_manifest=None):
+             common_manifest=None, strict_common=None):
     probe = _read_npz(probe_path)
     catch = _read_npz(catch_path)
     labels_raw = np.asarray(np.load(labels_path, allow_pickle=False))
@@ -224,6 +245,23 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
         split_record = validate_common_splits(*split_arrays, len(labels))
     evidence_ok, evidence_reason, evidence = _common_evidence(
         common_manifest, probe_path, catch_path, labels_path, split_paths)
+    if strict_common is None:
+        strict_common = bool(common_manifest)
+    if strict_common and not evidence_ok:
+        raise ValueError(f"strict CATCH-common evidence rejected: {evidence_reason}")
+    if evidence_ok:
+        calibration_identity = evidence.get("calibration_identity", {})
+        calibration_evidence = calibration_identity.get("evidence", {})
+        calibrated_threshold = calibration_evidence.get("threshold")
+        if calibrated_threshold is None or not math.isfinite(float(calibrated_threshold)):
+            raise ValueError("strict CATCH-common evidence has no finite calibrated threshold")
+        if not np.isclose(float(catch_threshold), float(calibrated_threshold), rtol=0, atol=1e-12):
+            raise ValueError("strict CATCH-common catch threshold does not match calibration evidence")
+        declared_score_threshold = catch.get("threshold")
+        if declared_score_threshold is not None:
+            declared_score_threshold = float(np.asarray(declared_score_threshold))
+            if not np.isclose(declared_score_threshold, float(calibrated_threshold), rtol=0, atol=1e-12):
+                raise ValueError("strict CATCH-common score threshold does not match calibration evidence")
     protocol = "CATCH-common" if evidence_ok else "index_intersection_reference"
     return {
         "protocol": protocol,
@@ -260,6 +298,8 @@ def main():
     parser.add_argument("--calibration-indices", default="")
     parser.add_argument("--common-manifest", default="",
                         help="completed execution evidence for strict CATCH-common")
+    parser.add_argument("--reference-mode", action="store_true",
+                        help="allow invalid/missing evidence as index_intersection_reference")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     split_args = (args.train_indices, args.validation_indices, args.calibration_indices)
@@ -269,7 +309,8 @@ def main():
     result = evaluate(args.probe, args.catch, args.labels,
                       args.probe_threshold, args.catch_threshold,
                       args.boundary_ids or None, split_paths,
-                      args.common_manifest or None)
+                      args.common_manifest or None,
+                      strict_common=bool(args.common_manifest) and not args.reference_mode)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
