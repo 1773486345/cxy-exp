@@ -53,6 +53,8 @@ class ViewProbeConfig:
             self.selected_views = tuple(item for item in self.selected_views.split(",") if item)
         else:
             self.selected_views = tuple(self.selected_views)
+        if self.mode == "s_only" and self.selected_views == VALID_VIEWS:
+            self.selected_views = ("S",)
         if not self.selected_views:
             raise ValueError("selected_views must be a non-empty subset of S,E,P,R")
         if len(set(self.selected_views)) != len(self.selected_views) or any(v not in VALID_VIEWS for v in self.selected_views):
@@ -61,6 +63,8 @@ class ViewProbeConfig:
             raise ValueError("selected_views must use canonical S,E,P,R order")
         if self.mode not in {"stage1", "full_gmm", "random_gmm", "select_gmm", "s_only", "flow"}:
             raise ValueError("mode must be stage1, full_gmm, random_gmm, select_gmm, s_only, or flow")
+        if self.mode == "s_only" and self.selected_views != ("S",):
+            raise ValueError("s_only mode requires selected_views=('S',) so its cache width is exactly one")
         if self.data_source not in {"large_detect", "external_detect", "synthetic"}:
             raise ValueError("data_source must be large_detect, external_detect, or synthetic")
         if self.batch_size < 1 or self.stage1_epochs < 1 or self.stage2_epochs < 1 or self.patience < 1:
@@ -73,6 +77,8 @@ class ViewProbeConfig:
             raise ValueError("encoding_batch_size cannot exceed batch_size")
         if self.gmm_components < 1 or self.gmm_fit_max_windows < 1 or self.gmm_n_init < 1 or self.gmm_max_iter < 1:
             raise ValueError("GMM component, sample, initialization, and iteration limits must be positive")
+        if self.gmm_covariance_type not in {"full", "tied", "diag", "spherical"}:
+            raise ValueError("gmm_covariance_type must be full, tied, diag, or spherical")
         if self.gmm_reg_covar <= 0 or self.cpu_threads < 1:
             raise ValueError("gmm_reg_covar and cpu_threads must be positive")
 

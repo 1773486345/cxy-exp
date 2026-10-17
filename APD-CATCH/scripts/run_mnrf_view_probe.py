@@ -69,8 +69,14 @@ def main():
     parser.add_argument("--relation-dim", type=int, default=None)
     parser.add_argument("--view-dim", type=int, default=8)
     parser.add_argument("--gmm-components", type=int, default=4)
+    parser.add_argument("--gmm-covariance-type", default="full", choices=("full", "tied", "diag", "spherical"))
+    parser.add_argument("--gmm-reg-covar", type=float, default=0.001)
+    parser.add_argument("--gmm-n-init", type=int, default=1)
+    parser.add_argument("--gmm-max-iter", type=int, default=100)
     parser.add_argument("--gmm-fit-max-windows", type=int, default=20000)
     parser.add_argument("--cpu-threads", type=int, default=1)
+    parser.add_argument("--train-noise-std", type=float, default=0.01)
+    parser.add_argument("--noise-seed", type=int, default=20261013)
     parser.add_argument("--resume-from", default="")
     args = parser.parse_args()
     frame, train_length, test_labels = _read_task(args.task, args.data_source)
@@ -85,7 +91,10 @@ def main():
                   source_dir=args.source_dir, output_dir=args.output_dir,
                   resume_from=args.resume_from, data_source=args.data_source,
                   task_name=f"{args.task}.csv",
-                  gmm_components=args.gmm_components, gmm_fit_max_windows=args.gmm_fit_max_windows,
+                  gmm_components=args.gmm_components, gmm_covariance_type=args.gmm_covariance_type,
+                  gmm_reg_covar=args.gmm_reg_covar, gmm_n_init=args.gmm_n_init,
+                  gmm_max_iter=args.gmm_max_iter, gmm_fit_max_windows=args.gmm_fit_max_windows,
+                  train_noise_std=args.train_noise_std, noise_seed=args.noise_seed,
                   cpu_threads=args.cpu_threads)
     probe = MNRFViewProbe(**kwargs)
     probe.fit(frame, train_length, None if args.mode == "stage1" else test_labels)

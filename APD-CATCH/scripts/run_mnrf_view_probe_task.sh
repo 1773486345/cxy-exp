@@ -52,5 +52,8 @@ exec python "${ROOT}/scripts/run_mnrf_view_probe.py" \
   --evolution-dim "${EVOLUTION_DIM:-8}" --pattern-dim "${PATTERN_DIM:-8}" \
   --relation-dim "${RELATION_DIM:-8}" --cache-chunk-size "${CACHE_CHUNK_SIZE:-256}" \
   --encoding-batch-size "${ENCODING_BATCH_SIZE:-${BATCH_SIZE}}" \
-  --gmm-components "${GMM_COMPONENTS:-4}" --gmm-fit-max-windows "${GMM_FIT_MAX_WINDOWS:-20000}" \
+  --gmm-components "${GMM_COMPONENTS:-4}" --gmm-covariance-type "${GMM_COVARIANCE_TYPE:-full}" \
+  --gmm-reg-covar "${GMM_REG_COVAR:-0.001}" --gmm-n-init "${GMM_N_INIT:-1}" \
+  --gmm-max-iter "${GMM_MAX_ITER:-100}" --gmm-fit-max-windows "${GMM_FIT_MAX_WINDOWS:-20000}" \
+  --train-noise-std "${TRAIN_NOISE_STD:-0.01}" --noise-seed "${NOISE_SEED:-20261013}" \
   --cpu-threads "${CPU_THREADS:-1}" --resume-from "${RESUME_PATH}"

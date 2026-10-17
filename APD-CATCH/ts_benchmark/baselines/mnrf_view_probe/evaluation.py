@@ -17,7 +17,15 @@ def common_index_intersection(*index_sets):
     """Return sorted shared integer coordinates and coverage diagnostics."""
     if not index_sets:
         return np.empty(0, dtype=np.int64), {"hash": _hash_array(np.empty(0, dtype=np.int64))}
-    normalized = [np.asarray(item, dtype=np.int64).reshape(-1) for item in index_sets]
+    normalized = []
+    for position, item in enumerate(index_sets):
+        array = np.asarray(item)
+        if array.ndim != 1 or array.dtype.kind not in "iu":
+            raise ValueError(f"index set {position} must be a one-dimensional integer array")
+        array = np.asarray(array, dtype=np.int64)
+        if len(np.unique(array)) != len(array):
+            raise ValueError(f"index set {position} contains duplicate coordinates")
+        normalized.append(array)
     common = normalized[0]
     for item in normalized[1:]:
         common = np.intersect1d(common, item, assume_unique=False)
@@ -36,8 +44,13 @@ def validate_common_splits(train_indices, validation_indices, calibration_indice
     The common evaluator accepts these coordinates as an audit record; it
     never creates a second 80/20 split or uses labels to alter them.
     """
-    arrays = [np.asarray(item, dtype=np.int64).reshape(-1)
-              for item in (train_indices, validation_indices, calibration_indices)]
+    arrays = []
+    for name, item in zip(("train", "validation", "calibration"),
+                          (train_indices, validation_indices, calibration_indices)):
+        array = np.asarray(item)
+        if array.ndim != 1 or array.dtype.kind not in "iu":
+            raise ValueError(f"{name} split must be a one-dimensional integer array")
+        arrays.append(np.asarray(array, dtype=np.int64))
     names = ("train", "validation", "calibration")
     seen = set()
     result = {}
@@ -109,13 +122,24 @@ def affiliation_f_segment_macro(actual, predicted, valid_mask=None, boundary_ids
                 result = pr_from_events(events_pred, events_gt, (0, right - left))
                 precision = float(result["precision"])
                 recall = float(result["recall"])
-                record.update({"precision": precision, "recall": recall,
-                               "f": None if precision + recall == 0 else 2 * precision * recall / (precision + recall),
-                               "defined": precision + recall > 0})
-                if record["defined"]:
-                    defined.append(record["f"])
+                record["precision"] = precision if np.isfinite(precision) else None
+                record["recall"] = recall if np.isfinite(recall) else None
+                if not np.isfinite(precision) or not np.isfinite(recall):
+                    record["undefined_reason"] = "non_finite_precision_or_recall"
+                elif precision + recall == 0:
+                    # A finite zero/zero result is a defined zero, distinct
+                    # from a metric that is mathematically undefined.
+                    record.update({"f": 0.0, "defined": True,
+                                   "undefined_reason": None})
+                    defined.append(0.0)
                 else:
-                    record["undefined_reason"] = "zero_precision_and_recall"
+                    value = 2 * precision * recall / (precision + recall)
+                    if not np.isfinite(value):
+                        record["undefined_reason"] = "non_finite_f_score"
+                    else:
+                        record.update({"f": float(value), "defined": True,
+                                       "undefined_reason": None})
+                        defined.append(float(value))
             except (ValueError, ZeroDivisionError) as error:
                 record["undefined_reason"] = str(error)
         records.append(record)

@@ -48,17 +48,17 @@ S-only and one-branch deletion probes use the same explicit source and each
 write a new head/calibration:
 
 ```bash
-GPU_ID=0 VIEW_PROBE_MODE=s_only VIEW_PROBE_VIEWS=S VIEW_PROBE_SOURCE_DIR=<STAGE1_RUN> VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/S-only-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
-GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=S,P,R VIEW_PROBE_SOURCE_DIR=<STAGE1_RUN> VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-E-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
-GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=S,E,R VIEW_PROBE_SOURCE_DIR=<STAGE1_RUN> VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-P-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
-GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=S,E,P VIEW_PROBE_SOURCE_DIR=<STAGE1_RUN> VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-R-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
-GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=E,P,R VIEW_PROBE_SOURCE_DIR=<STAGE1_RUN> VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-S-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+GPU_ID=0 VIEW_PROBE_MODE=s_only VIEW_PROBE_VIEWS=S VIEW_PROBE_SOURCE_DIR="/absolute/path/to/STAGE1_RUN" VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/S-only-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=S,P,R VIEW_PROBE_SOURCE_DIR="/absolute/path/to/STAGE1_RUN" VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-E-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=S,E,R VIEW_PROBE_SOURCE_DIR="/absolute/path/to/STAGE1_RUN" VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-P-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=S,E,P VIEW_PROBE_SOURCE_DIR="/absolute/path/to/STAGE1_RUN" VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-R-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+GPU_ID=0 VIEW_PROBE_MODE=select_gmm VIEW_PROBE_VIEWS=E,P,R VIEW_PROBE_SOURCE_DIR="/absolute/path/to/STAGE1_RUN" VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/drop-S-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
 ```
 
 Existing Flow control, same source and full layout only:
 
 ```bash
-GPU_ID=0 VIEW_PROBE_MODE=flow VIEW_PROBE_VIEWS=S,E,P,R VIEW_PROBE_SOURCE_DIR=<STAGE1_RUN> VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/flow-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+GPU_ID=0 VIEW_PROBE_MODE=flow VIEW_PROBE_VIEWS=S,E,P,R VIEW_PROBE_SOURCE_DIR="/absolute/path/to/STAGE1_RUN" VIEW_PROBE_OUTPUT=result/score/MNRF-ViewProbe/PSM/flow-2021 conda run --no-capture-output -n catch_env bash /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
 ```
 
 An unequal-dimension probe keeps the same data and protocol but creates a new
@@ -94,4 +94,11 @@ Compare a probe and an existing CATCH artifact on explicit common coordinates
 
 ```bash
 conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/evaluate_mnrf_view_probe_common.py --probe /absolute/probe/results/aligned_scores.npz --catch /absolute/catch/aligned_scores.npz --labels /absolute/labels.npy --output /absolute/comparison.json
+
+Only a registered execution manifest can opt into strict CATCH-common; an
+unregistered pair is reported as `index_intersection_reference`:
+
+```bash
+conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/register_mnrf_catch_common.py --probe /absolute/probe/results/aligned_scores.npz --catch /absolute/catch/aligned_scores.npz --labels /absolute/labels.npy --train-indices /absolute/train.npy --validation-indices /absolute/validation.npy --calibration-indices /absolute/calibration.npy --training-evidence /absolute/catch_training_evidence.json --calibration-evidence /absolute/catch_calibration_evidence.json --output /absolute/catch_common_manifest.json
+```
 ```

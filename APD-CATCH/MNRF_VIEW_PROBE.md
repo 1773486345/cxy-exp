@@ -71,10 +71,15 @@ uses the repository affiliation implementation on the original coordinate
 axis without joining gaps or entities. It does not train CATCH or silently
 re-split data.
 
-When a CATCH-common run has predeclared split index files, pass all three with
-`--train-indices`, `--validation-indices`, and `--calibration-indices`; the
-adapter verifies sorted, disjoint coordinates and records their hashes instead
-of creating an internal split.
+The evaluator calls a score pair an `index_intersection_reference` by default.
+Predeclared split files alone do not prove that either model trained and
+calibrated on those coordinates.  The strict `CATCH-common` name is granted
+only when `scripts/register_mnrf_catch_common.py` has registered a completed
+common-split training/score/calibration evidence manifest; pass that manifest
+with `--common-manifest` together with all three split files.  The adapter
+verifies sorted, disjoint coordinates and records their hashes instead of
+creating an internal split.  Paper/original CATCH scores and hand-entered
+thresholds cannot create this protocol identity.
 
 Validate a completed run with:
 

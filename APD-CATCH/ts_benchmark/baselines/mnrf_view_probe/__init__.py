@@ -2,5 +2,6 @@
 
 from .config import ViewProbeConfig
 from .probe import MNRFViewProbe, load_probe
+from .strategy import IndexedViewProbeStrategy
 
-__all__ = ["MNRFViewProbe", "ViewProbeConfig", "load_probe"]
+__all__ = ["MNRFViewProbe", "ViewProbeConfig", "load_probe", "IndexedViewProbeStrategy"]

@@ -7,6 +7,13 @@ from pathlib import Path
 
 import pandas as pd
 
+import sys
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from ts_benchmark.baselines.mnrf_view_probe import load_probe
+
 
 def collect(root):
     rows = []
@@ -23,6 +30,15 @@ def collect(root):
         config = manifest.get("config", {})
         gmm_status_path = run / "heads" / "gmm_status.json"
         gmm_status = json.loads(gmm_status_path.read_text()) if gmm_status_path.is_file() else {}
+        validation_status = "not_applicable"
+        validation_reason = ""
+        if run_status.get("status") in {"complete", "stage1_complete"}:
+            try:
+                load_probe(run, device="cpu")
+                validation_status = "valid"
+            except Exception as error:
+                validation_status = "invalid"
+                validation_reason = str(error)
         rows.append({
             "run": str(run), "task": config.get("task_name"), "seed": config.get("seed"),
             "seq_len": config.get("seq_len"), "mode": manifest.get("mode"),
@@ -34,6 +50,8 @@ def collect(root):
             "gmm_components": config.get("gmm_components"), "gmm_covariance_type": config.get("gmm_covariance_type"),
             "gmm_fit_endpoint_count": metrics.get("gmm_fit_endpoint_count", gmm_status.get("fit_endpoint_count")),
             "run_status": run_status.get("status"), "head_status": manifest.get("head_status"),
+            "artifact_type": manifest.get("artifact_type"), "head_type": manifest.get("head_type"),
+            "validation_status": validation_status, "validation_reason": validation_reason,
             "status": metrics.get("status"), "failure_reason": run_status.get("reason"),
             "auc_roc": metrics.get("auc_roc"), "auc_pr": metrics.get("auc_pr"),
             "threshold": metrics.get("threshold"), "valid_points": metrics.get("valid_points"),
@@ -49,7 +67,7 @@ def collect(root):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default="result/score/MNRF-ViewProbe")
-    parser.add_argument("--output", default="result/typefusion_catch_main/mnrf_view_probe_summary.csv")
+    parser.add_argument("--output", default="result/score/MNRF-ViewProbe/summary/mnrf_view_probe_summary.csv")
     args = parser.parse_args()
     frame = collect(args.root)
     output = Path(args.output)

@@ -34,6 +34,8 @@ from .config import VALID_VIEWS, ViewProbeConfig
 
 
 PROBE_SCHEMA = "mnrf-view-probe-v2"
+ARTIFACT_SOURCE = "source_encoder"
+ARTIFACT_HEAD = "probe_head"
 
 
 def _sha256_file(path):
@@ -92,6 +94,21 @@ def _hash_strings(values, chunk_size=65536):
 
 def _json_hash(payload):
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _runtime_free_config(config):
+    """Return the persisted configuration fields that define an artifact."""
+    value = dict(config.to_dict() if hasattr(config, "to_dict") else config)
+    for key in ("output_dir", "resume_from", "resolved_layout", "selected_indices", "selected_dim"):
+        value.pop(key, None)
+    return value
+
+
+def _strict_integer_indices(value, name):
+    array = np.asarray(value)
+    if array.ndim != 1 or array.dtype.kind not in "iu":
+        raise ValueError(f"{name} must be a one-dimensional integer array")
+    return np.asarray(array, dtype=np.int64)
 
 
 def _safe_name(value):
@@ -205,7 +222,12 @@ class MNRFViewProbe:
         else:
             self.output_dir.mkdir(parents=True, exist_ok=False)
         for name in ("checkpoints", "cache", "heads", "results"):
-            (self.output_dir / name).mkdir(exist_ok=resume)
+            directory = self.output_dir / name
+            if resume:
+                if not directory.is_dir():
+                    raise ValueError(f"resume run is missing required directory: {directory}")
+            else:
+                directory.mkdir()
 
     def _set_run_status(self, status, reason=None, **extra):
         if self.output_dir is None:
@@ -338,6 +360,43 @@ class MNRFViewProbe:
         cache["test"] = np.load(test_path, mmap_mode="r")
         return cache, {name: self.output_dir / "cache" / f"{name}_window_end_indices.npy" for name in ("train", "validation", "calibration", "test")}
 
+    def _cache_s_only(self, normalized, test_endpoints):
+        """Export the S view directly, without training an encoder."""
+        cache = {}
+        endpoint_paths = {}
+        for name, (start, end) in [(name, self.ranges[name]) for name in ("train", "validation", "calibration")]:
+            endpoints = window_endpoints(
+                intersect_segments(self.ranges["segment_ranges"][name], start, end),
+                self.config.seq_len,
+            )
+            path = self.output_dir / "cache" / f"{name}_features.npy"
+            mmap = np.lib.format.open_memmap(path.with_suffix(".partial.npy"), mode="w+", dtype=np.float32,
+                                             shape=(len(endpoints), len(self.variable_names), 1))
+            for offset in range(0, len(endpoints), self.config.encoding_batch_size or self.config.batch_size):
+                batch = endpoints[offset:offset + (self.config.encoding_batch_size or self.config.batch_size)]
+                mmap[offset:offset + len(batch)] = np.asarray(normalized[batch], dtype=np.float32)[:, :, None]
+            mmap.flush(); del mmap
+            os.replace(path.with_suffix(".partial.npy"), path)
+            index_path = self.output_dir / "cache" / f"{name}_window_end_indices.npy"
+            np.save(index_path, endpoints)
+            cache[name] = np.load(path, mmap_mode="r")
+            endpoint_paths[name] = index_path
+        endpoints = np.asarray(test_endpoints, dtype=np.int64)
+        path = self.output_dir / "cache" / "test_features.npy"
+        mmap = np.lib.format.open_memmap(path.with_suffix(".partial.npy"), mode="w+", dtype=np.float32,
+                                         shape=(len(endpoints), len(self.variable_names), 1))
+        batch_size = self.config.encoding_batch_size or self.config.batch_size
+        for offset in range(0, len(endpoints), batch_size):
+            batch = endpoints[offset:offset + batch_size]
+            mmap[offset:offset + len(batch)] = np.asarray(normalized[batch], dtype=np.float32)[:, :, None]
+        mmap.flush(); del mmap
+        os.replace(path.with_suffix(".partial.npy"), path)
+        index_path = self.output_dir / "cache" / "test_window_end_indices.npy"
+        np.save(index_path, endpoints)
+        cache["test"] = np.load(path, mmap_mode="r")
+        endpoint_paths["test"] = index_path
+        return cache, endpoint_paths
+
     def _expected_endpoints(self, name):
         if name == "test":
             return np.asarray(self._current_test_endpoints, dtype=np.int64)
@@ -372,6 +431,7 @@ class MNRFViewProbe:
     def _save_source_metadata(self, mode, cache, endpoint_paths, initial_state=None):
         payload = {
             "schema": PROBE_SCHEMA, "mode": mode, "task_name": self.config.task_name,
+            "artifact_type": ARTIFACT_SOURCE, "head_type": None,
             "config": self.config.to_dict(), "layout": self.config.layout.to_dict(),
             "variable_names": list(self.variable_names), "temporal_rule": self.temporal_rule,
             "ranges": {name: list(self.ranges[name]) for name in ("train", "validation", "calibration")},
@@ -382,7 +442,9 @@ class MNRFViewProbe:
             "source_identity": self.source_identity,
             "cache_shapes": {name: list(cache[name].shape) for name in cache},
             "cache_dtypes": {name: str(cache[name].dtype) for name in cache},
+            "cache_feature_dim": int(next(iter(cache.values())).shape[-1]),
             "input_statistics_sha256": _sha256_file(self.output_dir / "input_statistics.npz"),
+            "raw_input_statistics_sha256": _sha256_file(self.output_dir / "input_statistics.npz"),
             "checkpoint_sha256": {
                 name: _sha256_file(self.output_dir / "checkpoints" / name)
                 for name in ("initial_encoder.pt", "best_encoder.pt")
@@ -397,7 +459,9 @@ class MNRFViewProbe:
 
     def _save_probe_metadata(self, mode, source_manifest=None):
         payload = {
-            "schema": PROBE_SCHEMA, "mode": mode, "config": self.config.to_dict(),
+            "schema": PROBE_SCHEMA, "mode": mode, "artifact_type": ARTIFACT_HEAD,
+            "head_type": None, "stage_status": "source_reused" if source_manifest else "cache_ready",
+            "config": self.config.to_dict(),
             "layout": self.config.layout.to_dict(), "variable_names": list(self.variable_names),
             "temporal_rule": self.temporal_rule,
             "source_dir": str(Path(self.config.source_dir).resolve()) if self.config.source_dir else "",
@@ -405,6 +469,8 @@ class MNRFViewProbe:
             "source_feature_fingerprint": None if source_manifest is None else source_manifest.get("feature_fingerprint"),
             "selected_views": list(self.config.selected_views),
             "selected_indices": self.config.selected_indices, "selected_dim": self.config.selected_dim,
+            "cache_feature_dim": self.config.selected_dim if mode == "s_only" and source_manifest is None else None,
+            "raw_input_statistics_sha256": _sha256_file(self.output_dir / "input_statistics.npz"),
         }
         if source_manifest is not None:
             payload["source_cache_sha256"] = source_manifest.get("cache_sha256", {})
@@ -412,6 +478,18 @@ class MNRFViewProbe:
             payload["source_gmm_fit_endpoints_sha256"] = source_manifest.get("gmm_fit_endpoints_sha256")
         _atomic_json(self.output_dir / "probe_manifest.json", payload)
         return payload
+
+    def _bind_local_cache_metadata(self, cache, endpoint_paths):
+        manifest_path = self.output_dir / "probe_manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest.update({
+            "cache_sha256": {name: _sha256_file(self.output_dir / "cache" / f"{name}_features.npy") for name in cache},
+            "endpoint_sha256": {name: _sha256_file(path) for name, path in endpoint_paths.items()},
+            "cache_shapes": {name: list(cache[name].shape) for name in cache},
+            "cache_dtypes": {name: str(cache[name].dtype) for name in cache},
+            "cache_feature_dim": int(next(iter(cache.values())).shape[-1]),
+        })
+        _atomic_json(manifest_path, manifest)
 
     def _load_source(self, source_dir):
         source = Path(source_dir).resolve()
@@ -446,7 +524,12 @@ class MNRFViewProbe:
             raise ValueError("view probe source temporal protocol differs")
         if tuple(manifest.get("variable_names", ())) != tuple(self.variable_names):
             raise ValueError("view probe source variable order differs")
-        if manifest.get("mode") not in {"stage1", "pretrained", "random"}:
+        if (manifest.get("mode") not in {"stage1", "pretrained", "random"}
+                or manifest.get("artifact_type") not in {ARTIFACT_SOURCE, ARTIFACT_HEAD}
+                or (manifest.get("artifact_type") == ARTIFACT_SOURCE
+                    and manifest.get("stage_status") != "stage1_complete")
+                or (manifest.get("artifact_type") == ARTIFACT_HEAD
+                    and manifest.get("stage_status") != "complete")):
             raise ValueError("view probe source is not a stage-1 encoder artifact")
         self.trainer = self._make_trainer(len(self.variable_names))
         checkpoint = source / "checkpoints" / ("initial_encoder.pt" if self.config.mode == "random_gmm" else "best_encoder.pt")
@@ -493,11 +576,19 @@ class MNRFViewProbe:
         train = cache["train"]
         with threadpool_limits(limits=self.config.cpu_threads):
             self.trainer.fixed_feature.fit(train, chunk_size=self.config.cache_chunk_size)
-        np.savez(
-            self.output_dir / "heads" / "feature_statistics.npz",
-            mean=np.asarray(self.trainer.fixed_feature.mean_, dtype=np.float32),
-            scale=np.asarray(self.trainer.fixed_feature.scale_, dtype=np.float32),
-        )
+        statistics_path = self.output_dir / "heads" / "feature_statistics.npz"
+        computed_mean = np.asarray(self.trainer.fixed_feature.mean_, dtype=np.float32)
+        computed_scale = np.asarray(self.trainer.fixed_feature.scale_, dtype=np.float32)
+        if self.config.resume_from and statistics_path.is_file():
+            with np.load(statistics_path, allow_pickle=False) as saved_statistics:
+                saved_mean = np.asarray(saved_statistics["mean"], dtype=np.float32)
+                saved_scale = np.asarray(saved_statistics["scale"], dtype=np.float32)
+            if (saved_mean.shape != computed_mean.shape or saved_scale.shape != computed_scale.shape
+                    or not np.array_equal(saved_mean, computed_mean)
+                    or not np.array_equal(saved_scale, computed_scale)):
+                raise ValueError("GMM resume rejected: feature statistics changed")
+        else:
+            np.savez(statistics_path, mean=computed_mean, scale=computed_scale)
         selected = np.asarray(self.config.selected_indices, dtype=np.int64)
         endpoints_path = self.output_dir / "cache" / "train_window_end_indices.npy"
         if source_manifest is not None:
@@ -525,10 +616,19 @@ class MNRFViewProbe:
         fit_config = self.config.to_dict()
         fit_config.pop("output_dir", None)
         fit_config.pop("resume_from", None)
+        source_cache_identity = None if source_manifest is None else {
+            "source_dir": str(Path(self.config.source_dir).resolve()),
+            "source_identity": self.source_identity,
+            "cache_sha256": source_manifest.get("cache_sha256"),
+            "endpoint_sha256": source_manifest.get("endpoint_sha256"),
+        }
         progress_identity = _json_hash({"config": fit_config, "sample_hash": sample_hash,
-                                        "selected_indices": self.config.selected_indices})
+                                        "selected_indices": self.config.selected_indices,
+                                        "source": source_cache_identity})
         progress = {"schema": PROBE_SCHEMA, "identity": progress_identity, "completed": {}}
-        if self.config.resume_from and progress_path.is_file():
+        if self.config.resume_from:
+            if not progress_path.is_file():
+                raise ValueError("GMM resume rejected: gmm_progress.json is missing")
             progress = json.loads(progress_path.read_text())
             if progress.get("identity") != progress_identity:
                 raise ValueError("GMM resume rejected: head configuration or fitting sample differs")
@@ -540,7 +640,9 @@ class MNRFViewProbe:
             for variable in range(train.shape[1]):
                 entry = progress.get("completed", {}).get(str(variable))
                 model_path = variable_dir / f"variable_{variable}.pkl"
-                if entry and model_path.is_file() and _sha256_file(model_path) == entry.get("model_sha256"):
+                if entry and (not model_path.is_file() or _sha256_file(model_path) != entry.get("model_sha256")):
+                    raise ValueError(f"GMM resume rejected: completed variable {variable} is missing or changed")
+                if entry and model_path.is_file():
                     with open(model_path, "rb") as handle:
                         model = pickle.load(handle)
                     statuses[variable] = entry["status"]
@@ -563,8 +665,18 @@ class MNRFViewProbe:
                     raise RuntimeError(f"GMM variable {variable} did not converge")
                 self._gmm[variable] = model
                 dimension = int(model.means_.shape[1])
-                free_count = int((model.weights_.size - 1) + model.means_.size
-                                 + model.weights_.size * dimension * (dimension + 1) // 2)
+                covariance_type = model.covariance_type
+                if covariance_type == "full":
+                    covariance_count = model.weights_.size * dimension * (dimension + 1) // 2
+                elif covariance_type == "tied":
+                    covariance_count = dimension * (dimension + 1) // 2
+                elif covariance_type == "diag":
+                    covariance_count = model.weights_.size * dimension
+                elif covariance_type == "spherical":
+                    covariance_count = model.weights_.size
+                else:  # Config validation makes this unreachable.
+                    raise ValueError(f"unsupported GMM covariance type: {covariance_type}")
+                free_count = int((model.weights_.size - 1) + model.means_.size + covariance_count)
                 storage_count = int(model.weights_.size + model.means_.size + model.covariances_.size)
                 status = {"variable": variable, "converged": bool(model.converged_),
                           "n_iter": int(model.n_iter_), "lower_bound": float(model.lower_bound_),
@@ -707,40 +819,140 @@ class MNRFViewProbe:
         _atomic_json(self.output_dir / "results" / "metrics.json", metrics)
         return metrics
 
+    def _set_protocol_identity(self, frame, train_length):
+        values, test_endpoints, continuity = self._protocol(frame, int(train_length))
+        self._test_offset = int(train_length)
+        self._run_identity = _json_hash({
+            "source_identity": self.source_identity,
+            "config": _runtime_free_config(self.config),
+        })
+        return values, test_endpoints, continuity
+
+    def _validate_resume_preflight(self, frame, train_length):
+        """Read-only validation performed before any resume file is written."""
+        if not self.config.resume_from or self.output_dir is None:
+            return
+        if self.config.mode == "full_gmm" and self.config.source_dir:
+            raise ValueError("full_gmm with source_dir is unsupported; use select_gmm or s_only")
+        if not self.output_dir.is_dir():
+            raise FileNotFoundError(f"resume run directory does not exist: {self.output_dir}")
+        required = ("probe_manifest.json", "run_status.json", "checkpoints", "cache", "heads", "results")
+        missing = [name for name in required if not (self.output_dir / name).exists()]
+        if missing:
+            raise ValueError("resume preflight failed; missing artifacts: " + ", ".join(missing))
+        manifest = json.loads((self.output_dir / "probe_manifest.json").read_text())
+        status = json.loads((self.output_dir / "run_status.json").read_text())
+        if manifest.get("schema") != PROBE_SCHEMA or status.get("schema") != PROBE_SCHEMA:
+            raise ValueError("resume preflight failed: unsupported artifact schema")
+        if status.get("run_identity") != self._run_identity:
+            raise ValueError("resume rejected: run configuration or source identity differs")
+        manifest_config = manifest.get("config")
+        if manifest_config is None or _runtime_free_config(manifest_config) != _runtime_free_config(self.config):
+            raise ValueError("resume rejected: persisted configuration differs")
+        if manifest.get("source_identity") != self.source_identity:
+            raise ValueError("resume rejected: source identity differs")
+        if manifest.get("artifact_type") not in {ARTIFACT_SOURCE, ARTIFACT_HEAD}:
+            raise ValueError("resume rejected: unknown artifact type")
+        if status.get("status") == "complete":
+            raise ValueError("resume rejected: run is already complete")
+        # Validate an explicitly referenced source without creating any target
+        # directories or rewriting any target artifact.
+        if self.config.source_dir:
+            if not Path(self.config.source_dir).is_dir():
+                raise ValueError("resume rejected: source_dir is not a directory")
+            source, source_manifest, _ = self._load_source(self.config.source_dir)
+            for field in ("source_cache_sha256", "source_endpoint_sha256", "source_feature_fingerprint"):
+                expected = manifest.get(field)
+                actual = (source_manifest.get("cache_sha256") if field == "source_cache_sha256"
+                          else source_manifest.get("endpoint_sha256") if field == "source_endpoint_sha256"
+                          else source_manifest.get("feature_fingerprint"))
+                if expected != actual:
+                    raise ValueError(f"resume rejected: source {field} differs")
+        # Validate the immutable initialization contract before fit() is
+        # allowed to update run_status, normalized arrays, or checkpoints.
+        # Source-backed and direct S-only heads intentionally have no local
+        # encoder initialization to resume.
+        needs_encoder = not self.config.source_dir and self.config.mode != "s_only"
+        if needs_encoder:
+            initial_path = self.output_dir / "checkpoints" / "initial_encoder.pt"
+            if not initial_path.is_file():
+                raise ValueError("resume rejected: initial encoder checkpoint is missing")
+            payload = torch.load(initial_path, map_location="cpu", weights_only=False)
+            if payload.get("run_identity") != self._run_identity:
+                raise ValueError("resume rejected: initial encoder identity differs")
+            declared_initial = manifest.get("checkpoint_sha256", {}).get("initial_encoder.pt")
+            if not declared_initial or _sha256_file(initial_path) != declared_initial:
+                raise ValueError("resume rejected: initial encoder checkpoint hash differs")
+            trainer = self._make_trainer(len(self.variable_names))
+            expected = trainer.encoder.state_dict()
+            saved = payload.get("encoder", payload)
+            if set(saved) != set(expected) or any(tuple(saved[name].shape) != tuple(expected[name].shape) for name in expected):
+                raise ValueError("resume rejected: initial encoder state shape differs")
+        if manifest.get("artifact_type") == ARTIFACT_HEAD and not self.config.source_dir and self.config.mode != "s_only":
+            if not (self.output_dir / "input_statistics.npz").is_file():
+                raise ValueError("resume rejected: local head is missing input statistics")
+        # A completed stage-one source must have its complete source contract.
+        if manifest.get("artifact_type") == ARTIFACT_SOURCE:
+            for name in ("initial_encoder.pt", "best_encoder.pt"):
+                if not (self.output_dir / "checkpoints" / name).is_file():
+                    raise ValueError("resume rejected: completed source is missing " + name)
+            if not (self.output_dir / "input_statistics.npz").is_file():
+                raise ValueError("resume rejected: completed source is missing input statistics")
+            load_probe(self.output_dir, device=str(self.device))
+            self._resume_stage1_complete = status.get("status") == "stage1_complete"
+        if (manifest.get("artifact_type") == ARTIFACT_HEAD
+                and manifest.get("head_type") == "gmm"):
+            progress_path = self.output_dir / "heads" / "gmm_progress.json"
+            if progress_path.is_file():
+                progress = json.loads(progress_path.read_text())
+                completed = progress.get("completed", {})
+                if not isinstance(completed, dict):
+                    raise ValueError("resume rejected: GMM progress completed map is invalid")
+                for variable, entry in completed.items():
+                    model_path = self.output_dir / "heads" / "gmm_variables" / f"variable_{variable}.pkl"
+                    if (not isinstance(entry, dict) or not model_path.is_file()
+                            or not entry.get("model_sha256")
+                            or _sha256_file(model_path) != entry["model_sha256"]):
+                        raise ValueError(f"resume rejected: completed GMM variable {variable} is missing or changed")
+
     def fit(self, frame, train_length, labels=None):
         self._fit_started = time.perf_counter()
+        if self.config.mode == "full_gmm" and self.config.source_dir:
+            raise ValueError("full_gmm with source_dir is unsupported; use select_gmm or s_only")
+        resume_preflight = bool(self.config.resume_from)
+        if resume_preflight:
+            self._set_protocol_identity(frame, int(train_length))
+            self._validate_resume_preflight(frame, int(train_length))
+            if getattr(self, "_resume_stage1_complete", False) and self.config.mode == "stage1":
+                # A validated stage-one export is already complete.  Returning
+                # here is intentionally read-only: no second encoder fit,
+                # cache rewrite, or run-status mutation is performed.
+                self._fitted = True
+                return self
         self._prepare_dirs()
+        write_allowed = True
         try:
             seed_all(self.config.seed)
             # The probe's CPU budget is explicit and intentionally scoped to
             # this process; it does not change server-wide thread settings.
             torch.set_num_threads(self.config.cpu_threads)
-            values, test_endpoints, continuity = self._protocol(frame, int(train_length))
-            self._test_offset = int(train_length)
-            identity_config = self.config.to_dict()
-            identity_config.pop("output_dir", None)
-            identity_config.pop("resume_from", None)
-            self._run_identity = _json_hash({
-                "source_identity": self.source_identity,
-                "config": identity_config,
-            })
-            existing_status_path = self.output_dir / "run_status.json"
-            if self.config.resume_from and existing_status_path.is_file():
-                existing_status = json.loads(existing_status_path.read_text())
-                if existing_status.get("run_identity") != self._run_identity:
-                    raise ValueError("resume rejected: run configuration or source identity differs")
+            values, test_endpoints, continuity = self._set_protocol_identity(frame, int(train_length))
             self._set_run_status("running")
             self.trainer = self._make_trainer(len(self.variable_names))
             normalized = self._normalized_memmap(values)
-            initial_state = {k: v.detach().cpu().clone() for k, v in self.trainer.encoder.state_dict().items()}
-            initial_path = self.output_dir / "checkpoints" / "initial_encoder.pt"
-            if self.config.resume_from and initial_path.is_file():
-                initial_payload = torch.load(initial_path, map_location="cpu", weights_only=False)
-                saved_initial = initial_payload.get("encoder", initial_payload)
-                if set(saved_initial) != set(initial_state) or any(not torch.equal(saved_initial[key], initial_state[key]) for key in initial_state):
-                    raise ValueError("resume rejected: initial encoder state differs from the run identity")
-            else:
-                atomic_torch_save({"schema": PROBE_SCHEMA, "run_identity": self._run_identity, "encoder": initial_state}, initial_path)
+            initial_state = None
+            if self.config.mode != "s_only":
+                initial_state = {k: v.detach().cpu().clone() for k, v in self.trainer.encoder.state_dict().items()}
+                initial_path = self.output_dir / "checkpoints" / "initial_encoder.pt"
+                if self.config.resume_from and initial_path.is_file():
+                    initial_payload = torch.load(initial_path, map_location="cpu", weights_only=False)
+                    if initial_payload.get("run_identity") != self._run_identity:
+                        raise ValueError("resume rejected: initial encoder identity differs")
+                    saved_initial = initial_payload.get("encoder", initial_payload)
+                    if set(saved_initial) != set(initial_state) or any(not torch.equal(saved_initial[key], initial_state[key]) for key in initial_state):
+                        raise ValueError("resume rejected: initial encoder state differs from the run identity")
+                else:
+                    atomic_torch_save({"schema": PROBE_SCHEMA, "run_identity": self._run_identity, "encoder": initial_state}, initial_path)
             mode = self.config.mode
             source_manifest = None
             if mode in {"random_gmm", "stage1", "full_gmm"}:
@@ -751,7 +963,7 @@ class MNRFViewProbe:
                         self.output_dir / "checkpoints", self.segments,
                         self.output_dir / "training.jsonl", self._run_identity,
                     )
-            elif mode in {"select_gmm", "s_only", "flow"}:
+            elif mode in {"select_gmm", "flow"} or (mode == "s_only" and self.config.source_dir):
                 if not self.config.source_dir:
                     raise ValueError(f"mode={mode} requires source_dir pointing to a validated stage-1 probe")
                 source, source_manifest, source_cache = self._load_source(self.config.source_dir)
@@ -759,9 +971,11 @@ class MNRFViewProbe:
                     self.trainer.fixed_input.mean_ = stats["mean"].astype(np.float32)
                     self.trainer.fixed_input.scale_ = stats["scale"].astype(np.float32)
                 self.trainer.encoder.eval()
-            if mode in {"select_gmm", "s_only", "flow"}:
+            if mode in {"select_gmm", "flow"} or (mode == "s_only" and self.config.source_dir):
                 cache = source_cache
                 test_endpoints = self._current_test_endpoints
+            elif mode == "s_only":
+                cache, endpoint_paths = self._cache_s_only(normalized, test_endpoints)
             else:
                 cache, endpoint_paths = self._cache_all(normalized, values, test_endpoints)
             np.savez(self.output_dir / "input_statistics.npz", mean=self.trainer.fixed_input.mean_, scale=self.trainer.fixed_input.scale_)
@@ -769,8 +983,11 @@ class MNRFViewProbe:
                 self._save_source_metadata("pretrained", cache, endpoint_paths, initial_state)
                 self._set_run_status("stage1_complete")
                 return None
-            if mode in {"select_gmm", "s_only", "flow"}:
+            if mode in {"select_gmm", "flow"} or (mode == "s_only" and self.config.source_dir):
                 self._save_probe_metadata(mode, source_manifest)
+            elif mode == "s_only":
+                self._save_probe_metadata(mode, None)
+                self._bind_local_cache_metadata(cache, endpoint_paths)
             else:
                 self._save_source_metadata("random" if mode == "random_gmm" else "pretrained", cache, endpoint_paths, initial_state)
             if mode == "flow":
@@ -787,17 +1004,22 @@ class MNRFViewProbe:
                 manifest_path = self.output_dir / "probe_manifest.json"
                 manifest = json.loads(manifest_path.read_text())
                 manifest.update({
-                    "head": "gmm", "head_status": "complete",
+                    "artifact_type": ARTIFACT_HEAD, "head": "gmm", "head_type": "gmm",
+                    "head_status": "complete", "stage_status": "complete",
                     "feature_statistics_sha256": _sha256_file(self.output_dir / "heads" / "feature_statistics.npz"),
                     "gmm_status_sha256": _sha256_file(self.output_dir / "heads" / "gmm_status.json"),
                     "calibration_sha256": _sha256_file(self.output_dir / "heads" / "calibration.npz"),
+                    "test_nll_sha256": _sha256_file(self.output_dir / "results" / "test_nll.npy"),
+                    "aligned_scores_sha256": _sha256_file(self.output_dir / "results" / "aligned_scores.npz"),
+                    "metrics_sha256": _sha256_file(self.output_dir / "results" / "metrics.json"),
                 })
                 _atomic_json(manifest_path, manifest)
             self._fitted = True
             self._set_run_status("complete")
             return self
         except Exception as error:
-            self._set_run_status("failed", repr(error))
+            if write_allowed:
+                self._set_run_status("failed", repr(error))
             raise
 
     def _fit_flow(self, cache, labels, test_endpoints):
@@ -863,16 +1085,21 @@ class MNRFViewProbe:
             result_payload["aligned_actual"] = np.full(int(self._test_length), -1, dtype=np.asarray(actual).dtype)
             result_payload["aligned_actual"][local] = actual
         np.savez_compressed(self.output_dir / "results" / "aligned_scores.npz", **result_payload)
+        _atomic_json(self.output_dir / "results" / "metrics.json", payload)
         manifest_path = self.output_dir / "probe_manifest.json"
         if manifest_path.is_file():
             manifest = json.loads(manifest_path.read_text())
             manifest.update({"head": "flow", "head_status": "complete",
+                             "artifact_type": ARTIFACT_HEAD, "head_type": "flow",
+                             "stage_status": "complete",
                              "flow_checkpoint_sha256": _sha256_file(self.output_dir / "checkpoints" / "best_fusion.pt"),
                              "input_statistics_sha256": _sha256_file(self.output_dir / "heads" / "feature_statistics.npz"),
                              "calibration_sha256": _sha256_file(self.output_dir / "heads" / "calibration.npz"),
-                             "fixed_noise_sha256": _sha256_file(self.output_dir / "heads" / "fixed_noise.npy")})
+                             "fixed_noise_sha256": _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
+                             "test_nll_sha256": _sha256_file(self.output_dir / "results" / "test_nll.npy"),
+                             "aligned_scores_sha256": _sha256_file(self.output_dir / "results" / "aligned_scores.npz"),
+                             "metrics_sha256": _sha256_file(self.output_dir / "results" / "metrics.json")})
             _atomic_json(manifest_path, manifest)
-        _atomic_json(self.output_dir / "results" / "metrics.json", payload)
 
     def detect_fit(self, train_data, train_label=None):
         frame = train_data if isinstance(train_data, pd.DataFrame) else pd.DataFrame(train_data)
@@ -909,7 +1136,7 @@ class MNRFViewProbe:
         artifact, so a loaded Flow head is never mistaken for an unfitted
         object.
         """
-        if not self._fitted or self.trainer is None:
+        if not self._fitted:
             raise RuntimeError("probe is not a loaded, fitted artifact")
         cache_path = getattr(self, "_loaded_test_cache", None)
         endpoint_path = getattr(self, "_loaded_test_endpoints", None)
@@ -944,10 +1171,18 @@ def load_probe(path, device="cpu"):
     if manifest.get("schema") != PROBE_SCHEMA:
         raise ValueError("view probe artifact schema is unsupported; re-export with the current probe")
     run_status_path = path / "run_status.json"
-    if run_status_path.is_file():
-        run_status = json.loads(run_status_path.read_text())
-        if run_status.get("status") not in {"complete", "stage1_complete"}:
-            raise ValueError(f"view probe artifact is not complete: {run_status.get('status')}")
+    if not run_status_path.is_file():
+        raise ValueError("view probe artifact has no run_status.json")
+    run_status = json.loads(run_status_path.read_text())
+    if run_status.get("status") not in {"complete", "stage1_complete"}:
+        raise ValueError(f"view probe artifact is not complete: {run_status.get('status')}")
+    artifact_type = manifest.get("artifact_type")
+    if artifact_type not in {ARTIFACT_SOURCE, ARTIFACT_HEAD}:
+        raise ValueError("view probe artifact type is missing or unsupported")
+    if artifact_type == ARTIFACT_SOURCE and run_status.get("status") != "stage1_complete":
+        raise ValueError("source encoder artifact must have stage1_complete status")
+    if artifact_type == ARTIFACT_HEAD and run_status.get("status") != "complete":
+        raise ValueError("probe head artifact must have complete status")
     config = dict(manifest["config"])
     config.pop("resolved_layout", None); config.pop("selected_indices", None); config.pop("selected_dim", None)
     config["output_dir"] = str(path); config["device"] = device
@@ -957,6 +1192,8 @@ def load_probe(path, device="cpu"):
         raise ValueError("view probe artifact selected view order does not match its configuration")
     if manifest.get("selected_indices", probe.config.selected_indices) != probe.config.selected_indices:
         raise ValueError("view probe artifact selected indices do not match its layout")
+    if manifest.get("source_identity") is None:
+        raise ValueError("view probe artifact has no source identity")
     source_dir = manifest.get("source_dir") or ""
     if source_dir:
         source = Path(source_dir).resolve()
@@ -964,7 +1201,13 @@ def load_probe(path, device="cpu"):
         if not source_manifest_path.is_file():
             raise ValueError("view probe source manifest is missing")
         source_manifest = json.loads(source_manifest_path.read_text())
-        if source_manifest.get("schema") != PROBE_SCHEMA or source_manifest.get("source_identity") != manifest.get("source_identity"):
+        if (source_manifest.get("schema") != PROBE_SCHEMA
+                or source_manifest.get("artifact_type") not in {ARTIFACT_SOURCE, ARTIFACT_HEAD}
+                or (source_manifest.get("artifact_type") == ARTIFACT_SOURCE
+                    and source_manifest.get("stage_status") != "stage1_complete")
+                or (source_manifest.get("artifact_type") == ARTIFACT_HEAD
+                    and source_manifest.get("stage_status") != "complete")
+                or source_manifest.get("source_identity") != manifest.get("source_identity")):
             raise ValueError("view probe source identity does not match the loaded artifact")
         for name, declared_hash in manifest.get("source_cache_sha256", {}).items():
             cache_path = source / "cache" / f"{name}_features.npy"
@@ -974,22 +1217,99 @@ def load_probe(path, device="cpu"):
             endpoint_path = source / "cache" / f"{name}_window_end_indices.npy"
             if not endpoint_path.is_file() or _sha256_file(endpoint_path) != declared_hash:
                 raise ValueError(f"view probe source endpoint hash mismatch: {name}")
+        if set(manifest.get("source_cache_sha256", {})) != {"train", "validation", "calibration", "test"}:
+            raise ValueError("view probe source cache hashes are incomplete")
+        if set(manifest.get("source_endpoint_sha256", {})) != {"train", "validation", "calibration", "test"}:
+            raise ValueError("view probe source endpoint hashes are incomplete")
+    elif artifact_type == ARTIFACT_HEAD:
+        if set(manifest.get("cache_sha256", {})) != {"train", "validation", "calibration", "test"}:
+            raise ValueError("view probe local cache hashes are incomplete")
+        if set(manifest.get("endpoint_sha256", {})) != {"train", "validation", "calibration", "test"}:
+            raise ValueError("view probe local endpoint hashes are incomplete")
+        for name in ("train", "validation", "calibration", "test"):
+            cache_path = path / "cache" / f"{name}_features.npy"
+            endpoint_path = path / "cache" / f"{name}_window_end_indices.npy"
+            if (not cache_path.is_file() or _sha256_file(cache_path) != manifest["cache_sha256"][name]
+                    or not endpoint_path.is_file() or _sha256_file(endpoint_path) != manifest["endpoint_sha256"][name]):
+                raise ValueError(f"view probe local cache binding mismatch: {name}")
+            cache = np.load(cache_path, mmap_mode="r")
+            expected_shape = tuple(manifest.get("cache_shapes", {}).get(name, ()))
+            expected_dtype = manifest.get("cache_dtypes", {}).get(name)
+            if (expected_shape and tuple(cache.shape) != expected_shape
+                    or expected_dtype and str(cache.dtype) != expected_dtype
+                    or cache.dtype != np.float32 or cache.ndim != 3 or cache.shape[1] != len(manifest.get("variable_names", ()))
+                    or cache.shape[-1] != int(manifest.get("cache_feature_dim") or probe.config.layout.total_dim)
+                    or not all(np.isfinite(cache[start:start + 65536]).all()
+                               for start in range(0, len(cache), 65536))):
+                raise ValueError(f"view probe local cache metadata mismatch: {name}")
     mode = manifest.get("mode")
     stats_path = path / "heads" / "feature_statistics.npz"
     calibration_path = path / "heads" / "calibration.npz"
     model_path = path / "heads" / "gmm_models.pkl"
     status_path = path / "heads" / "gmm_status.json"
     sample_path = path / "heads" / "gmm_fit_endpoints.npy"
-    gmm_mode = mode in {"full_gmm", "select_gmm", "s_only", "random_gmm"}
-    # A full GMM run uses the source-manifest labels ``pretrained``/``random``;
-    # a stage-one-only export uses the same label but has no head artifacts.
-    # Distinguish them by the presence of the complete head, without silently
-    # accepting a partially written head.
-    if mode in {"pretrained", "random"} and any(item.exists() for item in (stats_path, calibration_path, model_path, status_path, sample_path)):
-        gmm_mode = True
+    gmm_mode = artifact_type == ARTIFACT_HEAD and manifest.get("head_type") == "gmm"
+    if artifact_type == ARTIFACT_SOURCE:
+        if any(item.exists() for item in (stats_path, calibration_path, model_path, status_path, sample_path)):
+            raise ValueError("source encoder artifact contains partial head artifacts")
+        required_source = (path / "input_statistics.npz", path / "checkpoints" / "initial_encoder.pt",
+                           path / "checkpoints" / "best_encoder.pt")
+        if any(not item.is_file() for item in required_source):
+            raise ValueError("source encoder artifact is incomplete")
+        for field, rel in (("input_statistics_sha256", "input_statistics.npz"),
+                           ("checkpoint_sha256", "checkpoints/initial_encoder.pt")):
+            declared = manifest.get(field)
+            if field == "checkpoint_sha256":
+                declared = declared.get("initial_encoder.pt") if isinstance(declared, dict) else None
+            artifact = path / rel
+            if not declared or _sha256_file(artifact) != declared:
+                raise ValueError(f"source encoder artifact hash mismatch: {rel}")
+        declared_best = manifest.get("checkpoint_sha256", {}).get("best_encoder.pt")
+        if not declared_best or _sha256_file(path / "checkpoints" / "best_encoder.pt") != declared_best:
+            raise ValueError("source encoder best checkpoint hash mismatch")
+        if set(manifest.get("cache_sha256", {})) != {"train", "validation", "calibration", "test"} or set(manifest.get("endpoint_sha256", {})) != {"train", "validation", "calibration", "test"}:
+            raise ValueError("source encoder cache bindings are incomplete")
+        for name in ("train", "validation", "calibration", "test"):
+            cache_path = path / "cache" / f"{name}_features.npy"
+            endpoint_path = path / "cache" / f"{name}_window_end_indices.npy"
+            if (not cache_path.is_file() or _sha256_file(cache_path) != manifest["cache_sha256"][name]
+                    or not endpoint_path.is_file() or _sha256_file(endpoint_path) != manifest["endpoint_sha256"][name]):
+                raise ValueError(f"source encoder cache binding mismatch: {name}")
+            cache = np.load(cache_path, mmap_mode="r")
+            endpoints = _strict_integer_indices(np.load(endpoint_path, mmap_mode="r"), f"{name} endpoints")
+            finite = all(np.isfinite(cache[start:start + 65536]).all() for start in range(0, len(cache), 65536))
+            expected_shape = tuple(manifest.get("cache_shapes", {}).get(name, ()))
+            expected_dtype = manifest.get("cache_dtypes", {}).get(name)
+            identity = manifest.get("source_identity", {})
+            if name == "test":
+                expected_endpoints = window_endpoints(identity.get("test_segments", ()), probe.config.seq_len)
+            else:
+                segment_ranges = identity.get("segment_ranges", {}).get(name, ())
+                data_range = identity.get("ranges", {}).get(name)
+                expected_endpoints = window_endpoints(
+                    intersect_segments(segment_ranges, *data_range), probe.config.seq_len
+                ) if data_range is not None else np.empty(0, dtype=np.int64)
+            if (cache.dtype != np.float32 or cache.ndim != 3 or cache.shape[0] != len(endpoints)
+                    or cache.shape[1] != len(manifest.get("variable_names", ()))
+                    or cache.shape[-1] != probe.config.layout.total_dim
+                    or expected_shape and tuple(cache.shape) != expected_shape
+                    or expected_dtype and str(cache.dtype) != expected_dtype
+                    or not np.array_equal(endpoints, expected_endpoints)
+                    or not finite or np.any(np.diff(endpoints) <= 0)):
+                raise ValueError(f"source encoder cache {name} is invalid")
+        return probe
+    if manifest.get("head_type") not in {"gmm", "flow"} or manifest.get("head_status") != "complete":
+        raise ValueError("probe head artifact has an unknown or incomplete head type")
+    if manifest.get("head_type") == "flow" and mode != "flow":
+        raise ValueError("Flow head artifact has an incompatible mode")
+    if manifest.get("head_type") == "gmm" and mode not in {"full_gmm", "select_gmm", "s_only", "random_gmm", "pretrained", "random"}:
+        raise ValueError("GMM head artifact has an incompatible mode")
+    raw_input_statistics = path / "input_statistics.npz"
+    declared_raw_input = manifest.get("raw_input_statistics_sha256")
+    if (not declared_raw_input or not raw_input_statistics.is_file()
+            or _sha256_file(raw_input_statistics) != declared_raw_input):
+        raise ValueError("view probe head input statistics are missing or changed")
     if gmm_mode:
-        if manifest.get("head_status") != "complete":
-            raise ValueError("view probe GMM head is not marked complete")
         required = (stats_path, calibration_path, model_path, status_path, sample_path)
         missing = [str(item) for item in required if not item.is_file()]
         if missing:
@@ -997,22 +1317,29 @@ def load_probe(path, device="cpu"):
         status = json.loads(status_path.read_text())
         if status.get("sklearn_version") != sklearn.__version__:
             raise ValueError(f"view probe sklearn version mismatch: artifact={status.get('sklearn_version')} current={sklearn.__version__}")
-        if status.get("config", {}).get("selected_indices") != probe.config.selected_indices:
+        status_config = status.get("config")
+        if status_config is None or _runtime_free_config(status_config) != _runtime_free_config(probe.config):
+            raise ValueError("view probe GMM configuration does not match the manifest")
+        if status_config.get("selected_indices") != probe.config.selected_indices:
             raise ValueError("view probe GMM selected indices do not match its configuration")
         with np.load(stats_path, allow_pickle=False) as stats:
             mean = np.asarray(stats["mean"], dtype=np.float32)
             scale = np.asarray(stats["scale"], dtype=np.float32)
         variables = len(manifest.get("variable_names", ()))
-        expected = (variables, probe.config.layout.total_dim)
+        expected_width = int(manifest.get("cache_feature_dim") or probe.config.layout.total_dim)
+        if expected_width not in {probe.config.layout.total_dim, probe.config.selected_dim}:
+            raise ValueError("view probe cache feature width is incompatible with the layout")
+        expected = (variables, expected_width)
         if (mean.shape != expected or scale.shape != expected or np.any(~np.isfinite(mean))
                 or np.any(~np.isfinite(scale)) or np.any(scale < probe.config.feature_std_floor)):
             raise ValueError(f"view probe feature statistics shape mismatch: expected {expected}")
-        if manifest.get("feature_statistics_sha256") and _sha256_file(stats_path) != manifest["feature_statistics_sha256"]:
-            raise ValueError("view probe feature statistics hash mismatch")
-        if manifest.get("gmm_status_sha256") and _sha256_file(status_path) != manifest["gmm_status_sha256"]:
-            raise ValueError("view probe GMM status hash mismatch")
-        if manifest.get("calibration_sha256") and _sha256_file(calibration_path) != manifest["calibration_sha256"]:
-            raise ValueError("view probe calibration hash mismatch")
+        for field, artifact in (("feature_statistics_sha256", stats_path),
+                                ("gmm_status_sha256", status_path),
+                                ("calibration_sha256", calibration_path)):
+            if not manifest.get(field):
+                raise ValueError(f"view probe manifest is missing required hash: {field}")
+            if _sha256_file(artifact) != manifest[field]:
+                raise ValueError(f"view probe {field} mismatch")
         sample_hash = _sha256_file(sample_path)
         if sample_hash != status.get("fit_endpoint_sha256") or sample_hash != manifest.get("gmm_fit_endpoints_sha256"):
             raise ValueError("view probe GMM fitting endpoint hash mismatch")
@@ -1046,21 +1373,54 @@ def load_probe(path, device="cpu"):
             raise ValueError("view probe GMM variable count does not match its manifest")
         if status.get("gmm_models_sha256") != _sha256_file(model_path):
             raise ValueError("view probe GMM model bundle hash mismatch")
-        for variable, model in enumerate(probe._gmm):
+        if len(status.get("variables", [])) != variables:
+            raise ValueError("view probe GMM variable status count mismatch")
+        for variable, (status_item, model) in enumerate(zip(status["variables"], probe._gmm)):
+            if status_item.get("variable") != variable:
+                raise ValueError("view probe GMM variable order mismatch")
             if getattr(model, "n_features_in_", None) != probe.config.selected_dim:
                 raise ValueError(f"view probe GMM variable {variable} feature width mismatch")
-            if model.n_components != probe.config.gmm_components or model.covariance_type != probe.config.gmm_covariance_type:
+            if (model.n_components != probe.config.gmm_components
+                    or model.covariance_type != probe.config.gmm_covariance_type
+                    or float(getattr(model, "reg_covar", -1)) != float(probe.config.gmm_reg_covar)
+                    or int(getattr(model, "n_init", -1)) != int(probe.config.gmm_n_init)
+                    or int(getattr(model, "max_iter", -1)) != int(probe.config.gmm_max_iter)
+                    or int(getattr(model, "random_state", -1)) != int(probe.config.seed)):
                 raise ValueError(f"view probe GMM variable {variable} configuration mismatch")
             if not getattr(model, "converged_", False):
                 raise ValueError(f"view probe GMM variable {variable} is not converged")
-        for item in status.get("variables", []):
-            if item.get("n_features_in") != probe.config.selected_dim or item.get("n_components") != probe.config.gmm_components:
+            if (status_item.get("n_features_in") != probe.config.selected_dim
+                    or status_item.get("n_components") != probe.config.gmm_components
+                    or status_item.get("covariance_type") != probe.config.gmm_covariance_type
+                    or not status_item.get("converged")):
                 raise ValueError("view probe per-variable GMM metadata mismatch")
+            dimension = int(model.means_.shape[1])
+            if model.covariance_type == "full":
+                covariance_count = model.n_components * dimension * (dimension + 1) // 2
+            elif model.covariance_type == "tied":
+                covariance_count = dimension * (dimension + 1) // 2
+            elif model.covariance_type == "diag":
+                covariance_count = model.n_components * dimension
+            elif model.covariance_type == "spherical":
+                covariance_count = model.n_components
+            else:
+                raise ValueError("view probe GMM covariance type is unsupported")
+            expected_free = (model.n_components - 1) + model.means_.size + covariance_count
+            if status_item.get("parameter_count_free") != int(expected_free):
+                raise ValueError("view probe GMM parameter count metadata mismatch")
+            for array in (model.weights_, model.means_, model.covariances_):
+                if not np.isfinite(array).all():
+                    raise ValueError("view probe GMM contains non-finite parameters")
+            if np.any(model.weights_ <= 0) or not np.isclose(np.sum(model.weights_), 1.0):
+                raise ValueError("view probe GMM weights are invalid")
         probe._feature_mean = mean
         probe._feature_scale = scale
         probe._loaded_head = "gmm"
-        probe._loaded_test_cache = path / "cache" / "test_features.npy"
-        probe._loaded_test_endpoints = path / "cache" / "test_window_end_indices.npy"
+        cache_root = Path(source_dir).resolve() if source_dir else path
+        probe._loaded_test_cache = cache_root / "cache" / "test_features.npy"
+        probe._loaded_test_endpoints = cache_root / "cache" / "test_window_end_indices.npy"
+        if not probe._loaded_test_cache.is_file() or not probe._loaded_test_endpoints.is_file():
+            raise ValueError("view probe GMM test cache is missing")
         probe._fitted = True
     elif mode == "flow":
         if manifest.get("head_status") != "complete":
@@ -1140,4 +1500,92 @@ def load_probe(path, device="cpu"):
         if not probe._loaded_test_cache.is_file() or not probe._loaded_test_endpoints.is_file():
             raise ValueError("view probe Flow source test cache is missing")
         probe._fitted = True
+    _validate_saved_results(probe, path, manifest)
     return probe
+
+
+def _validate_saved_results(probe, path, manifest):
+    """Validate result arrays and recompute scores/metrics from frozen state."""
+    result_dir = Path(path) / "results"
+    metrics_path = result_dir / "metrics.json"
+    aligned_path = result_dir / "aligned_scores.npz"
+    nll_path = result_dir / "test_nll.npy"
+    required_hashes = {
+        "metrics_sha256": metrics_path,
+        "aligned_scores_sha256": aligned_path,
+        "test_nll_sha256": nll_path,
+    }
+    for field, artifact in required_hashes.items():
+        declared = manifest.get(field)
+        if not declared or not artifact.is_file() or _sha256_file(artifact) != declared:
+            raise ValueError(f"view probe result binding is missing or changed: {field}")
+    metrics = json.loads(metrics_path.read_text())
+    if metrics.get("status") not in {"complete", "incomplete"}:
+        raise ValueError("view probe metrics has an invalid status")
+    with np.load(aligned_path, allow_pickle=False) as payload:
+        required = {"scores", "predictions", "time_indices", "local_indices", "valid_mask",
+                    "aligned_scores", "aligned_predictions"}
+        if not required.issubset(payload.files):
+            raise ValueError("view probe aligned result is incomplete")
+        scores = np.asarray(payload["scores"], dtype=np.float64).reshape(-1)
+        predictions = np.asarray(payload["predictions"], dtype=np.int64).reshape(-1)
+        endpoints = _strict_integer_indices(payload["time_indices"], "result time_indices")
+        local = _strict_integer_indices(payload["local_indices"], "result local_indices")
+        valid_mask = np.asarray(payload["valid_mask"], dtype=bool).reshape(-1)
+        aligned_scores = np.asarray(payload["aligned_scores"], dtype=np.float64).reshape(-1)
+        aligned_predictions = np.asarray(payload["aligned_predictions"], dtype=np.int64).reshape(-1)
+        if len(scores) != len(predictions) or len(scores) != len(endpoints) or len(scores) != len(local):
+            raise ValueError("view probe result vector lengths disagree")
+        if len(np.unique(local)) != len(local) or np.any(local < 0) or np.any(local >= len(valid_mask)):
+            raise ValueError("view probe result local indices are invalid")
+        if len(aligned_scores) != len(valid_mask) or len(aligned_predictions) != len(valid_mask):
+            raise ValueError("view probe aligned result lengths disagree")
+        if not np.isfinite(scores).all() or not np.isfinite(aligned_scores[valid_mask]).all():
+            raise ValueError("view probe effective scores contain NaN or Inf")
+        if not np.array_equal(valid_mask[local], np.ones(len(local), dtype=bool)):
+            raise ValueError("view probe valid mask does not cover all effective scores")
+        if not np.array_equal(aligned_scores[local], scores) or not np.array_equal(aligned_predictions[local], predictions):
+            raise ValueError("view probe aligned scores do not match effective scores")
+        if np.any(aligned_predictions[~valid_mask] != -1) or np.any(np.isfinite(aligned_scores[~valid_mask])):
+            raise ValueError("view probe invalid positions are not represented by the required sentinels")
+        actual = np.asarray(payload["actual"]).reshape(-1) if "actual" in payload.files else None
+    features = np.load(probe._loaded_test_cache, mmap_mode="r")
+    expected_width = int(manifest.get("cache_feature_dim") or probe.config.layout.total_dim)
+    variables = len(manifest.get("variable_names", ()))
+    if features.dtype != np.float32 or features.ndim != 3 or features.shape != (len(scores), variables, expected_width):
+        raise ValueError("view probe frozen test cache shape/dtype does not match the result")
+    endpoints_file = _strict_integer_indices(np.load(probe._loaded_test_endpoints, mmap_mode="r"), "cache endpoints")
+    if not np.array_equal(endpoints, endpoints_file):
+        raise ValueError("view probe result endpoints do not match the frozen test cache")
+    nll = np.load(nll_path, mmap_mode="r")
+    if nll.ndim != 2 or nll.shape != (len(scores), variables) or not np.isfinite(nll).all():
+        raise ValueError("view probe saved NLL has invalid shape or values")
+    if probe._loaded_head == "gmm":
+        expected_nll = probe._gmm_scores(features)
+    else:
+        expected_nll = probe.trainer.per_variable_scores(features)
+    if expected_nll.shape != nll.shape or not np.allclose(expected_nll, nll, rtol=0, atol=1e-6):
+        raise ValueError("view probe saved NLL does not reproduce from the frozen head")
+    center = probe._probe_stats["center"]
+    scale = probe._probe_stats["scale"]
+    threshold = float(probe._probe_stats["threshold"])
+    expected_score = np.max((nll - center) / scale, axis=1)
+    expected_prediction = (expected_score > threshold).astype(np.int64)
+    if not np.allclose(expected_score, scores, rtol=0, atol=1e-6) or not np.array_equal(expected_prediction, predictions):
+        raise ValueError("view probe saved score does not reproduce from calibration")
+    if actual is not None:
+        if len(actual) != len(scores) or not np.isfinite(actual).all():
+            raise ValueError("view probe actual labels are invalid")
+        from sklearn.metrics import average_precision_score, roc_auc_score
+        expected_pr = float(average_precision_score(actual, scores))
+        if metrics.get("auc_pr") is None or not np.isfinite(metrics["auc_pr"]) or not np.isclose(metrics["auc_pr"], expected_pr, rtol=0, atol=1e-7):
+            raise ValueError("view probe AUC-PR does not reproduce")
+        if np.unique(actual).size == 2:
+            expected_roc = float(roc_auc_score(actual, scores))
+            if metrics.get("auc_roc") is None or not np.isfinite(metrics["auc_roc"]) or not np.isclose(metrics["auc_roc"], expected_roc, rtol=0, atol=1e-7):
+                raise ValueError("view probe AUC-ROC does not reproduce")
+        elif metrics.get("auc_roc") is not None:
+            raise ValueError("view probe AUC-ROC must be null for a single-class label set")
+    for key in ("auc_roc", "auc_pr"):
+        if metrics.get(key) is not None and (not np.isfinite(metrics[key]) or not 0 <= float(metrics[key]) <= 1):
+            raise ValueError(f"view probe metric {key} is invalid")

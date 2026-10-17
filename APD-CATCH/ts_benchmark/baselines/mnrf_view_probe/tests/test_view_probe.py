@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, ViewProbeConfig, load_probe
+from ts_benchmark.baselines.mnrf_view_probe.strategy import IndexedViewProbeStrategy
 from ts_benchmark.baselines.mnrf_view_probe.probe import _select_stratified
 from ts_benchmark.models.model_loader import get_models
 
@@ -101,6 +102,26 @@ def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
         load_probe(selected_dir, device="cpu")
     stats_path.write_bytes(original_stats)
 
+    aligned_path = selected_dir / "results" / "aligned_scores.npz"
+    original_aligned = aligned_path.read_bytes()
+    with np.load(aligned_path, allow_pickle=False) as result:
+        altered = {name: np.asarray(result[name]) for name in result.files}
+    altered["scores"] = altered["scores"].copy()
+    altered["scores"][0] += 1.0
+    np.savez_compressed(aligned_path, **altered)
+    with pytest.raises(ValueError, match="result binding"):
+        load_probe(selected_dir, device="cpu")
+    aligned_path.write_bytes(original_aligned)
+
+    metrics_path = selected_dir / "results" / "metrics.json"
+    original_metrics = metrics_path.read_bytes()
+    metrics = json.loads(original_metrics)
+    metrics["auc_roc"] = 1.234
+    metrics_path.write_text(json.dumps(metrics, sort_keys=True))
+    with pytest.raises(ValueError, match="result binding"):
+        load_probe(selected_dir, device="cpu")
+    metrics_path.write_bytes(original_metrics)
+
     changed_frame = frame.copy()
     with pytest.raises(ValueError, match="identity|train split"):
         MNRFViewProbe(
@@ -108,6 +129,17 @@ def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
             device="cpu", output_dir=str(tmp_path / "bad-boundary"), mode="select_gmm",
             selected_views=("S", "P", "R"), source_dir=str(source_dir),
         ).fit(changed_frame, 480, np.zeros(len(changed_frame) - 480, dtype=np.int64))
+
+    selected_status = selected_dir / "run_status.json"
+    before_resume = selected_status.read_bytes()
+    with pytest.raises(ValueError, match="identity|source identity|train split"):
+        MNRFViewProbe(
+            seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1, patience=1,
+            device="cpu", output_dir=str(selected_dir), resume_from=str(selected_dir),
+            mode="select_gmm", selected_views=("S", "P", "R"), source_dir=str(source_dir),
+            gmm_fit_max_windows=32,
+        ).fit(changed_frame, 480, np.zeros(len(changed_frame) - 480, dtype=np.int64))
+    assert selected_status.read_bytes() == before_resume
 
 
 def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):
@@ -128,3 +160,26 @@ def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):
     metadata = probe.score_with_metadata()
     assert metadata["time_indices"].min() >= train_length
     assert np.isfinite(scores).all()
+
+
+def test_indexed_strategy_keeps_endpoint_coordinates_without_padding():
+    class FakeProbe:
+        output_dir = None
+
+        def fit(self, frame, train_length, labels=None):
+            self._metadata = {
+                "scores": np.arange(59, dtype=np.float32),
+                "predictions": np.zeros(59, dtype=np.int64),
+                "time_indices": np.arange(121, 180, dtype=np.int64),
+                "local_indices": np.arange(31, 90, dtype=np.int64),
+            }
+            return self
+
+        def score_with_metadata(self):
+            return self._metadata
+
+    train = pd.DataFrame(np.zeros((90, 2), dtype=np.float32), columns=("a", "b"))
+    test = pd.DataFrame(np.zeros((90, 2), dtype=np.float32), columns=("a", "b"))
+    result = IndexedViewProbeStrategy(FakeProbe()).run(train, test, np.zeros(90, dtype=np.int64))
+    assert np.array_equal(result["local_indices"], np.arange(31, 90))
+    assert np.array_equal(result["time_indices"], np.arange(121, 180))
