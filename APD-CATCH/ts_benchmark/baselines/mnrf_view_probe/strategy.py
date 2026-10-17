@@ -25,7 +25,22 @@ class IndexedViewProbeStrategy:
             raise ValueError("train and test frames must both be non-empty")
         if tuple(map(str, train.columns)) != tuple(map(str, test.columns)):
             raise ValueError("train and test frame columns must match")
-        combined = pd.concat([train, test], axis=0, ignore_index=True)
+        # Keep the caller's time coordinate intact.  Resetting the index here
+        # silently turns a real timestamp gap into adjacent rows and makes the
+        # probe's continuity protocol unverifiable.  A test frame with a
+        # separately reset index has no defensible global coordinate and is
+        # rejected instead of being guessed.
+        if train.index.dtype != test.index.dtype:
+            raise ValueError("train and test frame indices must have the same dtype")
+        if train.index.has_duplicates or test.index.has_duplicates:
+            raise ValueError("train and test frame indices must be unique")
+        overlap = train.index.intersection(test.index).size
+        row_protocol = isinstance(train.index, pd.RangeIndex) and isinstance(test.index, pd.RangeIndex)
+        if overlap and not row_protocol:
+            raise ValueError("train and test frame indices overlap; refusing to invent global coordinates")
+        combined = pd.concat([train, test], axis=0, ignore_index=False)
+        if combined.index.has_duplicates and not row_protocol:
+            raise ValueError("combined frame index is not unique")
         labels = None if test_labels is None else np.asarray(test_labels).reshape(-1)
         if labels is not None and len(labels) != len(test):
             raise ValueError("test_labels must have one value per test row")

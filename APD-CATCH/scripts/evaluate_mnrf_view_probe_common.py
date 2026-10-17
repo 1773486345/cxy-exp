@@ -10,6 +10,7 @@ used for the common report.
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -24,6 +25,7 @@ from ts_benchmark.baselines.mnrf_view_probe.evaluation import (
     _hash_array,
     affiliation_f_segment_macro,
     common_index_intersection,
+    strict_integer_indices,
     validate_common_splits,
 )
 
@@ -68,14 +70,69 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
         return False, "CATCH-common evidence has no split records", None
     for name, split_path in zip(("train", "validation", "calibration"), split_paths):
         record = declared_splits.get(name)
-        if not isinstance(record, dict) or not record.get("sha256"):
+        if not isinstance(record, dict) or not record.get("file_sha256") or not record.get("indices_sha256"):
             return False, f"CATCH-common evidence has no {name} hash", None
         if Path(record.get("path", "")).resolve() != Path(split_path).resolve():
             return False, f"CATCH-common evidence {name} path mismatch", None
-        if _sha256_file(split_path) != record["sha256"]:
+        if _sha256_file(split_path) != record["file_sha256"]:
             return False, f"CATCH-common evidence {name} hash mismatch", None
-    if manifest.get("train_score_identity") is None or manifest.get("calibration_identity") is None:
+        values = np.load(split_path, allow_pickle=False)
+        if _hash_array(values) != record["indices_sha256"]:
+            return False, f"CATCH-common evidence {name} coordinate hash mismatch", None
+        if record.get("dtype") != values.dtype.str or record.get("shape") != list(values.shape):
+            return False, f"CATCH-common evidence {name} dtype/shape mismatch", None
+        if int(record.get("count", -1)) != int(values.size):
+            return False, f"CATCH-common evidence {name} count mismatch", None
+    train_identity = manifest.get("train_score_identity")
+    calibration_identity = manifest.get("calibration_identity")
+    if not isinstance(train_identity, dict) or not isinstance(calibration_identity, dict):
         return False, "CATCH-common training/calibration identities are missing", None
+    for name, identity in (("training", train_identity), ("calibration", calibration_identity)):
+        evidence_path = identity.get("path")
+        if not evidence_path or not identity.get("file_sha256") or not Path(evidence_path).is_file():
+            return False, f"CATCH-common {name} evidence file is missing", None
+        if _sha256_file(evidence_path) != identity["file_sha256"]:
+            return False, f"CATCH-common {name} evidence file hash mismatch", None
+        try:
+            evidence = json.loads(Path(evidence_path).read_text(encoding="utf-8"))
+        except Exception:
+            return False, f"CATCH-common {name} evidence is not valid JSON", None
+        if not isinstance(evidence, dict) or evidence.get("status") != "complete":
+            return False, f"CATCH-common {name} evidence is incomplete", None
+        if manifest.get("task_name") and evidence.get("task_name") != manifest.get("task_name"):
+            return False, f"CATCH-common {name} evidence task differs", None
+        if not evidence.get("run_identity") or not evidence.get("data_identity") or not evidence.get("split_identity"):
+            return False, f"CATCH-common {name} evidence lacks execution identity", None
+        checkpoint = evidence.get("checkpoint_path")
+        if checkpoint is None and isinstance(evidence.get("checkpoint"), dict):
+            checkpoint = evidence["checkpoint"].get("path")
+        if not checkpoint or not Path(checkpoint).is_file():
+            return False, f"CATCH-common {name} checkpoint is missing", None
+        try:
+            import torch
+            checkpoint_payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        except Exception:
+            return False, f"CATCH-common {name} checkpoint cannot be loaded", None
+        if not isinstance(checkpoint_payload, dict) or checkpoint_payload.get("protocol") != "CATCH-common":
+            return False, f"CATCH-common {name} checkpoint is not bound to the protocol", None
+        if name == "calibration":
+            threshold = evidence.get("threshold")
+            scores_path = evidence.get("calibration_scores_path")
+            if threshold is None or not isinstance(threshold, (int, float)) or not math.isfinite(float(threshold)):
+                return False, "CATCH-common calibration threshold is missing or non-finite", None
+            if not scores_path or not Path(scores_path).is_file():
+                return False, "CATCH-common calibration scores are missing", None
+            if evidence.get("calibration_scores_sha256") != _sha256_file(scores_path):
+                return False, "CATCH-common calibration scores hash mismatch", None
+            with np.load(scores_path, allow_pickle=False) as score_payload:
+                if "scores" not in score_payload.files:
+                    return False, "CATCH-common calibration scores have no scores array", None
+                values = np.asarray(score_payload["scores"], dtype=np.float64).reshape(-1)
+            quantile = float(evidence.get("calibration_quantile", 0.995))
+            if not 0.0 < quantile < 1.0 or not np.isfinite(values).all():
+                return False, "CATCH-common calibration scores or quantile are invalid", None
+            if not np.isclose(float(threshold), float(np.quantile(values, quantile)), rtol=0, atol=1e-12):
+                return False, "CATCH-common calibration threshold does not reproduce", None
     return True, None, manifest
 
 
@@ -88,8 +145,11 @@ def _read_npz(path):
         if not required.issubset(payload.files):
             raise ValueError(f"{path} must contain scores and time_indices")
         result = {name: np.asarray(payload[name]) for name in payload.files}
-    indices = np.asarray(result["time_indices"], dtype=np.int64).reshape(-1)
-    scores = np.asarray(result["scores"], dtype=np.float64).reshape(-1)
+    indices = strict_integer_indices(result["time_indices"], f"{path} time_indices")
+    score_values = np.asarray(result["scores"])
+    if score_values.ndim != 1:
+        raise ValueError(f"{path} scores must be one-dimensional")
+    scores = np.asarray(score_values, dtype=np.float64)
     if len(indices) != len(scores) or len(np.unique(indices)) != len(indices):
         raise ValueError(f"{path} has invalid or duplicate endpoint coordinates")
     if np.any(indices < 0) or not np.isfinite(scores).all():
@@ -131,6 +191,8 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
     if labels_raw.ndim != 1 or labels_raw.dtype.kind not in "iu":
         raise ValueError("labels must be a one-dimensional integer array")
     labels = labels_raw.astype(np.int64)
+    for name, values in (("probe", probe["time_indices"]), ("catch", catch["time_indices"])):
+        strict_integer_indices(values, f"{name} time_indices", upper_bound=len(labels))
     boundary_ids = None if boundary_path is None else np.asarray(np.load(boundary_path, allow_pickle=False)).reshape(-1)
     if boundary_ids is not None and len(boundary_ids) != len(labels):
         raise ValueError("boundary ids must have the same length as labels")

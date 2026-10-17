@@ -8,6 +8,25 @@ from ts_benchmark.evaluation.metrics.affiliation.generics import convert_vector_
 from ts_benchmark.evaluation.metrics.affiliation.metrics import pr_from_events
 
 
+def strict_integer_indices(value, name, *, upper_bound=None, require_sorted=False):
+    """Validate endpoint/split coordinates before any dtype conversion."""
+    array = np.asarray(value)
+    if array.ndim != 1 or array.dtype.kind not in "iu" or array.dtype.kind == "b":
+        raise ValueError(f"{name} must be a one-dimensional integer array")
+    info = np.iinfo(array.dtype)
+    if np.any(array < 0) or np.any(array > info.max) or (
+            array.dtype.kind == "u" and np.any(array > np.iinfo(np.int64).max)):
+        raise ValueError(f"{name} contains invalid negative or overflowing coordinates")
+    if upper_bound is not None and np.any(array >= int(upper_bound)):
+        raise ValueError(f"{name} contains out-of-range coordinates")
+    converted = np.asarray(array, dtype=np.int64)
+    if len(np.unique(converted)) != len(converted):
+        raise ValueError(f"{name} contains duplicate coordinates")
+    if require_sorted and len(converted) > 1 and np.any(np.diff(converted) <= 0):
+        raise ValueError(f"{name} must be sorted and strictly increasing")
+    return converted
+
+
 def _hash_array(value):
     array = np.asarray(value)
     return hashlib.sha256(np.ascontiguousarray(array).tobytes()).hexdigest()
@@ -19,12 +38,7 @@ def common_index_intersection(*index_sets):
         return np.empty(0, dtype=np.int64), {"hash": _hash_array(np.empty(0, dtype=np.int64))}
     normalized = []
     for position, item in enumerate(index_sets):
-        array = np.asarray(item)
-        if array.ndim != 1 or array.dtype.kind not in "iu":
-            raise ValueError(f"index set {position} must be a one-dimensional integer array")
-        array = np.asarray(array, dtype=np.int64)
-        if len(np.unique(array)) != len(array):
-            raise ValueError(f"index set {position} contains duplicate coordinates")
+        array = strict_integer_indices(item, f"index set {position}")
         normalized.append(array)
     common = normalized[0]
     for item in normalized[1:]:
@@ -47,18 +61,12 @@ def validate_common_splits(train_indices, validation_indices, calibration_indice
     arrays = []
     for name, item in zip(("train", "validation", "calibration"),
                           (train_indices, validation_indices, calibration_indices)):
-        array = np.asarray(item)
-        if array.ndim != 1 or array.dtype.kind not in "iu":
-            raise ValueError(f"{name} split must be a one-dimensional integer array")
-        arrays.append(np.asarray(array, dtype=np.int64))
+        arrays.append(strict_integer_indices(item, f"{name} split", upper_bound=total_length,
+                                             require_sorted=True))
     names = ("train", "validation", "calibration")
     seen = set()
     result = {}
     for name, values in zip(names, arrays):
-        if np.any(values < 0) or np.any(values >= int(total_length)):
-            raise ValueError(f"{name} split has out-of-range coordinates")
-        if len(np.unique(values)) != len(values) or np.any(np.diff(values) <= 0):
-            raise ValueError(f"{name} split must be sorted and unique")
         overlap = seen.intersection(map(int, values))
         if overlap:
             raise ValueError(f"common splits overlap at coordinates: {sorted(overlap)[:5]}")

@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
-from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe
+from ts_benchmark.baselines.mnrf_view_probe import IndexedViewProbeStrategy, MNRFViewProbe
 from ts_benchmark.data.data_source import LocalAnomalyDetectDataSource, LocalExternalAnomalyDetectDataSource
 
 
@@ -97,7 +97,13 @@ def main():
                   train_noise_std=args.train_noise_std, noise_seed=args.noise_seed,
                   cpu_threads=args.cpu_threads)
     probe = MNRFViewProbe(**kwargs)
-    probe.fit(frame, train_length, None if args.mode == "stage1" else test_labels)
+    strategy = IndexedViewProbeStrategy(probe)
+    if args.mode == "stage1":
+        # Source export has no test scoring, but still uses the same explicit
+        # train/test coordinate construction as every scored mode.
+        probe.fit(frame, train_length, None)
+    else:
+        strategy.run(frame.iloc[:train_length].copy(), frame.iloc[train_length:].copy(), test_labels)
     print(json.dumps({"status": "complete", "task": args.task, "mode": args.mode,
                       "output_dir": str(probe.output_dir), "selected_views": list(probe.config.selected_views),
                       "selected_dim": probe.config.selected_dim, "layout": probe.config.layout.to_dict()}, sort_keys=True))

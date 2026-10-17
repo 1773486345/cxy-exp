@@ -90,3 +90,24 @@ conda run --no-capture-output -n catch_env python scripts/validate_mnrf_view_pro
 The validator checks complete stage/head state, hashes, finite statistics,
 calibration, fixed noise, aligned score arrays, and reloads a Flow encoder and
 head before scoring the validated source test cache.
+
+### Recovery and time identity
+
+ViewProbe writes `run_request.json` and its immutable source identity before
+stage updates. Stage-one epoch checkpoints and per-variable GMM progress are
+validated read-only before a resume can write status, caches, or progress
+files. A damaged completed GMM variable is rejected before any target file is
+changed. Flow accepts either an independent stage-one source or the same frozen
+encoder/cache contained in a completed GMM artifact.
+
+`IndexedViewProbeStrategy` preserves timestamp indices. Timestamp gaps and
+entity/session boundaries are hard window boundaries; row-order data without a
+real timestamp is explicitly recorded as the row-order protocol. It never
+resets a real time index or pads scores across an invalid interval.
+
+For an explicit CATCH-common run, use
+`scripts/run_mnrf_catch_common.py`. It trains CATCH on supplied train
+endpoints, validates on supplied validation endpoints, calibrates only on the
+supplied calibration endpoints, and writes checkpoint/calibration evidence.
+The registry refuses empty evidence, missing checkpoints, missing calibration
+scores, or hand-edited thresholds.

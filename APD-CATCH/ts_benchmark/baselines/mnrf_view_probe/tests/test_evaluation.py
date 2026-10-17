@@ -6,6 +6,7 @@ from pathlib import Path
 from ts_benchmark.baselines.mnrf_view_probe.evaluation import (
     affiliation_f_segment_macro,
     common_index_intersection,
+    strict_integer_indices,
     validate_common_splits,
 )
 
@@ -56,6 +57,18 @@ def test_common_split_rejects_float_coordinates():
         assert "integer" in str(error)
     else:
         raise AssertionError("fractional split coordinates were accepted")
+
+
+def test_endpoint_validation_rejects_fractional_boolean_and_overflow_before_cast():
+    for value in (np.array([1.9, 2.9]), np.array([True, False]),
+                  np.array([[1, 2]], dtype=np.int64),
+                  np.array([2**63], dtype=np.uint64)):
+        try:
+            strict_integer_indices(value, "endpoint")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid endpoint accepted: {value!r}")
 
 
 def test_unregistered_score_pair_is_reference_not_catch_common(tmp_path):

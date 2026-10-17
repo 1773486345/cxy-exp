@@ -183,3 +183,34 @@ def test_indexed_strategy_keeps_endpoint_coordinates_without_padding():
     result = IndexedViewProbeStrategy(FakeProbe()).run(train, test, np.zeros(90, dtype=np.int64))
     assert np.array_equal(result["local_indices"], np.arange(31, 90))
     assert np.array_equal(result["time_indices"], np.arange(121, 180))
+
+
+def test_indexed_strategy_preserves_timestamp_gap_and_rejects_cross_gap_scores():
+    class GapProbe:
+        output_dir = None
+
+        def fit(self, frame, train_length, labels=None):
+            self.seen_index = frame.index
+            # The expected protocol endpoints for a 32-point window are the
+            # 19 points before the gap and 9 points after it.
+            self._metadata = {
+                "scores": np.zeros(28, dtype=np.float32),
+                "predictions": np.zeros(28, dtype=np.int64),
+                "time_indices": np.r_[np.arange(461, 480), np.arange(511, 520)],
+                "local_indices": np.r_[np.arange(31, 50), np.arange(81, 90)],
+            }
+
+        def score_with_metadata(self):
+            return self._metadata
+
+    train = pd.DataFrame(np.zeros((430, 2), dtype=np.float32), columns=("a", "b"),
+                         index=pd.date_range("2026-01-01", periods=430, freq="min"))
+    first = pd.date_range(train.index[-1] + pd.Timedelta(minutes=1), periods=50, freq="min")
+    second = pd.date_range(first[-1] + pd.Timedelta(minutes=61), periods=40, freq="min")
+    test = pd.DataFrame(np.zeros((90, 2), dtype=np.float32), columns=("a", "b"),
+                        index=first.append(second))
+    probe = GapProbe()
+    result = IndexedViewProbeStrategy(probe).run(train, test, np.zeros(90, dtype=np.int64))
+    assert isinstance(probe.seen_index, pd.DatetimeIndex)
+    assert (probe.seen_index[480] - probe.seen_index[479]) == pd.Timedelta(minutes=61)
+    assert len(result["time_indices"]) == 28
