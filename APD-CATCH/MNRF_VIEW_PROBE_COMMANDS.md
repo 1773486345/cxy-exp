@@ -101,19 +101,19 @@ unregistered pair is reported as `index_intersection_reference`:
 
 ```bash
 conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/register_mnrf_catch_common.py --probe /absolute/probe/results/aligned_scores.npz --catch /absolute/catch/aligned_scores.npz --labels /absolute/labels.npy --train-indices /absolute/train.npy --validation-indices /absolute/validation.npy --calibration-indices /absolute/calibration.npy --training-evidence /absolute/catch_training_evidence.json --calibration-evidence /absolute/catch_calibration_evidence.json --output /absolute/catch_common_manifest.json
+```
 
 For a registered comparison, add the three split files and
 `--common-manifest /absolute/catch_common_manifest.json`; invalid evidence or
 a threshold different from the calibration artifact exits nonzero. Add
 `--reference-mode` only for an intentionally unregistered
 `index_intersection_reference` comparison.
-```
 
 The explicit-split CATCH-common adapter (short synthetic or one manually
 selected task; this command is prepared, not run by this repository change):
 
 ```bash
-conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/run_mnrf_catch_common.py --data-csv /absolute/task.csv --train-indices /absolute/train_endpoints.npy --validation-indices /absolute/validation_endpoints.npy --calibration-indices /absolute/calibration_endpoints.npy --train-rows /absolute/train_rows.npy --test-start 430 --task-name TASK.csv --output /absolute/catch-common-run
+conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/run_mnrf_catch_common.py --data-csv /absolute/task.csv --train-indices /absolute/common-contract/catch_train_indices.npy --validation-indices /absolute/common-contract/catch_validation_indices.npy --calibration-indices /absolute/common-contract/catch_calibration_indices.npy --train-rows /absolute/common-contract/train_rows.npy --common-contract /absolute/common-contract/common_contract.json --task-name TASK.csv --output /absolute/catch-common-run
 ```
 
 The adapter defaults match the CATCH score path (`score_lambda=0.05`,
@@ -130,16 +130,17 @@ Generate those frozen files from one validated Probe run and the exact source
 CSV (the exporter is read-only with respect to both inputs):
 
 ```bash
-conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/export_mnrf_view_probe_common.py --probe-run "/absolute/path/to/validated/PSM/probe-run" --data-csv "/absolute/path/to/PSM.csv" --output-dir "/absolute/path/to/PSM/common-contract"
+conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/export_mnrf_view_probe_common.py --probe-run "/absolute/path/to/validated/PSM/probe-run" --data-csv "/absolute/path/to/PSM.csv" --output-dir "/absolute/path/to/PSM/common-contract" --catch-seq-len 192
 ```
 
 The exporter verifies the raw feature values, variable order, canonical time
-coordinates and all entity/session boundary columns before writing
-`train_indices.npy`, `validation_indices.npy`, `calibration_indices.npy`,
-`train_rows.npy`, `labels.npy`, and `common_contract.json`. It refuses to
-overwrite an existing export directory. Use those exact generated paths for
-`run_mnrf_catch_common.py`, registration and strict evaluation; do not hand
-author split or label arrays.
+coordinates and all entity/session boundary columns before writing both the
+Probe endpoint files and the independently derived `catch_*_indices.npy`
+files, plus `train_rows.npy`, `labels.npy`, and `common_contract.json`. It
+refuses to overwrite an existing export directory. Use the CATCH files and
+contract for the CATCH adapter; use the Probe files for Probe evidence. Do not
+hand-author split or label arrays. If a split is shorter than the requested
+CATCH context, export fails before creating a usable contract.
 
 To resume a ViewProbe run, pass its exact existing directory through
 `VIEW_PROBE_RESUME_FROM` and use the same data, layout, source and GMM/Flow

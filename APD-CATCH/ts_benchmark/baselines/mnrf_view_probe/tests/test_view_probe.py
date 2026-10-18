@@ -223,6 +223,7 @@ def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
     assert after_files == before_files
     assert after_hashes == before_hashes
 
+
     # A completed variable cannot be resumed after its required statistics
     # binding is removed, even if the finite statistics file is edited too.
     missing_binding = tmp_path / "missing-stat-binding"
@@ -254,6 +255,35 @@ def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
                     for name in after_files}
     assert after_files == before_files
     assert after_hashes == before_hashes
+
+
+def test_flow_resume_missing_stage2_checkpoint_is_read_only_rejected(tmp_path):
+    rng = np.random.default_rng(2026)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("a", "b"),
+                         index=pd.date_range("2026-06-01", periods=n, freq="min"))
+    source_dir = tmp_path / "flow-source"
+    MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                  patience=1, device="cpu", output_dir=str(source_dir), mode="stage1").fit(frame, train_length)
+    flow_dir = tmp_path / "flow"
+    flow_kwargs = dict(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                       stage2_epochs=1, patience=1, device="cpu", output_dir=str(flow_dir),
+                       mode="flow", source_dir=str(source_dir), gmm_fit_max_windows=16)
+    MNRFViewProbe(**flow_kwargs).fit(frame, train_length)
+    damaged = tmp_path / "flow-damaged"
+    shutil.copytree(flow_dir, damaged)
+    (damaged / "checkpoints" / "stage2_latest.pt").unlink()
+    status_path = damaged / "run_status.json"
+    status = json.loads(status_path.read_text())
+    status["status"] = "flow_training"
+    status_path.write_text(json.dumps(status, sort_keys=True))
+    before = {str(path.relative_to(damaged)): hashlib.sha256(path.read_bytes()).hexdigest()
+              for path in damaged.rglob("*") if path.is_file()}
+    with pytest.raises(ValueError, match="stage2_latest.pt is missing"):
+        MNRFViewProbe(**dict(flow_kwargs, output_dir=str(damaged), resume_from=str(damaged))).fit(frame, train_length)
+    after = {str(path.relative_to(damaged)): hashlib.sha256(path.read_bytes()).hexdigest()
+             for path in damaged.rglob("*") if path.is_file()}
+    assert after == before
 
 
 def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):

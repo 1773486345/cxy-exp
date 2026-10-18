@@ -956,6 +956,49 @@ class MNRFViewProbe:
             raise ValueError("resume rejected: unknown artifact type")
         if status.get("status") == "complete":
             raise ValueError("resume rejected: run is already complete")
+        # A Flow run that has entered stage 2 is never silently restarted.  A
+        # stage-2 checkpoint is the durable proof of its progress and must be
+        # validated before _prepare_dirs or any status/cache write occurs.
+        if self.config.mode == "flow":
+            stage2_path = self.output_dir / "checkpoints" / "stage2_latest.pt"
+            flow_started = status.get("status") == "flow_training" or (manifest or {}).get("head_type") == "flow"
+            if flow_started and not stage2_path.is_file():
+                raise ValueError("resume rejected: Flow stage has started but stage2_latest.pt is missing")
+            if stage2_path.is_file():
+                try:
+                    stage2 = torch.load(stage2_path, map_location="cpu", weights_only=False)
+                except Exception as error:
+                    raise ValueError("resume rejected: stage2_latest.pt cannot be loaded") from error
+                required = {"schema_version", "stage", "resume_id", "next_epoch", "stage_status",
+                            "completion_reason", "best_epoch", "best", "best_state", "patience",
+                            "history", "completed_steps", "flow", "optimizer", "sampler_rng",
+                            "rng", "stage2_identity"}
+                if not isinstance(stage2, dict) or not required.issubset(stage2):
+                    missing = sorted(required.difference(stage2 if isinstance(stage2, dict) else {}))
+                    raise ValueError(f"resume rejected: incomplete Flow checkpoint fields {missing}")
+                if (stage2.get("schema_version") != 2 or stage2.get("stage") != "stage2"
+                        or stage2.get("resume_id") != self._run_identity
+                        or isinstance(stage2.get("next_epoch"), bool)
+                        or not isinstance(stage2.get("next_epoch"), int) or stage2["next_epoch"] < 1
+                        or stage2.get("stage_status") not in {"in_progress", "completed"}
+                        or not isinstance(stage2.get("completed_steps"), int) or stage2["completed_steps"] < 0
+                        or not isinstance(stage2.get("sampler_rng"), torch.Tensor)
+                        or stage2["sampler_rng"].dtype != torch.uint8):
+                    raise ValueError("resume rejected: invalid Flow checkpoint phase or RNG contract")
+                if stage2["stage_status"] == "completed" and stage2.get("completion_reason") not in {"early_stopping", "epoch_limit"}:
+                    raise ValueError("resume rejected: completed Flow checkpoint has no valid completion reason")
+                if not isinstance(stage2.get("flow"), dict) or not isinstance(stage2.get("best_state"), dict):
+                    raise ValueError("resume rejected: Flow/best_state payload is invalid")
+                for state_name, state in (("flow", stage2["flow"]), ("best_state", stage2["best_state"])):
+                    for key, value in state.items():
+                        if not torch.is_tensor(value) or not torch.isfinite(value).all():
+                            raise ValueError(f"resume rejected: non-finite Flow {state_name} tensor {key}")
+                if stage2["stage_status"] == "completed" and status.get("status") != "flow_training":
+                    raise ValueError("resume rejected: completed Flow stage cannot be reactivated")
+                feature_stats_path = self.output_dir / "heads" / "feature_statistics.npz"
+                declared_feature_stats = manifest.get("feature_statistics_sha256")
+                if not declared_feature_stats or not feature_stats_path.is_file() or _sha256_file(feature_stats_path) != declared_feature_stats:
+                    raise ValueError("resume rejected: Flow feature statistics binding is missing or changed")
         # Validate an explicitly referenced source without creating any target
         # directories or rewriting any target artifact.
         if self.config.source_dir:
@@ -1360,11 +1403,26 @@ class MNRFViewProbe:
             raise
 
     def _fit_flow(self, cache, labels, test_endpoints):
-        with threadpool_limits(limits=self.config.cpu_threads):
-            self.trainer.fixed_feature.fit(cache["train"], chunk_size=self.config.cache_chunk_size)
-        np.savez(self.output_dir / "heads" / "feature_statistics.npz",
-                 mean=np.asarray(self.trainer.fixed_feature.mean_, dtype=np.float32),
-                 scale=np.asarray(self.trainer.fixed_feature.scale_, dtype=np.float32))
+        feature_stats_path = self.output_dir / "heads" / "feature_statistics.npz"
+        if self.config.resume_from and feature_stats_path.is_file():
+            with np.load(feature_stats_path, allow_pickle=False) as stats:
+                mean = np.asarray(stats["mean"], dtype=np.float32)
+                scale = np.asarray(stats["scale"], dtype=np.float32)
+            if mean.shape != (self.trainer.feature_dim,) or scale.shape != mean.shape or not np.isfinite(mean).all() or not np.isfinite(scale).all() or np.any(scale <= 0):
+                raise ValueError("resume rejected: Flow feature statistics are invalid")
+            self.trainer.fixed_feature.mean_ = mean
+            self.trainer.fixed_feature.scale_ = scale
+        else:
+            with threadpool_limits(limits=self.config.cpu_threads):
+                self.trainer.fixed_feature.fit(cache["train"], chunk_size=self.config.cache_chunk_size)
+            np.savez(feature_stats_path,
+                     mean=np.asarray(self.trainer.fixed_feature.mean_, dtype=np.float32),
+                     scale=np.asarray(self.trainer.fixed_feature.scale_, dtype=np.float32))
+            manifest_path = self.output_dir / "probe_manifest.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text())
+                manifest["feature_statistics_sha256"] = _sha256_file(feature_stats_path)
+                _atomic_json(manifest_path, manifest)
         stage2_identity = _json_hash({"source_identity": self.source_identity,
                                       "feature_fingerprint": self.trainer.fingerprint(),
                                       "layout": self.config.layout.to_dict()})

@@ -41,6 +41,8 @@ def test_real_probe_and_catch_common_train_register_strict_evaluate(tmp_path):
     csv_frame = frame.reset_index(names="timestamp")
     csv_frame.to_csv(data_path, index=False)
     contract = export(probe_dir, data_path, tmp_path / "contract")
+    with pytest.raises(ValueError, match="catch_seq_len=64"):
+        export(probe_dir, data_path, tmp_path / "contract-catch64", catch_seq_len=64)
     split_paths = {name: tmp_path / "contract" / f"{name}_indices.npy"
                    for name in ("train", "validation", "calibration")}
     fit_rows_path = tmp_path / "contract" / "train_rows.npy"
@@ -92,3 +94,24 @@ def test_real_probe_and_catch_common_train_register_strict_evaluate(tmp_path):
                  split_paths=(str(split_paths["train"]), str(split_paths["validation"]),
                               str(split_paths["calibration"])),
                  common_manifest=str(tampered_manifest), strict_common=True)
+
+    # The producer receipt, not a newly calculated hash, owns the test score.
+    replaced_scores = tmp_path / "replaced.npz"
+    with np.load(catch_scores, allow_pickle=False) as payload:
+        values = {name: np.asarray(payload[name]) for name in payload.files}
+    values["scores"] = np.zeros_like(values["scores"])
+    np.savez_compressed(replaced_scores, **values)
+    with pytest.raises(ValueError, match="production score"):
+        register(argparse.Namespace(
+            probe=str(probe_scores), catch=str(replaced_scores), labels=str(labels_path),
+            train_indices=str(split_paths["train"]), validation_indices=str(split_paths["validation"]),
+            calibration_indices=str(split_paths["calibration"]),
+            training_evidence=str(training_evidence), calibration_evidence=str(calibration_evidence),
+            task_name="PSM", output=str(tmp_path / "replaced-manifest.json"),
+        ))
+
+    reference = evaluate(str(probe_scores), str(catch_scores), str(labels_path),
+                         split_paths=(str(split_paths["train"]), str(split_paths["validation"]),
+                                      str(split_paths["calibration"])),
+                         common_manifest=str(common_manifest), strict_common=False)
+    assert reference["protocol"] == "index_intersection_reference"

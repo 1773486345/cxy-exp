@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 from scripts.run_mnrf_catch_common import (
     _WindowDataset, _filter_test_endpoints, _validate_window_boundaries,
 )
+from scripts.export_mnrf_view_probe_common import _endpoints_for_ranges
 
 
 def test_catch_windows_are_lazy_and_batch_bounded():
@@ -73,3 +74,24 @@ def test_entity_session_boundaries_and_entity_clock_resets():
             session_frame, {"train": np.array([15]), "validation": np.array([23]),
                             "calibration": np.array([31]), "test": np.array([39])}, 4, 30,
         )
+
+
+def test_test_entity_not_seen_in_training_uses_frozen_global_cadence():
+    frame = pd.DataFrame({
+        "timestamp": list(pd.date_range("2026-01-01", periods=40, freq="min"))
+                     + list(pd.date_range("2026-02-01", periods=80, freq="min")),
+        "entity_id": ["train"] * 40 + ["new-test"] * 80,
+        "x": np.zeros(120), "y": np.zeros(120),
+    })
+    endpoints = np.arange(71, 120, dtype=np.int64)
+    filtered = _filter_test_endpoints(frame, endpoints, 32, np.arange(31, 40, dtype=np.int64))
+    np.testing.assert_array_equal(filtered, endpoints)
+
+
+def test_common_contract_derives_different_context_endpoints_without_rewriting_ranges():
+    segments = {"train": [[0, 300]], "validation": [[340, 520]], "calibration": [[560, 760]]}
+    train = _endpoints_for_ranges(segments["train"], 0, 300, 128)
+    catch_train = _endpoints_for_ranges(segments["train"], 0, 300, 192)
+    assert train[0] == 127 and catch_train[0] == 191
+    assert catch_train[-1] == 299
+    assert np.all(catch_train >= train[0])

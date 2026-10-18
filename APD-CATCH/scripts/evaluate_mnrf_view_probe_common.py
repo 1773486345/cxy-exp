@@ -53,9 +53,16 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
     path = Path(manifest_path)
     if not path.is_file():
         return False, "CATCH-common execution manifest is missing", None
-    manifest = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as error:
+        return False, f"CATCH-common execution manifest is invalid: {error}", None
     if manifest.get("protocol") != "CATCH-common" or manifest.get("status") != "complete":
         return False, "execution manifest is not a completed CATCH-common run", None
+    try:
+        catch_payload = _read_npz(catch_path)
+    except Exception as error:
+        return False, f"CATCH production score artifact is invalid: {error}", None
     expected_files = {
         "probe_score_sha256": probe_path,
         "catch_score_sha256": catch_path,
@@ -129,6 +136,11 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
         if identity.get("evidence") != evidence:
             return False, f"CATCH-common {name} embedded evidence differs from its verified file", None
         if name == "calibration":
+            try:
+                _verify_production_score_binding(evidence, catch_path, catch_payload)
+            except Exception as error:
+                return False, str(error), None
+        if name == "calibration":
             threshold = evidence.get("threshold")
             scores_path = evidence.get("calibration_scores_path")
             if threshold is None or not isinstance(threshold, (int, float)) or not math.isfinite(float(threshold)):
@@ -167,6 +179,21 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
     if (not fit_rows or not Path(fit_rows).is_file()
             or calibration.get("train_fit_rows_sha256") != _sha256_file(fit_rows)):
         return False, "CATCH-common training-row binding is missing or changed", None
+    contract_path = calibration.get("common_contract_path")
+    contract_hash = calibration.get("common_contract_sha256")
+    if contract_path or contract_hash:
+        if not contract_path or not contract_hash or not Path(contract_path).is_file() or _sha256_file(contract_path) != contract_hash:
+            return False, "CATCH-common raw contract is missing or changed", None
+        try:
+            contract = json.loads(Path(contract_path).read_text(encoding="utf-8"))
+        except Exception as error:
+            return False, f"CATCH-common raw contract is invalid: {error}", None
+        if contract.get("schema") != "mnrf-view-probe-common-export-v1" or int(contract.get("catch_seq_len", -1)) != int(calibration.get("seq_len", -2)):
+            return False, "CATCH-common contract window configuration differs", None
+        for name, split_path in zip(("train", "validation", "calibration"), split_paths):
+            record = contract.get("catch_splits", {}).get(name, {})
+            if Path(record.get("path", "")).resolve() != Path(split_path).resolve() or _sha256_file(split_path) != record.get("sha256"):
+                return False, f"CATCH-common {name} endpoints are not the contract-derived coordinates", None
     # Downstream threshold decisions consume the exact objects whose external
     # files and embedded copies were verified above.
     manifest["_verified_training_evidence"] = loaded_evidence["training"]
@@ -195,6 +222,48 @@ def _read_npz(path):
     result["time_indices"] = indices
     result["scores"] = scores
     return result
+
+
+def _verify_production_score_binding(evidence, catch_path, catch):
+    """Require the score file recorded by the producing adapter.
+
+    A registry must never turn an arbitrary replacement NPZ into a valid
+    execution artifact by calculating a new hash after the fact.
+    """
+    score_path = evidence.get("test_scores_path")
+    declared_hash = evidence.get("test_scores_sha256")
+    if not score_path or not declared_hash:
+        raise ValueError("CATCH-common production score binding is missing")
+    if Path(score_path).resolve() != Path(catch_path).resolve():
+        raise ValueError("CATCH-common production score path differs from evidence")
+    if _sha256_file(catch_path) != declared_hash:
+        raise ValueError("CATCH-common production score hash differs from evidence")
+    expected_indices = strict_integer_indices(np.asarray(catch["time_indices"]), "CATCH endpoints")
+    if evidence.get("test_indices_sha256") != _hash_array(expected_indices):
+        raise ValueError("CATCH-common production endpoint identity differs")
+    if int(evidence.get("test_count", -1)) != len(expected_indices):
+        raise ValueError("CATCH-common production endpoint count differs")
+    threshold = catch.get("threshold")
+    if threshold is None or not np.isfinite(float(np.asarray(threshold))):
+        raise ValueError("CATCH score artifact must contain a finite threshold")
+    if not np.isclose(float(threshold), float(evidence.get("test_threshold", np.nan)), rtol=0, atol=1e-12):
+        raise ValueError("CATCH production threshold differs from evidence")
+    with np.load(catch_path, allow_pickle=False) as payload:
+        predictions = payload.get("predictions")
+        actual = payload.get("actual")
+        if predictions is None or actual is None:
+            raise ValueError("CATCH production score artifact lacks predictions or actual labels")
+        predictions = np.asarray(predictions)
+        actual = np.asarray(actual)
+        if predictions.ndim != 1 or actual.ndim != 1 or len(predictions) != len(expected_indices) or len(actual) != len(expected_indices):
+            raise ValueError("CATCH production predictions/labels have inconsistent lengths")
+        expected_predictions = (np.asarray(catch["scores"], dtype=np.float64) > float(threshold)).astype(np.int64)
+        if not np.array_equal(predictions.astype(np.int64), expected_predictions):
+            raise ValueError("CATCH production predictions do not match its threshold")
+    if evidence.get("test_predictions_sha256") != _hash_array(predictions):
+        raise ValueError("CATCH production prediction identity differs")
+    if evidence.get("test_actual_sha256") != _hash_array(actual):
+        raise ValueError("CATCH production label identity differs")
 
 
 def _validate_probe_execution(probe_path, probe, catch, common_evidence, split_paths, labels):
@@ -339,6 +408,7 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
         split_record = validate_common_splits(*split_arrays, len(labels))
     evidence_ok, evidence_reason, evidence = _common_evidence(
         common_manifest, probe_path, catch_path, labels_path, split_paths)
+    requested_strict = strict_common
     if strict_common is None:
         strict_common = bool(common_manifest)
     if strict_common and not evidence_ok:
@@ -348,7 +418,7 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
         if probe_threshold is not None and not np.isclose(float(probe_threshold),
                                                           float(probe["threshold"]), rtol=0, atol=1e-12):
             raise ValueError("strict CATCH-common probe threshold override does not match its calibration")
-    if evidence_ok:
+    if evidence_ok and requested_strict is not False:
         calibration_evidence = evidence.get("_verified_calibration_evidence", {})
         calibrated_threshold = calibration_evidence.get("threshold")
         if calibrated_threshold is None or not math.isfinite(float(calibrated_threshold)):
@@ -360,10 +430,13 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
             declared_score_threshold = float(np.asarray(declared_score_threshold))
             if not np.isclose(declared_score_threshold, float(calibrated_threshold), rtol=0, atol=1e-12):
                 raise ValueError("strict CATCH-common score threshold does not match calibration evidence")
-    protocol = "CATCH-common" if evidence_ok else "index_intersection_reference"
+    # Explicit reference mode never upgrades merely because a manifest was
+    # supplied.  It is intentionally an index-intersection report.
+    protocol = "CATCH-common" if evidence_ok and requested_strict is not False else "index_intersection_reference"
     return {
         "protocol": protocol,
-        "protocol_reason": None if evidence_ok else evidence_reason,
+        "protocol_reason": ("explicit reference mode; strict evidence not asserted"
+                             if requested_strict is False else (None if evidence_ok else evidence_reason)),
         "probe_source": str(Path(probe_path).resolve()),
         "catch_source": str(Path(catch_path).resolve()),
         "labels_source": str(Path(labels_path).resolve()),

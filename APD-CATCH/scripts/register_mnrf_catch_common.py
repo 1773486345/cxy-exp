@@ -84,7 +84,9 @@ def _load_execution_evidence(path, kind, task_name, split_paths):
     if not checkpoint or not Path(checkpoint).is_file():
         raise ValueError(f"{kind} evidence checkpoint is missing")
     declared_checkpoint = evidence.get("checkpoint_sha256")
-    if declared_checkpoint and declared_checkpoint != _sha256(checkpoint):
+    if not declared_checkpoint:
+        raise ValueError(f"{kind} evidence is missing checkpoint_sha256")
+    if declared_checkpoint != _sha256(checkpoint):
         raise ValueError(f"{kind} evidence checkpoint hash mismatch")
     try:
         checkpoint_payload = __import__("torch").load(checkpoint, map_location="cpu", weights_only=False)
@@ -120,6 +122,50 @@ def _load_execution_evidence(path, kind, task_name, split_paths):
     return evidence
 
 
+def _verify_production_score_binding(evidence, catch_path, labels):
+    score_path = evidence.get("test_scores_path")
+    declared_hash = evidence.get("test_scores_sha256")
+    if not score_path or not declared_hash:
+        raise ValueError("CATCH production score binding is missing")
+    if Path(score_path).resolve() != Path(catch_path).resolve():
+        raise ValueError("CATCH production score path differs from evidence")
+    if _sha256(catch_path) != declared_hash:
+        raise ValueError("CATCH production score hash differs from evidence")
+    with np.load(catch_path, allow_pickle=False) as payload:
+        for name in ("scores", "time_indices", "predictions", "actual", "threshold"):
+            if name not in payload.files:
+                raise ValueError(f"CATCH production score artifact lacks {name}")
+        indices = np.asarray(payload["time_indices"])
+        scores = np.asarray(payload["scores"])
+        predictions = np.asarray(payload["predictions"])
+        actual = np.asarray(payload["actual"])
+        threshold = float(np.asarray(payload["threshold"]))
+    if indices.ndim != 1 or scores.ndim != 1 or predictions.ndim != 1 or actual.ndim != 1:
+        raise ValueError("CATCH production score arrays must be one-dimensional")
+    if not np.isfinite(scores).all() or len(indices) != len(scores) or len(predictions) != len(scores) or len(actual) != len(scores):
+        raise ValueError("CATCH production score arrays have invalid lengths or values")
+    if evidence.get("test_indices_sha256") != _array_sha256_from_values(indices):
+        raise ValueError("CATCH production endpoint identity differs")
+    if int(evidence.get("test_count", -1)) != len(indices):
+        raise ValueError("CATCH production endpoint count differs")
+    if not np.isclose(threshold, float(evidence.get("test_threshold", np.nan)), rtol=0, atol=1e-12):
+        raise ValueError("CATCH production threshold differs from evidence")
+    expected_predictions = (scores.astype(np.float64) > threshold).astype(np.int64)
+    if not np.array_equal(predictions.astype(np.int64), expected_predictions):
+        raise ValueError("CATCH production predictions do not match threshold")
+    if evidence.get("test_predictions_sha256") != _array_sha256_from_values(predictions):
+        raise ValueError("CATCH production prediction identity differs")
+    if evidence.get("test_actual_sha256") != _array_sha256_from_values(actual):
+        raise ValueError("CATCH production label identity differs")
+    if np.any(indices < 0) or np.any(indices >= len(labels)) or not np.array_equal(actual.astype(np.int64), labels[indices]):
+        raise ValueError("CATCH production labels do not match the registered full-coordinate labels")
+
+
+def _array_sha256_from_values(values):
+    array = np.asarray(values)
+    return hashlib.sha256(np.ascontiguousarray(array).tobytes()).hexdigest()
+
+
 def register(args):
     files = [args.probe, args.catch, args.labels, args.train_indices,
              args.validation_indices, args.calibration_indices,
@@ -139,6 +185,7 @@ def register(args):
                                                   (args.train_indices, args.validation_indices, args.calibration_indices))
     calibration_evidence = _load_execution_evidence(args.calibration_evidence, "calibration", args.task_name,
                                                      (args.train_indices, args.validation_indices, args.calibration_indices))
+    _verify_production_score_binding(calibration_evidence, args.catch, labels.astype(np.int64))
     with np.load(args.catch, allow_pickle=False) as catch_payload:
         catch_threshold = catch_payload.get("threshold")
     if catch_threshold is None or not np.isfinite(float(np.asarray(catch_threshold))):

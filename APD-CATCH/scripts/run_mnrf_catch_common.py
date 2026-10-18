@@ -31,6 +31,8 @@ from ts_benchmark.baselines.catch.utils.tools import adjust_learning_rate
 from ts_benchmark.baselines.mnrf_view_probe.evaluation import (
     calibrated_quantile, strict_integer_indices, validate_common_splits,
 )
+from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
+from ts_benchmark.baselines.mnrf_view_probe.probe import _all_boundary_ids, _chunked_array_hash, _hash_strings
 
 
 def _sha256(path):
@@ -129,18 +131,30 @@ def _boundary_keys(frame):
 
 
 def _training_intervals_by_boundary(frame, endpoints, seq_len, timestamps):
+    """Return one frozen training cadence from raw adjacent rows.
+
+    Cadence is a property of the frozen training protocol, not of each
+    overlapping window or of each entity seen later in test.  Computing it
+    from raw adjacent rows also avoids retaining O(number_of_windows * L)
+    temporary difference arrays.
+    """
     keys, _ = _boundary_keys(frame)
-    grouped = {}
-    for endpoint in endpoints:
-        start = int(endpoint) - seq_len + 1
-        window_keys = keys[start:int(endpoint) + 1]
-        if np.any(window_keys != window_keys[0]):
+    endpoints = strict_integer_indices(endpoints, "training endpoints", upper_bound=len(frame))
+    if len(endpoints) == 0:
+        return None
+    raw_start = max(0, int(endpoints.min()) - int(seq_len) + 1)
+    raw_stop = min(len(frame), int(endpoints.max()) + 1)
+    deltas = []
+    for left in range(raw_start, raw_stop - 1):
+        if keys[left] != keys[left + 1]:
             continue
-        delta = np.diff(timestamps[start:int(endpoint) + 1])
-        if np.any(delta <= 0):
-            raise ValueError("training window has duplicate or reversed timestamps")
-        grouped.setdefault(window_keys[0], []).append(delta)
-    return {key: float(np.median(np.concatenate(values))) for key, values in grouped.items()}
+        delta = int(timestamps[left + 1]) - int(timestamps[left])
+        if delta <= 0:
+            raise ValueError("training timestamps contain duplicate or reversed rows")
+        deltas.append(delta)
+    if not deltas:
+        return None
+    return float(np.median(np.asarray(deltas, dtype=np.int64)))
 
 
 def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start):
@@ -177,7 +191,7 @@ def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start):
             if right - left > 1 and np.any(np.diff(timestamps[left:right]) <= 0):
                 raise ValueError("timestamps duplicate or reverse within an entity/session segment")
         cadence = _training_intervals_by_boundary(frame, endpoints_by_name["train"], seq_len, timestamps)
-        if not cadence:
+        if cadence is None:
             raise ValueError("cannot infer a positive training sampling interval")
         # Check each actual window, never the union of disjoint windows.  A
         # legal purge or separate entity therefore cannot look like a gap.
@@ -187,12 +201,10 @@ def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start):
                 key = boundary_keys[start]
                 if np.any(boundary_keys[start:int(endpoint) + 1] != key):
                     continue  # The boundary-specific error below is more precise.
-                if key not in cadence:
-                    raise ValueError(f"{name} window has no frozen training cadence for its entity/session")
                 deltas = np.diff(timestamps[start:int(endpoint) + 1])
                 if np.any(deltas <= 0):
                     raise ValueError(f"{name} window has duplicate or reversed timestamps")
-                if np.any(np.abs(deltas / cadence[key] - 1.0) > 0.05):
+                if np.any(np.abs(deltas / cadence - 1.0) > 0.05):
                     raise ValueError(f"{name} window crosses a timestamp gap")
     return intervals
 
@@ -207,7 +219,7 @@ def _filter_test_endpoints(frame, endpoints, seq_len, train_endpoints):
     if timestamp_column is not None:
         timestamps = pd.to_datetime(frame[timestamp_column], errors="raise", utc=True).view("int64").to_numpy()
         cadence = _training_intervals_by_boundary(frame, train_endpoints, seq_len, timestamps)
-        if not cadence:
+        if cadence is None:
             raise ValueError("cannot infer a positive training sampling interval")
         boundary_keys, _ = _boundary_keys(frame)
     boundary_columns = [column for column in frame.columns
@@ -222,8 +234,7 @@ def _filter_test_endpoints(frame, endpoints, seq_len, train_endpoints):
             deltas = np.diff(timestamps[start:int(endpoint) + 1])
             if np.any(deltas <= 0):
                 continue
-            key = boundary_keys[start]
-            if key not in cadence or np.any(np.abs(deltas / cadence[key] - 1.0) > 0.05):
+            if np.any(np.abs(deltas / cadence - 1.0) > 0.05):
                 continue
         valid.append(int(endpoint))
     return np.asarray(valid, dtype=np.int64)
@@ -254,6 +265,52 @@ def run(args):
     labels = frame[label_column].to_numpy(dtype=np.int64)
     if values.ndim != 2 or values.shape[1] < 2 or not np.isfinite(values).all():
         raise ValueError("data features must be finite with at least two variables")
+    contract = None
+    contract_path = getattr(args, "common_contract", "")
+    if contract_path:
+        contract_path = str(Path(contract_path).resolve())
+        contract = json.loads(Path(contract_path).read_text(encoding="utf-8"))
+        if contract.get("schema") != "mnrf-view-probe-common-export-v1" or contract.get("status") != "complete":
+            raise ValueError("common contract is incomplete or unsupported")
+        expected_len = int(contract.get("catch_seq_len", args.seq_len))
+        if expected_len != int(args.seq_len):
+            raise ValueError(f"CATCH seq_len={args.seq_len} differs from common contract catch_seq_len={expected_len}")
+        catch_records = contract.get("catch_splits", {})
+        for name in ("train", "validation", "calibration"):
+            record = catch_records.get(name)
+            if not isinstance(record, dict) or not Path(record.get("path", "")).is_file():
+                raise ValueError(f"common contract is missing CATCH {name} endpoints")
+            if Path(record["path"]).resolve() != Path(getattr(args, f"{name}_indices")).resolve():
+                raise ValueError(f"{name} endpoint path is not the one derived by the common contract")
+            if not record.get("sha256") or _sha256(record["path"]) != record["sha256"]:
+                raise ValueError(f"common contract {name} endpoint hash differs")
+        test_record = contract.get("catch_test")
+        if not isinstance(test_record, dict) or not Path(test_record.get("path", "")).is_file():
+            raise ValueError("common contract is missing CATCH test endpoints")
+        if not test_record.get("sha256") or _sha256(test_record["path"]) != test_record["sha256"]:
+            raise ValueError("common contract test endpoint hash differs")
+        contract_test_indices = np.load(test_record["path"], allow_pickle=False)
+    else:
+        contract_test_indices = None
+    test_start = int(contract.get("train_length")) if contract is not None else int(args.test_start)
+    if contract is not None and getattr(args, "test_start", None) is not None and int(args.test_start) != test_start:
+        raise ValueError("test_start differs from the common contract")
+    if test_start < 0:
+        raise ValueError("test_start is required unless common_contract supplies train_length")
+    if contract is not None:
+        if list(map(str, feature_columns)) != list(map(str, contract.get("variable_names", []))):
+            raise ValueError("common contract variable order differs from the CATCH data")
+        if _chunked_array_hash(values) != contract.get("data_identity"):
+            raise ValueError("common contract feature data identity differs")
+        time_index = MNRFLiteV2._time_index(frame)
+        if _chunked_array_hash(time_index.values_ns) != contract.get("time_identity"):
+            raise ValueError("common contract time identity differs")
+        boundary_ids, boundary_columns = _all_boundary_ids(frame)
+        if boundary_columns != contract.get("boundary_columns", []):
+            raise ValueError("common contract boundary columns differ")
+        boundary_hash = None if boundary_ids is None else _hash_strings(boundary_ids)
+        if boundary_hash != contract.get("boundary_identity"):
+            raise ValueError("common contract boundary identity differs")
     train_indices = np.load(args.train_indices, allow_pickle=False)
     validation_indices = np.load(args.validation_indices, allow_pickle=False)
     calibration_indices = np.load(args.calibration_indices, allow_pickle=False)
@@ -264,18 +321,21 @@ def run(args):
     train_endpoints = strict_integer_indices(train_indices, "train endpoints", upper_bound=len(values))
     validation_endpoints = strict_integer_indices(validation_indices, "validation endpoints", upper_bound=len(values))
     calibration_endpoints = strict_integer_indices(calibration_indices, "calibration endpoints", upper_bound=len(values))
-    test_indices = np.arange(int(args.test_start) + args.seq_len - 1, len(values), dtype=np.int64)
-    test_indices = _filter_test_endpoints(frame, test_indices, args.seq_len, train_indices)
+    test_indices = (strict_integer_indices(contract_test_indices, "contract test endpoints", upper_bound=len(values))
+                    if contract_test_indices is not None else
+                    np.arange(test_start + args.seq_len - 1, len(values), dtype=np.int64))
+    if contract_test_indices is None:
+        test_indices = _filter_test_endpoints(frame, test_indices, args.seq_len, train_indices)
     if len(test_indices) == 0:
         raise ValueError("test interval has no complete windows")
     endpoint_sets = {"train": train_endpoints, "validation": validation_endpoints,
                      "calibration": calibration_endpoints, "test": test_indices}
-    boundary_rows = _validate_window_boundaries(frame, endpoint_sets, args.seq_len, args.test_start)
+    boundary_rows = _validate_window_boundaries(frame, endpoint_sets, args.seq_len, test_start)
     if args.train_rows:
         fit_rows = strict_integer_indices(np.load(args.train_rows, allow_pickle=False), "raw training rows", upper_bound=len(values))
         if len(fit_rows) == 0:
             raise ValueError("raw training rows are empty")
-        if np.any(fit_rows >= int(args.test_start)):
+        if np.any(fit_rows >= test_start):
             raise ValueError("raw training rows must be before test_start")
         forbidden = np.concatenate([boundary_rows[name] for name in ("validation", "calibration", "test")])
         if _indices_overlap_intervals(fit_rows, forbidden):
@@ -399,6 +459,17 @@ def run(args):
     np.savez_compressed(output / "results" / "aligned_scores.npz", scores=scores,
                         predictions=predictions, time_indices=test_indices,
                         threshold=np.asarray(threshold), actual=labels[test_indices])
+    score_path = output / "results" / "aligned_scores.npz"
+    test_actual = labels[test_indices]
+    production_binding = {
+        "test_scores_path": str(score_path.resolve()),
+        "test_scores_sha256": _sha256(score_path),
+        "test_indices_sha256": hashlib.sha256(np.ascontiguousarray(test_indices).tobytes()).hexdigest(),
+        "test_predictions_sha256": hashlib.sha256(np.ascontiguousarray(predictions).tobytes()).hexdigest(),
+        "test_actual_sha256": hashlib.sha256(np.ascontiguousarray(test_actual).tobytes()).hexdigest(),
+        "test_count": int(len(test_indices)),
+        "test_threshold": float(threshold),
+    }
     data_identity = _array_identity(values)
     time_columns = [column for column in frame.columns
                     if str(column).lower() in {"timestamp", "date", "time", "datetime"}]
@@ -423,7 +494,7 @@ def run(args):
               "run_identity": run_identity, "data_identity": data_identity,
               "time_identity": time_identity, "variable_identity": variable_identity,
               "time_kind": time_kind, "seq_len": int(args.seq_len),
-              "test_start": int(args.test_start),
+              "test_start": test_start,
               "feature_columns": list(feature_columns),
               "boundary_values_identity": boundary_identity,
               "model_config": dict(vars(config)),
@@ -440,7 +511,10 @@ def run(args):
                                  "inference_patch_stride": int(args.inference_patch_stride)},
               "train_indices_sha256": split_record["train"]["sha256"],
               "validation_indices_sha256": split_record["validation"]["sha256"],
-              "calibration_indices_sha256": split_record["calibration"]["sha256"]}
+              "calibration_indices_sha256": split_record["calibration"]["sha256"],
+              **production_binding,
+              "common_contract_path": contract_path or None,
+              "common_contract_sha256": _sha256(contract_path) if contract_path else None}
     _atomic_json(output / "evidence" / "training.json", common)
     calibration_evidence = dict(common, threshold=threshold,
                                 calibration_quantile=args.calibration_quantile,
@@ -465,8 +539,11 @@ def main():
     parser.add_argument("--train-rows", required=True,
                         help="raw training row coordinates used to fit the scaler")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--common-contract", default="",
+                        help="validated Probe common_contract.json; derives CATCH endpoints read-only")
     parser.add_argument("--task-name", required=True)
-    parser.add_argument("--test-start", type=int, required=True)
+    parser.add_argument("--test-start", type=int, default=None,
+                        help="official test start; read from --common-contract when supplied")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument("--seq-len", type=int, default=192)

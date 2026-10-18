@@ -127,11 +127,17 @@ scores, cross-run evidence, or hand-edited thresholds. Supplying
 `--common-manifest` to the evaluator is strict and exits nonzero when evidence
 is invalid; use `--reference-mode` only when an explicit
 `index_intersection_reference` result is intended.
+Older common manifests without the production score receipt remain read-only
+references; regenerate a new independent common run before claiming strict
+CATCH-common identity.
 
 Strict registration also reconstructs the recorded CATCH model and loads its
 checkpoint with `strict=True`. The checkpoint, normalization statistics,
 scaler-fit row file, calibration score array/endpoints, serialized threshold,
-and score output are cross-bound. Probe and CATCH may have different run IDs,
+and score output are cross-bound. The CATCH adapter writes a production score
+receipt only after the stable checkpoint, calibration and test NPZ exist;
+registration and evaluation require that receipt and reject a replaced,
+cross-run, or hand-completed score file. Probe and CATCH may have different run IDs,
 but their raw feature values, variable order, canonical time values, boundary
 columns, official train/test boundary, and frozen split identity must agree.
 The scaler's raw fit rows are the exact Probe internal training range, not the
@@ -139,6 +145,15 @@ union of rows covered by training windows; this retains valid short-entity rows
 that cannot form a window. CATCH windows are materialized lazily per DataLoader
 batch for train, validation, calibration, and test. The I/O/cache chunk size
 does not alter GPU forward batch size.
+
+The common exporter keeps the Probe context and endpoint files unchanged.  It
+can derive a separate CATCH endpoint set with `--catch-seq-len` (the formal
+default is 192) from the same frozen raw ranges and continuous segments.  A
+split that is too short for that context is rejected before training; the
+contract records Probe and CATCH lengths, endpoint hashes, and the official
+test boundary.  The CATCH runner consumes `--common-contract` and refuses a
+wrong length or a hand-selected endpoint file.  Different model window
+lengths are therefore a declared protocol property, not an endpoint rewrite.
 
 Calibration thresholds are generated and verified with the saved score array's
 dtype and NumPy linear-quantile rule. The evaluator uses the external evidence

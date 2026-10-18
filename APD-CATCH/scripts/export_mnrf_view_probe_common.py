@@ -28,7 +28,18 @@ def _sha256(path):
     return digest.hexdigest()
 
 
-def export(probe_run, data_csv, output_dir):
+def _endpoints_for_ranges(segment_ranges, lower, upper, seq_len):
+    result = []
+    for left, right in segment_ranges:
+        start = max(int(left), int(lower))
+        stop = min(int(right), int(upper))
+        first = start + int(seq_len) - 1
+        if first < stop:
+            result.extend(range(first, stop))
+    return np.asarray(result, dtype=np.int64)
+
+
+def export(probe_run, data_csv, output_dir, catch_seq_len=None):
     run = Path(probe_run).resolve()
     probe = load_probe(run, device="cpu")
     manifest = json.loads((run / "probe_manifest.json").read_text(encoding="utf-8"))
@@ -61,14 +72,42 @@ def export(probe_run, data_csv, output_dir):
         raise ValueError("common export output must be outside the read-only Probe source tree")
     if root.exists():
         raise FileExistsError(f"common export directory already exists: {root}")
-    root.mkdir(parents=True)
+    # Derive every CATCH split before creating any output files.  A too-short
+    # frozen range therefore fails without leaving a partial contract.
     cache_root = Path(manifest.get("source_dir") or run).resolve()
+    catch_seq_len = int(source.get("seq_len") if catch_seq_len is None else catch_seq_len)
+    if catch_seq_len <= 0:
+        raise ValueError("catch_seq_len must be positive")
+    segment_ranges = source.get("segment_ranges", {})
+    derived_catch = {}
+    for name in ("train", "validation", "calibration"):
+        raw_range = source.get("ranges", {}).get(name)
+        segments = segment_ranges.get(name, [])
+        if not raw_range or not segments:
+            raise ValueError(f"Probe contract lacks frozen segment ranges for {name}")
+        endpoints = _endpoints_for_ranges(segments, raw_range[0], raw_range[1], catch_seq_len)
+        if len(endpoints) == 0:
+            raise ValueError(f"catch_seq_len={catch_seq_len} leaves no complete {name} windows in frozen range {raw_range}")
+        derived_catch[name] = endpoints
+    test_start = int(source.get("train_length", -1))
+    catch_test = _endpoints_for_ranges(source.get("test_segments", []), test_start, len(frame), catch_seq_len)
+    if len(catch_test) == 0:
+        raise ValueError(f"catch_seq_len={catch_seq_len} leaves no complete test windows")
+    root.mkdir(parents=True)
     records = {}
     for name in ("train", "validation", "calibration"):
         endpoints = np.load(cache_root / "cache" / f"{name}_window_end_indices.npy", allow_pickle=False)
         target = root / f"{name}_indices.npy"
         np.save(target, endpoints)
         records[name] = {"path": str(target), "sha256": _sha256(target), "count": int(len(endpoints))}
+    catch_records = {}
+    for name in ("train", "validation", "calibration"):
+        endpoints = derived_catch[name]
+        target = root / f"catch_{name}_indices.npy"
+        np.save(target, endpoints)
+        catch_records[name] = {"path": str(target), "sha256": _sha256(target), "count": int(len(endpoints))}
+    catch_test_path = root / "catch_test_indices.npy"
+    np.save(catch_test_path, catch_test)
     start, stop = source["ranges"]["train"]
     raw_rows = np.arange(int(start), int(stop), dtype=np.int64)
     rows_path = root / "train_rows.npy"
@@ -83,9 +122,11 @@ def export(probe_run, data_csv, output_dir):
         "time_identity": source.get("time_index", {}).get("values_sha256"),
         "boundary_identity": source.get("boundary_values_sha256"),
         "variable_names": source.get("variable_names"), "seq_len": int(source["seq_len"]),
+        "catch_seq_len": catch_seq_len,
         "train_length": int(source["train_length"]),
         "raw_training_range": [int(start), int(stop)],
-        "splits": records,
+        "splits": records, "catch_splits": catch_records,
+        "catch_test": {"path": str(catch_test_path), "sha256": _sha256(catch_test_path), "count": int(len(catch_test))},
         "train_rows": {"path": str(rows_path), "sha256": _sha256(rows_path), "count": int(len(raw_rows))},
         "labels": {"path": str(labels_path), "sha256": _sha256(labels_path), "count": int(len(labels))},
     }
@@ -99,8 +140,9 @@ def main():
     parser.add_argument("--probe-run", required=True)
     parser.add_argument("--data-csv", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--catch-seq-len", type=int, default=192)
     args = parser.parse_args()
-    contract = export(args.probe_run, args.data_csv, args.output_dir)
+    contract = export(args.probe_run, args.data_csv, args.output_dir, args.catch_seq_len)
     print(json.dumps({"status": "complete", "output_dir": str(Path(args.output_dir).resolve()),
                       "train_rows": contract["train_rows"]["count"],
                       "train_windows": contract["splits"]["train"]["count"]}, sort_keys=True))
