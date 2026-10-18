@@ -127,3 +127,22 @@ scores, cross-run evidence, or hand-edited thresholds. Supplying
 `--common-manifest` to the evaluator is strict and exits nonzero when evidence
 is invalid; use `--reference-mode` only when an explicit
 `index_intersection_reference` result is intended.
+
+Strict registration also reconstructs the recorded CATCH model and loads its
+checkpoint with `strict=True`. The checkpoint, normalization statistics,
+scaler-fit row file, calibration score array/endpoints, serialized threshold,
+and score output are cross-bound. Probe and CATCH may have different run IDs,
+but their raw feature values, variable order, canonical time values, boundary
+columns, official train/test boundary, and frozen split identity must agree.
+The scaler's raw fit rows are the exact Probe internal training range, not the
+union of rows covered by training windows; this retains valid short-entity rows
+that cannot form a window. CATCH windows are materialized lazily per DataLoader
+batch for train, validation, calibration, and test. The I/O/cache chunk size
+does not alter GPU forward batch size.
+
+Calibration thresholds are generated and verified with the saved score array's
+dtype and NumPy linear-quantile rule. The evaluator uses the external evidence
+object only after checking its embedded copy is identical, and verifies the
+calibration endpoint array against the frozen calibration split. A report is
+strict CATCH-common only after these checks; it is not equivalent to a paper
+reference or an index-intersection-only comparison.

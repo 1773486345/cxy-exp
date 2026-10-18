@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ts_benchmark.baselines.mnrf_view_probe.evaluation import validate_common_splits
+from ts_benchmark.baselines.mnrf_view_probe.evaluation import calibrated_quantile, validate_common_splits
+from ts_benchmark.baselines.mnrf_view_probe.catch_common import load_verified_catch_checkpoint
 
 
 def _sha256(path):
@@ -91,6 +92,7 @@ def _load_execution_evidence(path, kind, task_name, split_paths):
         raise ValueError(f"{kind} evidence checkpoint cannot be loaded: {error}") from error
     if not isinstance(checkpoint_payload, dict) or checkpoint_payload.get("protocol") != "CATCH-common":
         raise ValueError(f"{kind} evidence checkpoint is not a CATCH-common checkpoint")
+    load_verified_catch_checkpoint(checkpoint_payload, evidence)
     if kind == "calibration":
         threshold = evidence.get("threshold")
         if threshold is None or not isinstance(threshold, (int, float)) or not math.isfinite(float(threshold)):
@@ -103,11 +105,11 @@ def _load_execution_evidence(path, kind, task_name, split_paths):
         with np.load(calibration_scores, allow_pickle=False) as scores_payload:
             if "scores" not in scores_payload.files:
                 raise ValueError("calibration evidence scores have no scores array")
-            calibration_values = np.asarray(scores_payload["scores"], dtype=np.float64).reshape(-1)
+            calibration_values = np.asarray(scores_payload["scores"])
         quantile = float(evidence.get("calibration_quantile", 0.995))
         if not 0.0 < quantile < 1.0 or not np.isfinite(calibration_values).all():
             raise ValueError("calibration evidence quantile or scores are invalid")
-        if not np.isclose(float(threshold), float(np.quantile(calibration_values, quantile)), rtol=0, atol=1e-12):
+        if not np.isclose(float(threshold), calibrated_quantile(calibration_values, quantile), rtol=0, atol=1e-12):
             raise ValueError("calibration threshold does not reproduce from calibration scores")
     for split_name, split_path in zip(("train", "validation", "calibration"), split_paths):
         key = f"{split_name}_indices_sha256"

@@ -19,13 +19,28 @@ def collect(root):
     rows = []
     for manifest_path in sorted(Path(root).glob("**/probe_manifest.json")):
         run = manifest_path.parent
-        result_path = run / "results" / "metrics.json"
-        if not result_path.is_file():
-            rows.append({"run": str(run), "status": "missing_metrics"})
-            continue
         manifest = json.loads(manifest_path.read_text())
         status_path = run / "run_status.json"
         run_status = json.loads(status_path.read_text()) if status_path.is_file() else {"status": "missing_status"}
+        result_path = run / "results" / "metrics.json"
+        if not result_path.is_file():
+            completed_stage1 = (run_status.get("status") == "stage1_complete"
+                                and manifest.get("artifact_type") == "source_encoder"
+                                and manifest.get("stage_status") == "stage1_complete")
+            validation_status = "valid" if completed_stage1 else "not_applicable"
+            validation_reason = ""
+            if completed_stage1:
+                try:
+                    load_probe(run, device="cpu")
+                except Exception as error:
+                    validation_status = "invalid"
+                    validation_reason = str(error)
+            rows.append({"run": str(run), "task": manifest.get("config", {}).get("task_name"),
+                         "mode": manifest.get("mode"), "run_status": run_status.get("status"),
+                         "artifact_type": manifest.get("artifact_type"),
+                         "validation_status": validation_status, "validation_reason": validation_reason,
+                         "status": "stage1_complete" if validation_status == "valid" else "missing_metrics"})
+            continue
         metrics = json.loads(result_path.read_text())
         config = manifest.get("config", {})
         gmm_status_path = run / "heads" / "gmm_status.json"

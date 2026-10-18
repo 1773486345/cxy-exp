@@ -27,6 +27,16 @@ def strict_integer_indices(value, name, *, upper_bound=None, require_sorted=Fals
     return converted
 
 
+def calibrated_quantile(values, quantile):
+    """Reproduce a threshold using the calibration score array's stored dtype."""
+    scores = np.asarray(values)
+    if scores.ndim != 1 or scores.dtype.kind not in "fiu" or len(scores) == 0:
+        raise ValueError("calibration scores must be a non-empty one-dimensional numeric array")
+    if not np.isfinite(scores).all() or not 0.0 < float(quantile) < 1.0:
+        raise ValueError("calibration scores or quantile are invalid")
+    return float(np.quantile(scores, float(quantile), method="linear"))
+
+
 def _hash_array(value):
     array = np.asarray(value)
     return hashlib.sha256(np.ascontiguousarray(array).tobytes()).hexdigest()

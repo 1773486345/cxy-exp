@@ -5,6 +5,7 @@ import shutil
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, ViewProbeConfig, load_probe
 from ts_benchmark.baselines.mnrf_view_probe.strategy import IndexedViewProbeStrategy
@@ -19,6 +20,62 @@ def test_probe_is_loadable_through_benchmark_model_factory():
     })
     assert factories[0].model_name == "MNRFViewProbe"
     assert factories[0]().model_name == "MNRFViewProbe"
+
+
+def test_auto_device_gmm_can_be_loaded_and_validated_on_cpu(tmp_path, monkeypatch):
+    from scripts.validate_mnrf_view_probe import validate
+    from scripts.summarize_mnrf_view_probe import collect
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    rng = np.random.default_rng(901)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("x", "y"),
+                         index=pd.date_range("2026-03-01", periods=n, freq="min"))
+    frame["label"] = np.r_[np.zeros(train_length, dtype=np.int64), np.arange(n - train_length) % 2]
+    run = tmp_path / "auto-cpu"
+    probe = MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=32, stage1_epochs=1,
+                          stage2_epochs=1, patience=1, device="auto", output_dir=str(run),
+                          mode="full_gmm", gmm_fit_max_windows=32)
+    probe.fit(frame, train_length, frame["label"].to_numpy()[train_length:])
+    persisted = json.loads((run / "probe_manifest.json").read_text())
+    status = json.loads((run / "heads" / "gmm_status.json").read_text())
+    assert persisted["config"]["device"] == "auto"
+    assert status["config"]["device"] == "auto"
+    restored = load_probe(run, device="cpu")
+    assert restored.device.type == "cpu"
+    assert np.isfinite(restored.score_cached_test()["scores"]).all()
+    assert validate(run)["status"] == "complete"
+    summary = collect(tmp_path)
+    assert summary.loc[summary["run"] == str(run), "validation_status"].iloc[0] == "valid"
+    referenced = tmp_path / "auto-reference"
+    selected = MNRFViewProbe(
+        seq_len=32, pattern_len=32, batch_size=32, stage1_epochs=1, stage2_epochs=1,
+        patience=1, device="auto", output_dir=str(referenced), mode="select_gmm",
+        selected_views=("S", "P", "R"), source_dir=str(run), gmm_fit_max_windows=32,
+    )
+    selected.fit(frame, train_length, frame["label"].to_numpy()[train_length:])
+    assert load_probe(referenced, device="cpu").device.type == "cpu"
+    assert validate(referenced)["status"] == "complete"
+
+
+def test_completed_stage1_resume_is_read_only_with_real_best_checkpoint(tmp_path, monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    rng = np.random.default_rng(902)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("x", "y"),
+                         index=pd.date_range("2026-04-01", periods=n, freq="min"))
+    frame["label"] = np.r_[np.zeros(train_length, dtype=np.int64), np.zeros(n - train_length, dtype=np.int64)]
+    run = tmp_path / "stage1"
+    kwargs = dict(seq_len=32, pattern_len=32, batch_size=32, stage1_epochs=1,
+                  stage2_epochs=1, patience=1, device="auto", output_dir=str(run), mode="stage1")
+    MNRFViewProbe(**kwargs).fit(frame, train_length)
+    names_before = sorted(path.relative_to(run).as_posix() for path in run.rglob("*") if path.is_file())
+    hashes_before = {name: hashlib.sha256((run / name).read_bytes()).hexdigest() for name in names_before}
+    MNRFViewProbe(**dict(kwargs, resume_from=str(run))).fit(frame, train_length)
+    names_after = sorted(path.relative_to(run).as_posix() for path in run.rglob("*") if path.is_file())
+    hashes_after = {name: hashlib.sha256((run / name).read_bytes()).hexdigest() for name in names_after}
+    assert names_after == names_before
+    assert hashes_after == hashes_before
 
 
 def test_view_selection_uses_canonical_layout_and_rejects_invalid_views():
@@ -163,6 +220,38 @@ def test_frozen_probe_gmm_random_and_selection_are_independent(tmp_path):
         ).fit(frame, train_length, labels)
     after_files = sorted(path.relative_to(damaged_dir).as_posix() for path in damaged_dir.rglob("*") if path.is_file())
     after_hashes = {name: hashlib.sha256((damaged_dir / name).read_bytes()).hexdigest() for name in after_files}
+    assert after_files == before_files
+    assert after_hashes == before_hashes
+
+    # A completed variable cannot be resumed after its required statistics
+    # binding is removed, even if the finite statistics file is edited too.
+    missing_binding = tmp_path / "missing-stat-binding"
+    shutil.copytree(source_dir, missing_binding)
+    status_path = missing_binding / "run_status.json"
+    status = json.loads(status_path.read_text())
+    status["status"] = "gmm_fitting"
+    status_path.write_text(json.dumps(status, sort_keys=True))
+    manifest_path = missing_binding / "probe_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.pop("feature_statistics_sha256", None)
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True))
+    stats_path = missing_binding / "heads" / "feature_statistics.npz"
+    with np.load(stats_path) as stats:
+        np.savez(stats_path, mean=stats["mean"] + 25.0, scale=stats["scale"])
+    before_files = sorted(path.relative_to(missing_binding).as_posix()
+                          for path in missing_binding.rglob("*") if path.is_file())
+    before_hashes = {name: hashlib.sha256((missing_binding / name).read_bytes()).hexdigest()
+                     for name in before_files}
+    with pytest.raises(ValueError, match="feature_statistics_sha256"):
+        MNRFViewProbe(
+            seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1, patience=1,
+            device="cpu", output_dir=str(missing_binding), resume_from=str(missing_binding),
+            mode="full_gmm", gmm_fit_max_windows=32,
+        ).fit(frame, train_length, labels)
+    after_files = sorted(path.relative_to(missing_binding).as_posix()
+                         for path in missing_binding.rglob("*") if path.is_file())
+    after_hashes = {name: hashlib.sha256((missing_binding / name).read_bytes()).hexdigest()
+                    for name in after_files}
     assert after_files == before_files
     assert after_hashes == before_hashes
 

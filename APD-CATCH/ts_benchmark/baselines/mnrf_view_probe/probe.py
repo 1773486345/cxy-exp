@@ -697,7 +697,17 @@ class MNRFViewProbe:
             "cache_sha256": source_manifest.get("cache_sha256"),
             "endpoint_sha256": source_manifest.get("endpoint_sha256"),
         }
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text())
+        else:
+            manifest = {}
         progress_identity = _json_hash({"config": fit_config, "sample_hash": sample_hash,
+                                        "statistics_hash": _sha256_file(statistics_path),
+                                        "noise_hash": _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
+                                        "cache_hashes": (manifest.get("source_cache_sha256") if source_manifest is not None
+                                                         else manifest.get("cache_sha256")),
+                                        "endpoint_hashes": (manifest.get("source_endpoint_sha256") if source_manifest is not None
+                                                            else manifest.get("endpoint_sha256")),
                                         "selected_indices": self.config.selected_indices,
                                         "source": source_cache_identity})
         progress = {"schema": PROBE_SCHEMA, "identity": progress_identity, "completed": {}}
@@ -1041,6 +1051,7 @@ class MNRFViewProbe:
                 raise ValueError("resume rejected: local head is missing input statistics")
         # A completed stage-one source must have its complete source contract.
         if manifest is not None and manifest.get("artifact_type") == ARTIFACT_SOURCE:
+            checkpoint_trainer = self._make_trainer(len(self.variable_names))
             for name in ("initial_encoder.pt", "best_encoder.pt"):
                 checkpoint_path = self.output_dir / "checkpoints" / name
                 declared = manifest.get("checkpoint_sha256", {}).get(name)
@@ -1050,8 +1061,26 @@ class MNRFViewProbe:
                     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
                 except Exception as error:
                     raise ValueError("resume rejected: source checkpoint cannot be loaded: " + name) from error
-                if not isinstance(checkpoint, dict) or checkpoint.get("run_identity") != self._run_identity:
+                # initial_encoder.pt carries the run identity; best_encoder.pt
+                # is the trainer's established {encoder, auxiliary} payload.
+                # The immutable manifest hash binds both formats to this run.
+                if not isinstance(checkpoint, dict):
                     raise ValueError("resume rejected: completed source checkpoint identity differs")
+                if name == "initial_encoder.pt":
+                    if checkpoint.get("run_identity") != self._run_identity or "encoder" not in checkpoint:
+                        raise ValueError("resume rejected: initial source checkpoint identity differs")
+                elif not {"encoder", "auxiliary"}.issubset(checkpoint):
+                    raise ValueError("resume rejected: best source checkpoint payload is invalid")
+                for part in (("encoder", "auxiliary") if name == "best_encoder.pt" else ("encoder",)):
+                    state = checkpoint[part] if part in checkpoint else checkpoint
+                    module = checkpoint_trainer.encoder if part == "encoder" else checkpoint_trainer.auxiliary
+                    expected_state = module.state_dict()
+                    if (not isinstance(state, dict) or set(state) != set(expected_state)
+                            or any(tuple(state[key].shape) != tuple(expected_state[key].shape)
+                                   for key in expected_state) or any(
+                            not torch.is_tensor(value) or not torch.isfinite(value).all()
+                            for value in state.values())):
+                        raise ValueError("resume rejected: source checkpoint state is invalid")
             input_stats_path = self.output_dir / "input_statistics.npz"
             declared_stats = manifest.get("input_statistics_sha256")
             if not input_stats_path.is_file() or not declared_stats or _sha256_file(input_stats_path) != declared_stats:
@@ -1087,6 +1116,22 @@ class MNRFViewProbe:
                 completed = progress.get("completed", {})
                 if not isinstance(completed, dict):
                     raise ValueError("resume rejected: GMM progress completed map is invalid")
+                if completed:
+                    # These artifacts already influenced persisted heads. A
+                    # missing declaration is evidence loss, not permission to
+                    # bless the current files with newly computed hashes.
+                    for field in ("feature_statistics_sha256", "fixed_noise_sha256",
+                                  "gmm_fit_endpoints_sha256"):
+                        if not manifest or not manifest.get(field):
+                            raise ValueError(f"resume rejected: completed GMM variables require {field}")
+                    statistics_path = self.output_dir / "heads" / "feature_statistics.npz"
+                    noise_path = self.output_dir / "heads" / "fixed_noise.npy"
+                    sample_path = self.output_dir / "heads" / "gmm_fit_endpoints.npy"
+                    for field, artifact in (("feature_statistics_sha256", statistics_path),
+                                            ("fixed_noise_sha256", noise_path),
+                                            ("gmm_fit_endpoints_sha256", sample_path)):
+                        if not artifact.is_file() or _sha256_file(artifact) != manifest[field]:
+                            raise ValueError(f"resume rejected: {field} is missing or changed")
                 for variable, entry in completed.items():
                     if not str(variable).isdigit() or int(variable) < 0 or int(variable) >= len(self.variable_names):
                         raise ValueError("resume rejected: GMM progress variable order is invalid")
@@ -1137,9 +1182,21 @@ class MNRFViewProbe:
                     "cache_sha256": (manifest or {}).get("source_cache_sha256"),
                     "endpoint_sha256": (manifest or {}).get("source_endpoint_sha256"),
                 }
+                stats_path = self.output_dir / "heads" / "feature_statistics.npz"
+                noise_path = self.output_dir / "heads" / "fixed_noise.npy"
+                if not stats_path.is_file() or not noise_path.is_file():
+                    raise ValueError("resume rejected: GMM statistics or fixed noise is missing")
+                current_cache_hashes = ((manifest or {}).get("source_cache_sha256") if self.config.source_dir
+                                        else (manifest or {}).get("cache_sha256"))
+                current_endpoint_hashes = ((manifest or {}).get("source_endpoint_sha256") if self.config.source_dir
+                                           else (manifest or {}).get("endpoint_sha256"))
                 expected_progress_identity = _json_hash({
                     "config": fit_config,
                     "sample_hash": _sha256_file(sample_path),
+                    "statistics_hash": _sha256_file(stats_path),
+                    "noise_hash": _sha256_file(noise_path),
+                    "cache_hashes": current_cache_hashes,
+                    "endpoint_hashes": current_endpoint_hashes,
                     "selected_indices": self.config.selected_indices,
                     "source": source_cache_identity,
                 })
@@ -1465,7 +1522,10 @@ def load_probe(path, device="cpu"):
         raise ValueError("source encoder artifact must have stage1_complete status")
     if artifact_type == ARTIFACT_HEAD and run_status.get("status") != "complete":
         raise ValueError("probe head artifact must have complete status")
-    config = dict(manifest["config"])
+    # Keep the artifact's original training configuration intact. The caller's
+    # device is a load-time execution choice, not a persisted model parameter.
+    persisted_config = dict(manifest["config"])
+    config = dict(persisted_config)
     config.pop("resolved_layout", None); config.pop("selected_indices", None); config.pop("selected_dim", None)
     config["output_dir"] = str(path); config["device"] = device
     probe = MNRFViewProbe.from_kwargs(**config)
@@ -1559,6 +1619,27 @@ def load_probe(path, device="cpu"):
         declared_best = manifest.get("checkpoint_sha256", {}).get("best_encoder.pt")
         if not declared_best or _sha256_file(path / "checkpoints" / "best_encoder.pt") != declared_best:
             raise ValueError("source encoder best checkpoint hash mismatch")
+        checkpoint_trainer = probe._make_trainer(len(manifest.get("variable_names", ())))
+        for name in ("initial_encoder.pt", "best_encoder.pt"):
+            checkpoint_path = path / "checkpoints" / name
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+            if not isinstance(checkpoint, dict):
+                raise ValueError("source encoder checkpoint payload is invalid: " + name)
+            states = (("encoder", checkpoint.get("encoder", checkpoint)),) if name == "initial_encoder.pt" else (
+                ("encoder", checkpoint.get("encoder")), ("auxiliary", checkpoint.get("auxiliary")))
+            for state_name, state in states:
+                module = checkpoint_trainer.encoder if state_name == "encoder" else checkpoint_trainer.auxiliary
+                expected_state = module.state_dict()
+                if (not isinstance(state, dict) or set(state) != set(expected_state)
+                        or any(tuple(state[key].shape) != tuple(expected_state[key].shape)
+                               or not torch.isfinite(state[key]).all() for key in expected_state)):
+                    raise ValueError("source encoder checkpoint state is invalid: " + name)
+            if name == "initial_encoder.pt" and checkpoint.get("run_identity") != manifest.get("run_identity"):
+                # The stage-one run identity is stored in run_status, while
+                # the exported source identity is data/config based.
+                status_identity = run_status.get("run_identity")
+                if checkpoint.get("run_identity") != status_identity:
+                    raise ValueError("source initial checkpoint run identity differs")
         if set(manifest.get("cache_sha256", {})) != {"train", "validation", "calibration", "test"} or set(manifest.get("endpoint_sha256", {})) != {"train", "validation", "calibration", "test"}:
             raise ValueError("source encoder cache bindings are incomplete")
         for name in ("train", "validation", "calibration", "test"):
@@ -1610,7 +1691,7 @@ def load_probe(path, device="cpu"):
         if status.get("sklearn_version") != sklearn.__version__:
             raise ValueError(f"view probe sklearn version mismatch: artifact={status.get('sklearn_version')} current={sklearn.__version__}")
         status_config = status.get("config")
-        if status_config is None or _runtime_free_config(status_config) != _runtime_free_config(probe.config):
+        if status_config is None or _runtime_free_config(status_config) != _runtime_free_config(persisted_config):
             raise ValueError("view probe GMM configuration does not match the manifest")
         if status_config.get("selected_indices") != probe.config.selected_indices:
             raise ValueError("view probe GMM selected indices do not match its configuration")

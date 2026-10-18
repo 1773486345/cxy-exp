@@ -119,8 +119,27 @@ conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/
 The adapter defaults match the CATCH score path (`score_lambda=0.05`,
 inference patch size 32, stride 1); override them only as an explicitly named
 protocol variant. The endpoint arrays must be purged, mutually window-disjoint
-coordinates. The scaler fit rows are derived from the raw rows covered by the
-training windows and are recorded in the run evidence.
+coordinates. `--train-rows` must contain exactly every raw row in the Probe
+internal training range `[train_start, train_stop)`, exported from that run's
+`probe_manifest.json` `source_identity.ranges.train`; it is not a window-row
+union and includes short valid regions that cannot form a training window.
+Strict registration verifies that exact row sequence against the completed
+Probe run. Use separate endpoint files for train, validation, and calibration.
+
+Generate those frozen files from one validated Probe run and the exact source
+CSV (the exporter is read-only with respect to both inputs):
+
+```bash
+conda run --no-capture-output -n catch_env python /media/h3c/users/wangyueyang1/cxy/APD-CATCH/scripts/export_mnrf_view_probe_common.py --probe-run "/absolute/path/to/validated/PSM/probe-run" --data-csv "/absolute/path/to/PSM.csv" --output-dir "/absolute/path/to/PSM/common-contract"
+```
+
+The exporter verifies the raw feature values, variable order, canonical time
+coordinates and all entity/session boundary columns before writing
+`train_indices.npy`, `validation_indices.npy`, `calibration_indices.npy`,
+`train_rows.npy`, `labels.npy`, and `common_contract.json`. It refuses to
+overwrite an existing export directory. Use those exact generated paths for
+`run_mnrf_catch_common.py`, registration and strict evaluation; do not hand
+author split or label arrays.
 
 To resume a ViewProbe run, pass its exact existing directory through
 `VIEW_PROBE_RESUME_FROM` and use the same data, layout, source and GMM/Flow

@@ -32,15 +32,28 @@ class IndexedViewProbeStrategy:
         # rejected instead of being guessed.
         if train.index.dtype != test.index.dtype:
             raise ValueError("train and test frame indices must have the same dtype")
-        if train.index.has_duplicates or test.index.has_duplicates:
-            raise ValueError("train and test frame indices must be unique")
-        overlap = train.index.intersection(test.index).size
+        boundary_columns = [column for column in train.columns
+                            if str(column).lower() in {"entity_id", "session_id", "record_id", "scenario_id"}]
         row_protocol = isinstance(train.index, pd.RangeIndex) and isinstance(test.index, pd.RangeIndex)
+        if (train.index.has_duplicates or test.index.has_duplicates) and not boundary_columns:
+            raise ValueError("duplicate frame times require explicit entity/session boundary columns")
+        overlap = train.index.intersection(test.index).size
         if overlap and not row_protocol:
-            raise ValueError("train and test frame indices overlap; refusing to invent global coordinates")
+            if not boundary_columns:
+                raise ValueError("train and test frame indices overlap without entity boundaries")
         combined = pd.concat([train, test], axis=0, ignore_index=False)
         if combined.index.has_duplicates and not row_protocol:
-            raise ValueError("combined frame index is not unique")
+            boundary = combined[boundary_columns].astype(object).where(
+                combined[boundary_columns].notna(), "<NA>").astype(str).agg("\x1f".join, axis=1)
+            pairs = pd.DataFrame({"time": combined.index, "boundary": boundary.to_numpy()})
+            if pairs.duplicated().any():
+                raise ValueError("timestamps repeat within the same entity/session")
+            # Validate monotonicity separately per declared composite entity;
+            # independent entities may legitimately restart their clocks.
+            for _, positions in pairs.groupby("boundary", sort=False).indices.items():
+                times = combined.index[np.asarray(positions, dtype=np.int64)]
+                if len(times) > 1 and np.any(np.diff(times.asi8) <= 0):
+                    raise ValueError("timestamps are not strictly increasing within an entity/session")
         labels = None if test_labels is None else np.asarray(test_labels).reshape(-1)
         if labels is not None and len(labels) != len(test):
             raise ValueError("test_labels must have one value per test row")
