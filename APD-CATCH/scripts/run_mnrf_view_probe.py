@@ -57,10 +57,17 @@ def main():
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument("--seq-len", type=int, default=128)
+    parser.add_argument("--pattern-len", type=int, default=32)
+    parser.add_argument("--hidden-dim", type=int, default=32)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--stage1-epochs", type=int, default=50)
     parser.add_argument("--stage2-epochs", type=int, default=30)
     parser.add_argument("--patience", type=int, default=5)
+    parser.add_argument("--learning-rate", type=float, default=0.001)
+    parser.add_argument("--weight-decay", type=float, default=0.0001)
+    parser.add_argument("--feature-std-floor", type=float, default=0.05)
+    parser.add_argument("--score-mad-floor", type=float, default=0.001)
+    parser.add_argument("--calibration-quantile", type=float, default=0.995)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--cache-chunk-size", type=int, default=256)
     parser.add_argument("--encoding-batch-size", type=int, default=0)
@@ -80,9 +87,13 @@ def main():
     parser.add_argument("--resume-from", default="")
     args = parser.parse_args()
     frame, train_length, test_labels = _read_task(args.task, args.data_source)
-    kwargs = dict(seed=args.seed, seq_len=args.seq_len, batch_size=args.batch_size,
+    kwargs = dict(seed=args.seed, seq_len=args.seq_len, pattern_len=args.pattern_len,
+                  hidden_dim=args.hidden_dim, batch_size=args.batch_size,
                   stage1_epochs=args.stage1_epochs, stage2_epochs=args.stage2_epochs,
-                  patience=args.patience,
+                  patience=args.patience, learning_rate=args.learning_rate,
+                  weight_decay=args.weight_decay, feature_std_floor=args.feature_std_floor,
+                  score_mad_floor=args.score_mad_floor,
+                  calibration_quantile=args.calibration_quantile,
                   device=args.device, cache_chunk_size=args.cache_chunk_size,
                   encoding_batch_size=args.encoding_batch_size, view_dim=args.view_dim,
                   evolution_dim=args.evolution_dim, pattern_dim=args.pattern_dim,

@@ -6,6 +6,22 @@ existing launchers. The probe imports the existing `FourViewEncoder` and
 stage-one `MNRFTrainer` implementation, then writes a separate
 `result/score/MNRF-ViewProbe/...` run directory.
 
+## Prepared task entries
+
+The five manually runnable entries are
+`PSM_script/MNRFViewProbe.sh`, `MSL_script/MNRFViewProbe.sh`,
+`GECCO_script/MNRFViewProbe.sh`, `SMD_script/MNRFViewProbe.sh`, and
+`Genesis_script/MNRFViewProbe.sh` under
+`scripts/multivariate_detection/detect_score/`. They are self-contained,
+resolve the repository root from their own location, run the read-only
+preflight first, and then invoke the MNRF CLI with explicit parameters. They
+expect the caller to run `conda activate catch_env` once; they do not activate
+an environment or alter `CUDA_VISIBLE_DEVICES`. Their default device is the
+inherited logical `cuda:0`, and each run gets a new timestamp/PID output
+directory. See `MNRF_VIEW_PROBE_COMMANDS.md` for the five independent
+commands. These entries are prepared, not executed, and do not claim a
+benchmark result.
+
 Artifacts use schema `mnrf-view-probe-v2`. Each run is bound to the task, raw
 features, normalized time coordinates, entity boundaries, train split, purge
 ranges, continuous segments, endpoint indices, canonical S/E/P/R layout,
