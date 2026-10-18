@@ -124,7 +124,10 @@ internal training range `[train_start, train_stop)`, exported from that run's
 `probe_manifest.json` `source_identity.ranges.train`; it is not a window-row
 union and includes short valid regions that cannot form a training window.
 Strict registration verifies that exact row sequence against the completed
-Probe run. Use separate endpoint files for train, validation, and calibration.
+Probe run and requires the versioned v2 common contract. Use separate endpoint
+files for train, validation, and calibration; an uncontracted run is
+reference-only. The contract freezes the Probe cadence and continuous
+segments, so CATCH does not re-estimate cadence from endpoint coverage.
 
 Generate those frozen files from one validated Probe run and the exact source
 CSV (the exporter is read-only with respect to both inputs):

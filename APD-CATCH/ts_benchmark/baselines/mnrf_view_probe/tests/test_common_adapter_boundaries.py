@@ -5,7 +5,8 @@ import torch
 from torch.utils.data import DataLoader
 
 from scripts.run_mnrf_catch_common import (
-    _WindowDataset, _filter_test_endpoints, _validate_window_boundaries,
+    _WindowDataset, _filter_test_endpoints, _training_intervals_by_boundary,
+    _validate_window_boundaries,
 )
 from scripts.export_mnrf_view_probe_common import _endpoints_for_ranges
 
@@ -95,3 +96,28 @@ def test_common_contract_derives_different_context_endpoints_without_rewriting_r
     assert train[0] == 127 and catch_train[0] == 191
     assert catch_train[-1] == 299
     assert np.all(catch_train >= train[0])
+
+
+def test_frozen_probe_cadence_is_used_when_short_entities_are_not_windows():
+    n, train_length, seq_len = 520, 430, 32
+    ids = [f"short{i}" for i in range(13) for _ in range(10)]
+    ids += ["valid_a"] * 32 + ["slow"] * 100 + ["valid_b"] * 32
+    ids += ["tail"] * (n - len(ids))
+    deltas = np.full(n - 1, 60_000_000_000, dtype=np.int64)
+    for index in range(n - 1):
+        if ids[index] == ids[index + 1] == "slow":
+            deltas[index] = 120_000_000_000
+    times = pd.to_datetime(pd.Timestamp("2026-08-01").value + np.r_[0, np.cumsum(deltas)])
+    frame = pd.DataFrame({"timestamp": times, "entity_id": ids,
+                          "x": np.zeros(n), "y": np.zeros(n)})
+    train_endpoints = np.asarray([161, 293], dtype=np.int64)
+    timestamps = pd.to_datetime(frame["timestamp"], utc=True).view("int64").to_numpy()
+    inferred_from_window_cover = _training_intervals_by_boundary(frame, train_endpoints, seq_len, timestamps)
+    assert inferred_from_window_cover == 120_000_000_000.0
+    intervals = _validate_window_boundaries(
+        frame,
+        {"train": train_endpoints, "validation": np.asarray([325]),
+         "calibration": np.asarray([360]), "test": np.asarray([461])},
+        seq_len, train_length, expected_interval=60_000_000_000.0,
+    )
+    assert intervals["train"].shape == (2, 2)

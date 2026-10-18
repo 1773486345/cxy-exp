@@ -149,11 +149,18 @@ does not alter GPU forward batch size.
 The common exporter keeps the Probe context and endpoint files unchanged.  It
 can derive a separate CATCH endpoint set with `--catch-seq-len` (the formal
 default is 192) from the same frozen raw ranges and continuous segments.  A
-split that is too short for that context is rejected before training; the
-contract records Probe and CATCH lengths, endpoint hashes, and the official
-test boundary.  The CATCH runner consumes `--common-contract` and refuses a
-wrong length or a hand-selected endpoint file.  Different model window
-lengths are therefore a declared protocol property, not an endpoint rewrite.
+split that is too short for that context is rejected before training.  The
+versioned v2 contract records the Probe manifest/source identity, canonical
+time kind, every joint boundary column and value identity, frozen temporal
+rule, raw split ranges, continuous segments, raw training rows, labels, and
+the exact CATCH endpoint hashes.  The CATCH runner consumes
+`--common-contract` and refuses a wrong length, a hand-selected/subsampled
+endpoint file, or a self-consistent but incorrectly derived contract.
+Different model window lengths are therefore a declared protocol property,
+not an endpoint rewrite.  Timestamped CATCH runs consume the Probe-frozen
+training cadence from this contract; cadence is never re-estimated from
+overlapping windows or later test entities, so short entities can contribute
+to raw training identity even when they cannot form a window.
 
 Calibration thresholds are generated and verified with the saved score array's
 dtype and NumPy linear-quantile rule. The evaluator uses the external evidence

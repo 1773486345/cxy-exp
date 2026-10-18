@@ -30,6 +30,9 @@ from ts_benchmark.baselines.mnrf_view_probe.evaluation import (
     validate_common_splits,
 )
 from ts_benchmark.baselines.mnrf_view_probe.catch_common import load_verified_catch_checkpoint
+from ts_benchmark.baselines.mnrf_view_probe.common_contract import (
+    CONTRACT_SCHEMA, expected_contract_endpoints, missing_contract_fields,
+)
 
 
 def _sha256_file(path):
@@ -165,9 +168,12 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
     training = loaded_evidence["training"]
     calibration = loaded_evidence["calibration"]
     for field in ("protocol", "task_name", "run_identity", "data_identity", "time_identity",
-                  "variable_identity", "boundary_columns", "score_protocol", "split_identity",
+                  "time_kind", "test_start", "seq_len", "variable_identity", "boundary_columns",
+                  "score_protocol", "split_identity", "common_contract_path", "common_contract_sha256",
                   "checkpoint_path", "checkpoint_sha256", "normalization_path", "normalization_sha256",
-                  "train_fit_rows_path", "train_fit_rows_sha256"):
+                  "train_fit_rows_path", "train_fit_rows_sha256", "test_scores_path",
+                  "test_scores_sha256", "test_indices_sha256", "test_predictions_sha256",
+                  "test_actual_sha256", "test_count", "test_threshold"):
         if training.get(field) != calibration.get(field):
             return False, f"CATCH-common training/calibration {field} mismatch", None
     normalization = calibration.get("normalization_path")
@@ -181,6 +187,8 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
         return False, "CATCH-common training-row binding is missing or changed", None
     contract_path = calibration.get("common_contract_path")
     contract_hash = calibration.get("common_contract_sha256")
+    if not contract_path or not contract_hash:
+        return False, "CATCH-common frozen common contract is missing", None
     if contract_path or contract_hash:
         if not contract_path or not contract_hash or not Path(contract_path).is_file() or _sha256_file(contract_path) != contract_hash:
             return False, "CATCH-common raw contract is missing or changed", None
@@ -188,12 +196,40 @@ def _common_evidence(manifest_path, probe_path, catch_path, labels_path,
             contract = json.loads(Path(contract_path).read_text(encoding="utf-8"))
         except Exception as error:
             return False, f"CATCH-common raw contract is invalid: {error}", None
-        if contract.get("schema") != "mnrf-view-probe-common-export-v1" or int(contract.get("catch_seq_len", -1)) != int(calibration.get("seq_len", -2)):
+        if contract.get("schema") != CONTRACT_SCHEMA or int(contract.get("catch_seq_len", -1)) != int(calibration.get("seq_len", -2)):
             return False, "CATCH-common contract window configuration differs", None
+        missing = missing_contract_fields(contract)
+        if missing:
+            return False, "CATCH-common contract is missing required fields: " + ", ".join(missing), None
+        probe_manifest = Path(contract["probe_run"]) / "probe_manifest.json"
+        if (not probe_manifest.is_file()
+                or _sha256_file(probe_manifest) != contract["probe_manifest_sha256"]):
+            return False, "CATCH-common Probe manifest binding is missing or changed", None
+        try:
+            source_identity = json.loads(probe_manifest.read_text(encoding="utf-8")).get("source_identity")
+        except Exception as error:
+            return False, f"CATCH-common Probe source identity is invalid: {error}", None
+        if source_identity != contract["probe_source_identity"]:
+            return False, "CATCH-common Probe source identity differs from contract", None
         for name, split_path in zip(("train", "validation", "calibration"), split_paths):
             record = contract.get("catch_splits", {}).get(name, {})
             if Path(record.get("path", "")).resolve() != Path(split_path).resolve() or _sha256_file(split_path) != record.get("sha256"):
                 return False, f"CATCH-common {name} endpoints are not the contract-derived coordinates", None
+            values = strict_integer_indices(np.load(split_path, allow_pickle=False), f"contract {name} endpoints")
+            try:
+                expected = expected_contract_endpoints(contract, name)
+            except Exception as error:
+                return False, f"CATCH-common frozen {name} ranges are invalid: {error}", None
+            if not np.array_equal(values, expected):
+                return False, f"CATCH-common {name} endpoints are not the exact frozen derivation", None
+        test_record = contract.get("catch_test", {})
+        test_path = Path(test_record.get("path", ""))
+        if (not test_path.is_file() or not test_record.get("sha256")
+                or _sha256_file(test_path) != test_record["sha256"]):
+            return False, "CATCH-common test endpoint binding is missing or changed", None
+        if not np.array_equal(strict_integer_indices(np.load(test_path, allow_pickle=False), "contract test endpoints"),
+                              expected_contract_endpoints(contract, "test")):
+            return False, "CATCH-common test endpoints are not the exact frozen derivation", None
     # Downstream threshold decisions consume the exact objects whose external
     # files and embedded copies were verified above.
     manifest["_verified_training_evidence"] = loaded_evidence["training"]
@@ -406,6 +442,8 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
     if split_paths is not None:
         split_arrays = [np.load(item, allow_pickle=False) for item in split_paths]
         split_record = validate_common_splits(*split_arrays, len(labels))
+    if strict_common is True and not common_manifest:
+        raise ValueError("strict CATCH-common evaluation requires a frozen common contract manifest")
     evidence_ok, evidence_reason, evidence = _common_evidence(
         common_manifest, probe_path, catch_path, labels_path, split_paths)
     requested_strict = strict_common

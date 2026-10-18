@@ -514,7 +514,9 @@ class MNRFViewProbe:
     def _save_probe_metadata(self, mode, source_manifest=None):
         payload = {
             "schema": PROBE_SCHEMA, "mode": mode, "artifact_type": ARTIFACT_HEAD,
-            "head_type": None, "stage_status": "source_reused" if source_manifest else "cache_ready",
+            "head_type": "flow" if mode == "flow" else None,
+            "head_status": "in_progress" if mode == "flow" else None,
+            "stage_status": "flow_training" if mode == "flow" else ("source_reused" if source_manifest else "cache_ready"),
             "config": self.config.to_dict(),
             "layout": self.config.layout.to_dict(), "variable_names": list(self.variable_names),
             "temporal_rule": self.temporal_rule,
@@ -530,7 +532,17 @@ class MNRFViewProbe:
             payload["source_cache_sha256"] = source_manifest.get("cache_sha256", {})
             payload["source_endpoint_sha256"] = source_manifest.get("endpoint_sha256", {})
             payload["source_gmm_fit_endpoints_sha256"] = source_manifest.get("gmm_fit_endpoints_sha256")
-        _atomic_json(self.output_dir / "probe_manifest.json", payload)
+        manifest_path = self.output_dir / "probe_manifest.json"
+        # A resumed head already owns immutable bindings (feature statistics,
+        # stage identity, cache hashes, and completion facts).  Merge the
+        # current view instead of recreating a weaker initial manifest.
+        if self.config.resume_from and manifest_path.is_file():
+            existing = json.loads(manifest_path.read_text())
+            for key, value in payload.items():
+                if value is not None or key not in existing:
+                    existing[key] = value
+            payload = existing
+        _atomic_json(manifest_path, payload)
         return payload
 
     def _bind_local_cache_metadata(self, cache, endpoint_paths):
@@ -961,7 +973,13 @@ class MNRFViewProbe:
         # validated before _prepare_dirs or any status/cache write occurs.
         if self.config.mode == "flow":
             stage2_path = self.output_dir / "checkpoints" / "stage2_latest.pt"
-            flow_started = status.get("status") == "flow_training" or (manifest or {}).get("head_type") == "flow"
+            request_stage = (request or {}).get("stage")
+            flow_started = (
+                status.get("status") == "flow_training"
+                or (manifest or {}).get("head_type") == "flow"
+                or (manifest or {}).get("stage_status") == "flow_training"
+                or request_stage == "flow_training"
+            )
             if flow_started and not stage2_path.is_file():
                 raise ValueError("resume rejected: Flow stage has started but stage2_latest.pt is missing")
             if stage2_path.is_file():
@@ -985,20 +1003,58 @@ class MNRFViewProbe:
                         or not isinstance(stage2.get("sampler_rng"), torch.Tensor)
                         or stage2["sampler_rng"].dtype != torch.uint8):
                     raise ValueError("resume rejected: invalid Flow checkpoint phase or RNG contract")
+                expected_shape = (len(self.variable_names), self.config.layout.total_dim)
+                if any((not isinstance(stage2[name], dict)) for name in ("flow", "best_state")):
+                    raise ValueError("resume rejected: Flow checkpoint state payload is invalid")
+                for state_name in ("flow", "best_state"):
+                    if not stage2[state_name] or any(
+                            not torch.is_tensor(value) or not torch.isfinite(value).all()
+                            for value in stage2[state_name].values()):
+                        raise ValueError(f"resume rejected: non-finite Flow {state_name} state")
+                if stage2["sampler_rng"].numel() == 0:
+                    raise ValueError("resume rejected: Flow sampler RNG state is empty")
+                try:
+                    torch.Generator(device="cpu").set_state(stage2["sampler_rng"])
+                except Exception as error:
+                    raise ValueError("resume rejected: Flow sampler RNG state is not loadable") from error
+                rng_state = stage2.get("rng")
+                if (not isinstance(rng_state, dict)
+                        or not isinstance(rng_state.get("torch"), torch.Tensor)
+                        or rng_state["torch"].dtype != torch.uint8
+                        or not isinstance(rng_state.get("numpy"), tuple)
+                        or not isinstance(rng_state.get("python"), tuple)):
+                    raise ValueError("resume rejected: Flow global RNG state is invalid")
+                if (not np.isfinite(float(stage2.get("best", np.inf)))
+                        or isinstance(stage2.get("patience"), bool)
+                        or not isinstance(stage2.get("patience"), int)
+                        or not isinstance(stage2.get("history"), list)):
+                    raise ValueError("resume rejected: Flow best/patience/history state is invalid")
+                try:
+                    trainer_probe = self._make_trainer(len(self.variable_names))
+                    optimizer_probe = torch.optim.AdamW(
+                        trainer_probe.flow.parameters(), lr=self.config.mnrf.learning_rate,
+                        weight_decay=self.config.mnrf.weight_decay,
+                    )
+                    optimizer_probe.load_state_dict(stage2["optimizer"])
+                except Exception as error:
+                    raise ValueError("resume rejected: Flow optimizer state is incompatible") from error
+                declared_identity = (manifest or {}).get("stage2_identity")
+                if declared_identity is not None and stage2.get("stage2_identity") != declared_identity:
+                    raise ValueError("resume rejected: Flow stage2 identity differs from manifest")
                 if stage2["stage_status"] == "completed" and stage2.get("completion_reason") not in {"early_stopping", "epoch_limit"}:
                     raise ValueError("resume rejected: completed Flow checkpoint has no valid completion reason")
-                if not isinstance(stage2.get("flow"), dict) or not isinstance(stage2.get("best_state"), dict):
-                    raise ValueError("resume rejected: Flow/best_state payload is invalid")
-                for state_name, state in (("flow", stage2["flow"]), ("best_state", stage2["best_state"])):
-                    for key, value in state.items():
-                        if not torch.is_tensor(value) or not torch.isfinite(value).all():
-                            raise ValueError(f"resume rejected: non-finite Flow {state_name} tensor {key}")
-                if stage2["stage_status"] == "completed" and status.get("status") != "flow_training":
-                    raise ValueError("resume rejected: completed Flow stage cannot be reactivated")
                 feature_stats_path = self.output_dir / "heads" / "feature_statistics.npz"
                 declared_feature_stats = manifest.get("feature_statistics_sha256")
-                if not declared_feature_stats or not feature_stats_path.is_file() or _sha256_file(feature_stats_path) != declared_feature_stats:
+                if (not declared_feature_stats or not feature_stats_path.is_file()
+                        or _sha256_file(feature_stats_path) != declared_feature_stats):
                     raise ValueError("resume rejected: Flow feature statistics binding is missing or changed")
+                with np.load(feature_stats_path, allow_pickle=False) as stats:
+                    mean = np.asarray(stats["mean"])
+                    scale = np.asarray(stats["scale"])
+                if (mean.shape != expected_shape or scale.shape != expected_shape
+                        or not np.isfinite(mean).all() or not np.isfinite(scale).all()
+                        or np.any(scale <= 0)):
+                    raise ValueError(f"resume rejected: Flow feature statistics shape/value differs; expected {expected_shape}")
         # Validate an explicitly referenced source without creating any target
         # directories or rewriting any target artifact.
         if self.config.source_dir:
@@ -1366,6 +1422,7 @@ class MNRFViewProbe:
                 if tuple(self.config.selected_views) != VALID_VIEWS:
                     raise ValueError("flow mode requires the complete S,E,P,R layout")
                 self._set_run_status("flow_training")
+                self._save_run_request(stage="flow_training")
                 self._fit_flow(cache, labels, test_endpoints)
             else:
                 self._set_run_status("gmm_fitting")
@@ -1408,8 +1465,11 @@ class MNRFViewProbe:
             with np.load(feature_stats_path, allow_pickle=False) as stats:
                 mean = np.asarray(stats["mean"], dtype=np.float32)
                 scale = np.asarray(stats["scale"], dtype=np.float32)
-            if mean.shape != (self.trainer.feature_dim,) or scale.shape != mean.shape or not np.isfinite(mean).all() or not np.isfinite(scale).all() or np.any(scale <= 0):
-                raise ValueError("resume rejected: Flow feature statistics are invalid")
+            expected_shape = (int(cache["train"].shape[1]), int(cache["train"].shape[2]))
+            if (mean.shape != expected_shape or scale.shape != expected_shape
+                    or not np.isfinite(mean).all() or not np.isfinite(scale).all()
+                    or np.any(scale <= 0)):
+                raise ValueError(f"resume rejected: Flow feature statistics are invalid; expected {expected_shape}")
             self.trainer.fixed_feature.mean_ = mean
             self.trainer.fixed_feature.scale_ = scale
         else:
@@ -1426,6 +1486,15 @@ class MNRFViewProbe:
         stage2_identity = _json_hash({"source_identity": self.source_identity,
                                       "feature_fingerprint": self.trainer.fingerprint(),
                                       "layout": self.config.layout.to_dict()})
+        manifest_path = self.output_dir / "probe_manifest.json"
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text())
+            declared_identity = manifest.get("stage2_identity")
+            if self.config.resume_from and declared_identity and declared_identity != stage2_identity:
+                raise ValueError("resume rejected: Flow stage2 identity differs")
+            manifest["stage2_identity"] = stage2_identity
+            manifest["feature_statistics_sha256"] = _sha256_file(feature_stats_path)
+            _atomic_json(manifest_path, manifest)
         self.trainer.stage2(
             cache["train"], cache["validation"], self.output_dir / "checkpoints",
             log_path=self.output_dir / "training.jsonl", resume_id=self._run_identity,

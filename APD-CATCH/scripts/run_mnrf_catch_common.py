@@ -33,6 +33,10 @@ from ts_benchmark.baselines.mnrf_view_probe.evaluation import (
 )
 from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
 from ts_benchmark.baselines.mnrf_view_probe.probe import _all_boundary_ids, _chunked_array_hash, _hash_strings
+from ts_benchmark.baselines.mnrf_view_probe.common_contract import (
+    CONTRACT_SCHEMA, endpoints_for_ranges, expected_contract_endpoints,
+    missing_contract_fields,
+)
 
 
 def _sha256(path):
@@ -99,6 +103,11 @@ def _window_intervals(endpoints, seq_len, length, name):
     return intervals[np.argsort(intervals[:, 0], kind="stable")]
 
 
+def _endpoints_for_ranges(segment_ranges, lower, upper, seq_len):
+    """Derive the complete, non-subsampled endpoint sequence from frozen segments."""
+    return endpoints_for_ranges(segment_ranges, lower, upper, seq_len)
+
+
 def _intervals_overlap(left, right):
     i = j = 0
     while i < len(left) and j < len(right):
@@ -130,7 +139,7 @@ def _boundary_keys(frame):
     return keys, columns
 
 
-def _training_intervals_by_boundary(frame, endpoints, seq_len, timestamps):
+def _training_intervals_by_boundary(frame, endpoints, seq_len, timestamps, expected_interval=None):
     """Return one frozen training cadence from raw adjacent rows.
 
     Cadence is a property of the frozen training protocol, not of each
@@ -139,6 +148,11 @@ def _training_intervals_by_boundary(frame, endpoints, seq_len, timestamps):
     temporary difference arrays.
     """
     keys, _ = _boundary_keys(frame)
+    if expected_interval is not None:
+        cadence = float(expected_interval)
+        if not np.isfinite(cadence) or cadence <= 0:
+            raise ValueError("frozen temporal rule must contain a positive expected interval")
+        return cadence
     endpoints = strict_integer_indices(endpoints, "training endpoints", upper_bound=len(frame))
     if len(endpoints) == 0:
         return None
@@ -157,7 +171,7 @@ def _training_intervals_by_boundary(frame, endpoints, seq_len, timestamps):
     return float(np.median(np.asarray(deltas, dtype=np.int64)))
 
 
-def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start):
+def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start, expected_interval=None):
     """Reject windows that overlap splits, entities, or unexplained time gaps."""
     length = len(frame)
     intervals = {name: _window_intervals(endpoints, seq_len, length, name)
@@ -190,7 +204,10 @@ def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start):
         for left, right in zip(bounds[:-1], bounds[1:]):
             if right - left > 1 and np.any(np.diff(timestamps[left:right]) <= 0):
                 raise ValueError("timestamps duplicate or reverse within an entity/session segment")
-        cadence = _training_intervals_by_boundary(frame, endpoints_by_name["train"], seq_len, timestamps)
+        cadence = _training_intervals_by_boundary(
+            frame, endpoints_by_name["train"], seq_len, timestamps,
+            expected_interval=expected_interval,
+        )
         if cadence is None:
             raise ValueError("cannot infer a positive training sampling interval")
         # Check each actual window, never the union of disjoint windows.  A
@@ -209,7 +226,7 @@ def _validate_window_boundaries(frame, endpoints_by_name, seq_len, test_start):
     return intervals
 
 
-def _filter_test_endpoints(frame, endpoints, seq_len, train_endpoints):
+def _filter_test_endpoints(frame, endpoints, seq_len, train_endpoints, expected_interval=None):
     """Keep only complete test windows; gaps create cold-start exclusions."""
     endpoints = np.asarray(endpoints, dtype=np.int64)
     timestamp_column = next((column for column in frame.columns
@@ -218,7 +235,10 @@ def _filter_test_endpoints(frame, endpoints, seq_len, train_endpoints):
     cadence = None
     if timestamp_column is not None:
         timestamps = pd.to_datetime(frame[timestamp_column], errors="raise", utc=True).view("int64").to_numpy()
-        cadence = _training_intervals_by_boundary(frame, train_endpoints, seq_len, timestamps)
+        cadence = _training_intervals_by_boundary(
+            frame, train_endpoints, seq_len, timestamps,
+            expected_interval=expected_interval,
+        )
         if cadence is None:
             raise ValueError("cannot infer a positive training sampling interval")
         boundary_keys, _ = _boundary_keys(frame)
@@ -251,9 +271,6 @@ def run(args):
     output = Path(args.output).resolve()
     if output.exists():
         raise FileExistsError(f"output already exists: {output}")
-    output.mkdir(parents=True)
-    for name in ("checkpoints", "results", "evidence"):
-        (output / name).mkdir()
     frame = pd.read_csv(args.data_csv)
     label_column = next((column for column in frame.columns if str(column).lower() == "label"), None)
     if label_column is None:
@@ -270,8 +287,23 @@ def run(args):
     if contract_path:
         contract_path = str(Path(contract_path).resolve())
         contract = json.loads(Path(contract_path).read_text(encoding="utf-8"))
-        if contract.get("schema") != "mnrf-view-probe-common-export-v1" or contract.get("status") != "complete":
+        if contract.get("schema") != CONTRACT_SCHEMA or contract.get("status") != "complete":
             raise ValueError("common contract is incomplete or unsupported")
+        missing_contract = missing_contract_fields(contract)
+        if missing_contract:
+            raise ValueError("common contract is missing required fields: " + ", ".join(missing_contract))
+        source_identity = contract["probe_source_identity"]
+        probe_manifest_path = Path(contract["probe_run"]) / "probe_manifest.json"
+        if (not probe_manifest_path.is_file()
+                or contract.get("probe_manifest_sha256") != _sha256(probe_manifest_path)):
+            raise ValueError("common contract Probe manifest identity differs")
+        probe_manifest = json.loads(probe_manifest_path.read_text(encoding="utf-8"))
+        if probe_manifest.get("source_identity") != source_identity:
+            raise ValueError("common contract Probe source identity differs from its manifest")
+        if source_identity.get("task_name") != contract.get("task_name"):
+            raise ValueError("common contract task identity differs")
+        if source_identity.get("temporal_rule") != contract.get("temporal_rule"):
+            raise ValueError("common contract temporal rule is not sourced from Probe")
         expected_len = int(contract.get("catch_seq_len", args.seq_len))
         if expected_len != int(args.seq_len):
             raise ValueError(f"CATCH seq_len={args.seq_len} differs from common contract catch_seq_len={expected_len}")
@@ -290,9 +322,36 @@ def run(args):
         if not test_record.get("sha256") or _sha256(test_record["path"]) != test_record["sha256"]:
             raise ValueError("common contract test endpoint hash differs")
         contract_test_indices = np.load(test_record["path"], allow_pickle=False)
+        expected_by_name = {}
+        for name in ("train", "validation", "calibration"):
+            expected_by_name[name] = expected_contract_endpoints(contract, name, args.seq_len)
+            actual = np.load(catch_records[name]["path"], allow_pickle=False)
+            if not np.array_equal(strict_integer_indices(actual, f"contract {name} endpoints"), expected_by_name[name]):
+                raise ValueError(f"common contract {name} endpoints are not the exact frozen derivation")
+        expected_test = expected_contract_endpoints(contract, "test", args.seq_len)
+        if not np.array_equal(strict_integer_indices(contract_test_indices, "contract test endpoints"), expected_test):
+            raise ValueError("common contract test endpoints are not the exact frozen derivation")
+        train_rows_record = contract.get("train_rows")
+        if (not isinstance(train_rows_record, dict) or not train_rows_record.get("path")
+                or not train_rows_record.get("sha256") or not Path(train_rows_record["path"]).is_file()
+                or _sha256(train_rows_record["path"]) != train_rows_record["sha256"]):
+            raise ValueError("common contract raw training rows binding is missing or changed")
+        if Path(args.train_rows).resolve() != Path(train_rows_record["path"]).resolve():
+            raise ValueError("raw training rows path is not the one frozen by the common contract")
+        fit_rows_candidate = np.load(train_rows_record["path"], allow_pickle=False)
+        expected_rows = np.arange(*map(int, contract.get("raw_training_range", ())), dtype=np.int64)
+        if not np.array_equal(strict_integer_indices(fit_rows_candidate, "contract raw training rows"), expected_rows):
+            raise ValueError("common contract raw training rows differ from Probe frozen training rows")
+        labels_record = contract.get("labels")
+        if (not isinstance(labels_record, dict) or not labels_record.get("path")
+                or not labels_record.get("sha256") or not Path(labels_record["path"]).is_file()
+                or _sha256(labels_record["path"]) != labels_record["sha256"]):
+            raise ValueError("common contract labels binding is missing or changed")
     else:
         contract_test_indices = None
     test_start = int(contract.get("train_length")) if contract is not None else int(args.test_start)
+    if contract is not None and int(contract.get("input_length", -1)) != len(values):
+        raise ValueError("common contract input length differs")
     if contract is not None and getattr(args, "test_start", None) is not None and int(args.test_start) != test_start:
         raise ValueError("test_start differs from the common contract")
     if test_start < 0:
@@ -303,6 +362,9 @@ def run(args):
         if _chunked_array_hash(values) != contract.get("data_identity"):
             raise ValueError("common contract feature data identity differs")
         time_index = MNRFLiteV2._time_index(frame)
+        if (time_index.kind != contract.get("time_kind")
+                or time_index.source_timezone != contract.get("source_timezone")):
+            raise ValueError("common contract time kind/timezone differs")
         if _chunked_array_hash(time_index.values_ns) != contract.get("time_identity"):
             raise ValueError("common contract time identity differs")
         boundary_ids, boundary_columns = _all_boundary_ids(frame)
@@ -330,7 +392,13 @@ def run(args):
         raise ValueError("test interval has no complete windows")
     endpoint_sets = {"train": train_endpoints, "validation": validation_endpoints,
                      "calibration": calibration_endpoints, "test": test_indices}
-    boundary_rows = _validate_window_boundaries(frame, endpoint_sets, args.seq_len, test_start)
+    expected_interval = None
+    if contract is not None:
+        expected_interval = contract.get("temporal_rule", {}).get("expected_interval_ns")
+    boundary_rows = _validate_window_boundaries(
+        frame, endpoint_sets, args.seq_len, test_start,
+        expected_interval=expected_interval,
+    )
     if args.train_rows:
         fit_rows = strict_integer_indices(np.load(args.train_rows, allow_pickle=False), "raw training rows", upper_bound=len(values))
         if len(fit_rows) == 0:
@@ -343,6 +411,9 @@ def run(args):
     else:
         raise ValueError("--train-rows is required to distinguish raw training rows from window endpoints")
     scaler = StandardScaler().fit(values[fit_rows])
+    output.mkdir(parents=True)
+    for name in ("checkpoints", "results", "evidence"):
+        (output / name).mkdir()
     normalized = scaler.transform(values).astype(np.float32)
     fit_rows_path = output / "evidence" / "train_fit_rows.npy"
     np.save(fit_rows_path, fit_rows)

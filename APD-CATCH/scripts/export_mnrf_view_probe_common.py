@@ -18,6 +18,7 @@ from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
 from ts_benchmark.baselines.mnrf_view_probe.probe import (
     _all_boundary_ids, _chunked_array_hash, _hash_strings, load_probe,
 )
+from ts_benchmark.baselines.mnrf_view_probe.common_contract import endpoints_for_ranges
 
 
 def _sha256(path):
@@ -29,14 +30,7 @@ def _sha256(path):
 
 
 def _endpoints_for_ranges(segment_ranges, lower, upper, seq_len):
-    result = []
-    for left, right in segment_ranges:
-        start = max(int(left), int(lower))
-        stop = min(int(right), int(upper))
-        first = start + int(seq_len) - 1
-        if first < stop:
-            result.extend(range(first, stop))
-    return np.asarray(result, dtype=np.int64)
+    return endpoints_for_ranges(segment_ranges, lower, upper, seq_len)
 
 
 def export(probe_run, data_csv, output_dir, catch_seq_len=None):
@@ -115,16 +109,25 @@ def export(probe_run, data_csv, output_dir, catch_seq_len=None):
     labels_path = root / "labels.npy"
     np.save(labels_path, labels)
     contract = {
-        "schema": "mnrf-view-probe-common-export-v1", "status": "complete",
+        "schema": "mnrf-view-probe-common-export-v2", "status": "complete",
         "task_name": source.get("task_name"), "probe_run": str(run),
         "probe_manifest_sha256": _sha256(run / "probe_manifest.json"),
+        "probe_source_identity": source,
         "data_identity": source.get("feature_data_sha256"),
         "time_identity": source.get("time_index", {}).get("values_sha256"),
+        "time_kind": source.get("time_index", {}).get("kind"),
+        "source_timezone": source.get("time_index", {}).get("source_timezone"),
+        "boundary_columns": list(source.get("boundary_columns", [])),
         "boundary_identity": source.get("boundary_values_sha256"),
         "variable_names": source.get("variable_names"), "seq_len": int(source["seq_len"]),
         "catch_seq_len": catch_seq_len,
         "train_length": int(source["train_length"]),
+        "input_length": int(source.get("input_length", len(frame))),
         "raw_training_range": [int(start), int(stop)],
+        "ranges": source.get("ranges"),
+        "segment_ranges": source.get("segment_ranges"),
+        "test_segments": source.get("test_segments"),
+        "temporal_rule": source.get("temporal_rule"),
         "splits": records, "catch_splits": catch_records,
         "catch_test": {"path": str(catch_test_path), "sha256": _sha256(catch_test_path), "count": int(len(catch_test))},
         "train_rows": {"path": str(rows_path), "sha256": _sha256(rows_path), "count": int(len(raw_rows))},

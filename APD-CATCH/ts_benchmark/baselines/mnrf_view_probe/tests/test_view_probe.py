@@ -11,6 +11,7 @@ from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, ViewProbeConfi
 from ts_benchmark.baselines.mnrf_view_probe.strategy import IndexedViewProbeStrategy
 from ts_benchmark.baselines.mnrf_view_probe.probe import _select_stratified
 from ts_benchmark.models.model_loader import get_models
+from ts_benchmark.baselines.mnrf_lite_v2.training import MNRFTrainer
 
 
 def test_probe_is_loadable_through_benchmark_model_factory():
@@ -76,6 +77,80 @@ def test_completed_stage1_resume_is_read_only_with_real_best_checkpoint(tmp_path
     hashes_after = {name: hashlib.sha256((run / name).read_bytes()).hexdigest() for name in names_after}
     assert names_after == names_before
     assert hashes_after == hashes_before
+
+
+def test_flow_feature_statistics_shape_and_completed_stage2_resume_only_finishes(tmp_path, monkeypatch):
+    rng = np.random.default_rng(904)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("x", "y"),
+                         index=pd.date_range("2026-04-15", periods=n, freq="min"))
+    frame["label"] = np.r_[np.zeros(train_length, dtype=np.int64), np.zeros(n - train_length, dtype=np.int64)]
+    source_dir = tmp_path / "flow-source"
+    MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                  stage2_epochs=1, patience=1, device="cpu", output_dir=str(source_dir),
+                  mode="stage1").fit(frame, train_length)
+    flow_dir = tmp_path / "flow"
+    kwargs = dict(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                  stage2_epochs=1, patience=1, device="cpu", output_dir=str(flow_dir),
+                  mode="flow", source_dir=str(source_dir))
+    original_calibrate = MNRFTrainer.calibrate
+
+    def fail_after_stage2(self, *args, **kwargs):
+        raise RuntimeError("controlled post-stage2 interruption")
+
+    monkeypatch.setattr(MNRFTrainer, "calibrate", fail_after_stage2)
+    with pytest.raises(RuntimeError, match="controlled post-stage2"):
+        MNRFViewProbe(**kwargs).fit(frame, train_length)
+    checkpoint_path = flow_dir / "checkpoints" / "stage2_latest.pt"
+    checkpoint_before = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert checkpoint_before["stage_status"] == "completed"
+    with np.load(flow_dir / "heads" / "feature_statistics.npz") as stats:
+        assert stats["mean"].shape == (2, 25)
+        assert stats["scale"].shape == (2, 25)
+    monkeypatch.setattr(MNRFTrainer, "calibrate", original_calibrate)
+    restored = MNRFViewProbe(**dict(kwargs, resume_from=str(flow_dir)))
+    restored.fit(frame, train_length)
+    checkpoint_after = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert checkpoint_after["completed_steps"] == checkpoint_before["completed_steps"]
+    assert checkpoint_after["next_epoch"] == checkpoint_before["next_epoch"]
+    assert json.loads((flow_dir / "run_status.json").read_text())["status"] == "complete"
+
+
+def test_flow_real_epoch_checkpoint_resumes_from_next_epoch(tmp_path, monkeypatch):
+    rng = np.random.default_rng(905)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("x", "y"),
+                         index=pd.date_range("2026-04-20", periods=n, freq="min"))
+    frame["label"] = 0
+    source_dir = tmp_path / "source"
+    MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                  stage2_epochs=1, patience=1, device="cpu", output_dir=str(source_dir),
+                  mode="stage1").fit(frame, train_length)
+    flow_dir = tmp_path / "flow"
+    kwargs = dict(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                  stage2_epochs=3, patience=3, device="cpu", output_dir=str(flow_dir),
+                  mode="flow", source_dir=str(source_dir))
+    original_validation = MNRFTrainer._stage2_validation
+    calls = {"count": 0}
+
+    def interrupt_after_first_checkpoint(self, features):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("controlled epoch-boundary interruption")
+        return original_validation(self, features)
+
+    monkeypatch.setattr(MNRFTrainer, "_stage2_validation", interrupt_after_first_checkpoint)
+    with pytest.raises(RuntimeError, match="epoch-boundary"):
+        MNRFViewProbe(**kwargs).fit(frame, train_length)
+    checkpoint_path = flow_dir / "checkpoints" / "stage2_latest.pt"
+    interrupted = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert interrupted["stage_status"] == "in_progress"
+    assert interrupted["next_epoch"] == 1
+    monkeypatch.setattr(MNRFTrainer, "_stage2_validation", original_validation)
+    MNRFViewProbe(**dict(kwargs, resume_from=str(flow_dir))).fit(frame, train_length)
+    resumed = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert resumed["completed_steps"] > interrupted["completed_steps"]
+    assert resumed["next_epoch"] >= 2
 
 
 def test_view_selection_uses_canonical_layout_and_rejects_invalid_views():

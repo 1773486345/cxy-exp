@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 
 from ts_benchmark.baselines.mnrf_view_probe.evaluation import calibrated_quantile, validate_common_splits
 from ts_benchmark.baselines.mnrf_view_probe.catch_common import load_verified_catch_checkpoint
+from ts_benchmark.baselines.mnrf_view_probe.common_contract import CONTRACT_SCHEMA, missing_contract_fields
 
 
 def _sha256(path):
@@ -113,6 +114,21 @@ def _load_execution_evidence(path, kind, task_name, split_paths):
             raise ValueError("calibration evidence quantile or scores are invalid")
         if not np.isclose(float(threshold), calibrated_quantile(calibration_values, quantile), rtol=0, atol=1e-12):
             raise ValueError("calibration threshold does not reproduce from calibration scores")
+    contract_path = evidence.get("common_contract_path")
+    contract_hash = evidence.get("common_contract_sha256")
+    if not contract_path or not contract_hash or not Path(contract_path).is_file():
+        raise ValueError(f"{kind} evidence is missing the frozen common contract")
+    if _sha256(contract_path) != contract_hash:
+        raise ValueError(f"{kind} evidence common contract hash mismatch")
+    try:
+        contract = json.loads(Path(contract_path).read_text(encoding="utf-8"))
+    except Exception as error:
+        raise ValueError(f"{kind} evidence common contract is invalid: {error}") from error
+    if contract.get("schema") != CONTRACT_SCHEMA or contract.get("status") != "complete":
+        raise ValueError(f"{kind} evidence common contract is incomplete or unsupported")
+    missing_contract = missing_contract_fields(contract)
+    if missing_contract:
+        raise ValueError(f"{kind} evidence common contract is missing fields: {missing_contract}")
     for split_name, split_path in zip(("train", "validation", "calibration"), split_paths):
         key = f"{split_name}_indices_sha256"
         if key not in evidence:
@@ -193,9 +209,12 @@ def register(args):
     if not np.isclose(float(np.asarray(catch_threshold)), float(calibration_evidence["threshold"]), rtol=0, atol=1e-12):
         raise ValueError("CATCH score threshold does not match its calibration evidence")
     for field in ("protocol", "task_name", "run_identity", "data_identity", "split_identity",
-                  "time_identity", "variable_identity", "boundary_columns", "score_protocol",
+                  "time_identity", "time_kind", "test_start", "seq_len", "variable_identity",
+                  "boundary_columns", "score_protocol", "common_contract_path", "common_contract_sha256",
                   "checkpoint_path", "checkpoint_sha256", "normalization_path", "normalization_sha256",
-                  "train_fit_rows_path", "train_fit_rows_sha256"):
+                  "train_fit_rows_path", "train_fit_rows_sha256", "test_scores_path",
+                  "test_scores_sha256", "test_indices_sha256", "test_predictions_sha256",
+                  "test_actual_sha256", "test_count", "test_threshold"):
         if training_evidence.get(field) != calibration_evidence.get(field):
             raise ValueError(f"training/calibration evidence {field} mismatch")
     manifest = {
