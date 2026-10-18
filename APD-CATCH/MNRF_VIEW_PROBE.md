@@ -155,6 +155,18 @@ available CUDA RNG states into private objects. It preserves the caller's RNG
 state while constructing the validation model, so a rejected check cannot
 change the subsequent run.
 
+Flow manifests distinguish the raw input scaler from the encoded-feature
+scaler. `input_statistics.npz` is bound by `raw_input_statistics_sha256`,
+while `heads/feature_statistics.npz` is bound by
+`feature_statistics_sha256`. Older Flow artifacts from the release that wrote
+the feature hash under `input_statistics_sha256` are accepted only when that
+legacy value exactly matches the feature-statistics file and an independent
+raw-input binding is also present and valid; the loader never re-authenticates
+an altered file by writing a new digest. A completed Flow checkpoint that was
+interrupted after scoring therefore resumes only calibration/result
+finalization, with zero additional optimizer steps. A validated result bundle
+with cleanup failure is handled by `organize_mnrf_view_probe.py` only.
+
 `IndexedViewProbeStrategy` preserves timestamp indices. Timestamp gaps and
 entity/session boundaries are hard window boundaries; row-order data without a
 real timestamp is explicitly recorded as the row-order protocol. It never
@@ -240,6 +252,15 @@ is flushed incrementally and includes stage/cache/GMM/calibration/scoring
 progress, stderr, warnings, and tracebacks; a rejected resume keeps its
 preflight log outside the target run without modifying that run. SIGINT and
 SIGTERM return nonzero and preserve the recovery tree.
+
+Stage-one and Flow stage-two now also emit intra-epoch events at real completed
+optimizer-step boundaries. Each `*_batch` event records `epoch`,
+`epoch_batch`, `total_batches`, cumulative `completed_steps`/
+`optimizer_steps`, the already-computed train NLL, seconds per step, and an
+epoch ETA. The first and last batch and either the step or elapsed-time
+interval are logged without extra forward/backward work. Epoch-start events and
+the checkpoint's next epoch remain authoritative after recovery; a failed
+optimizer step does not produce a completion event.
 
 `artifact_policy=results` describes the requested final retention policy. An
 interrupted Stage 1, GMM, or Flow run remains resumable while its recovery

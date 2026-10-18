@@ -144,6 +144,29 @@ def test_summary_isolates_corrupt_gmm_status_from_valid_runs(tmp_path, monkeypat
     broken_reason = frame.loc[frame["task"] == "broken", "validation_reason"].iloc[0]
     assert "gmm_status.json" in broken_reason
 
+
+def test_summary_isolates_nested_manifest_shape_errors(tmp_path):
+    valid = _bundle(tmp_path / "valid")
+    bad_values = (
+        ("layout", []),
+        ("selected_views", 3),
+        ("retention_after", []),
+        ("config", []),
+    )
+    for index, (field, value) in enumerate(bad_values):
+        run = tmp_path / f"bad-{index}"
+        run.mkdir(parents=True)
+        (run / "probe_manifest.json").write_text(json.dumps({"artifact_type": probe_module.ARTIFACT_RESULTS,
+                                                               "artifact_policy": "results", field: value}))
+        (run / "run_status.json").write_text(json.dumps({"status": "complete"}))
+    from scripts.summarize_mnrf_view_probe import collect
+    frame = collect(tmp_path)
+    assert any(row == str(valid) and status in {"results_valid", "results_valid_cleanup_failed"}
+               for row, status in zip(frame["run"], frame["validation_status"]))
+    invalid = frame[frame["validation_status"] == "invalid"]
+    assert len(invalid) == len(bad_values)
+    assert all("probe_manifest.json:" in reason for reason in invalid["validation_reason"])
+
     run = _bundle(tmp_path / "counts")
     metrics_path = run / "results" / "metrics.json"
     metrics = json.loads(metrics_path.read_text())

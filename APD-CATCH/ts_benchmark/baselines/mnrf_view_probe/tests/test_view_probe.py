@@ -24,6 +24,27 @@ def test_probe_is_loadable_through_benchmark_model_factory():
     assert factories[0]().model_name == "MNRFViewProbe"
 
 
+def test_progress_events_follow_real_stage1_optimizer_steps(tmp_path):
+    rng = np.random.default_rng(20261019)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("x", "y"),
+                         index=pd.date_range("2026-01-01", periods=n, freq="min"))
+    frame["label"] = np.r_[np.zeros(train_length, dtype=np.int64), np.arange(n - train_length) % 2]
+    probe = MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=32, stage1_epochs=1,
+                          stage2_epochs=1, patience=1, device="cpu", output_dir=str(tmp_path / "run"),
+                          mode="stage1", log_every_steps=2, log_every_seconds=30)
+    events = []
+    probe._log_event = lambda event, **fields: events.append((event, fields))
+    probe.fit(frame, train_length)
+    progress = [fields for event, fields in events if event == "stage1_batch"]
+    assert [item["completed_steps"] for item in progress] == [1, 2, 4, 6, 8, 9]
+    assert all(item["completed_steps"] == item["optimizer_steps"] for item in progress)
+    checkpoint = torch.load(tmp_path / "run" / "checkpoints" / "stage1_latest.pt",
+                            map_location="cpu", weights_only=False)
+    assert checkpoint["completed_steps"] == 9
+    assert progress[-1]["epoch_batch"] == progress[-1]["total_batches"] == 9
+
+
 def test_auto_device_gmm_can_be_loaded_and_validated_on_cpu(tmp_path, monkeypatch):
     from scripts.validate_mnrf_view_probe import validate
     from scripts.summarize_mnrf_view_probe import collect
@@ -108,6 +129,14 @@ def test_flow_feature_statistics_shape_and_completed_stage2_resume_only_finishes
     with np.load(flow_dir / "heads" / "feature_statistics.npz") as stats:
         assert stats["mean"].shape == (2, 25)
         assert stats["scale"].shape == (2, 25)
+    # Older Flow manifests stored the encoded-feature hash in the legacy
+    # input_statistics field.  Keep that format loadable only with the
+    # independent raw-input binding still present.
+    manifest_path = flow_dir / "probe_manifest.json"
+    legacy_manifest = json.loads(manifest_path.read_text())
+    legacy_manifest["input_statistics_sha256"] = legacy_manifest["feature_statistics_sha256"]
+    legacy_manifest.pop("feature_statistics_sha256")
+    manifest_path.write_text(json.dumps(legacy_manifest))
     monkeypatch.setattr(MNRFTrainer, "calibrate", original_calibrate)
     restored = MNRFViewProbe(**dict(kwargs, resume_from=str(flow_dir)))
     restored.fit(frame, train_length)

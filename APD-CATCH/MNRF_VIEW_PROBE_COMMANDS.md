@@ -32,6 +32,21 @@ After scoring, validation and cleanup are separate; a cleanup error is
 reported as `results_valid_cleanup_failed` and can be retried with
 `python scripts/organize_mnrf_view_probe.py <RUN_DIR>`.
 
+Flow recovery keeps raw and encoded-feature statistics separate:
+`input_statistics.npz`/`raw_input_statistics_sha256` describe the input
+standardization, and `heads/feature_statistics.npz`/
+`feature_statistics_sha256` describe the Flow feature standardization. A
+legacy Flow manifest using `input_statistics_sha256` for the latter is accepted
+only with an independently verified raw-input hash. A completed checkpoint
+resumed after scoring performs no new optimizer steps; it only finishes
+calibration, validation, and result organization.
+
+Training logs are flushed at epoch starts and at completed optimizer-step
+boundaries. Stage-one and Flow stage-two batch events include the epoch and
+batch position, total and cumulative optimizer steps, NLL, speed, and ETA.
+The configured step/time intervals control observation frequency only and do
+not alter numerical training or recovery state.
+
 ## Task commands
 
 ```bash

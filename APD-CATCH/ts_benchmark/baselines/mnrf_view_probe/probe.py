@@ -14,6 +14,7 @@ import pickle
 import platform
 import random
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -621,20 +622,86 @@ class MNRFViewProbe:
         return trainer
 
     def _stage1_with_progress(self, normalized):
-        """Run the protected trainer without inventing pre-step progress.
-
-        The shared trainer writes its epoch record only after ``optimizer.step``
-        returns and persists ``completed_steps`` in the same checkpoint.  An
-        adapter-side wrapper around ``_pretrain_batch`` cannot observe that
-        boundary and previously reported forward-call counts as optimizer
-        steps, so progress is intentionally delegated to the authoritative
-        trainer record.
-        """
-        return self.trainer.stage1(
+        return self._run_trainer_with_progress(
+            "stage1", self.trainer.stage1,
             normalized, self.ranges["train"], self.ranges["validation"],
             self.output_dir / "checkpoints", self.segments,
             self.output_dir / "training.jsonl", self._run_identity,
         )
+
+    def _run_trainer_with_progress(self, stage, function, *args, **kwargs):
+        """Observe completed trainer batches without changing the algorithm.
+
+        The protected trainer owns optimizer construction, RNG, checkpointing,
+        and all numerical operations.  A scoped Python line tracer observes
+        the local ``completed_steps`` only after the increment following a
+        successful ``optimizer.step``.  It never wraps Torch, adds a forward,
+        or changes the trainer's control flow; it is restored immediately on
+        return.  Epoch records/checkpoints remain authoritative for recovery.
+        """
+        code = function.__code__
+        loss_name = "task_losses" if stage == "stage1" else "losses"
+        state = {"last_steps": None, "last_batch": 0, "last_epoch": None,
+                 "last_logged": time.perf_counter(), "started": time.perf_counter(),
+                 "new_steps": 0}
+        previous_trace = sys.gettrace()
+
+        def local_trace(frame, event, _arg):
+            if event == "line":
+                local = frame.f_locals
+                epoch = local.get("epoch")
+                losses = local.get(loss_name)
+                completed = local.get("completed_steps")
+                if isinstance(epoch, int) and isinstance(losses, list):
+                    epoch_number = epoch + 1
+                    if state["last_epoch"] != epoch_number and len(losses) == 0:
+                        self._log_event(f"{stage}_epoch_start", epoch=epoch_number,
+                                        completed_steps=int(completed or 0))
+                        state["last_epoch"] = epoch_number
+                        state["last_batch"] = 0
+                    if isinstance(completed, int):
+                        if state["last_steps"] is None:
+                            state["last_steps"] = completed
+                        if completed > state["last_steps"] and len(losses) > state["last_batch"]:
+                            batch = len(losses)
+                            if stage == "stage1":
+                                total_batches = max(1, len(local.get("train_loader", ())))
+                            else:
+                                indices = local.get("indices")
+                                batch_size = int(self.config.batch_size)
+                                total_batches = max(1, int(math.ceil(len(indices) / float(batch_size))))
+                            now = time.perf_counter()
+                            elapsed = max(now - state["started"], 1e-12)
+                            epoch_start = local.get("epoch_start", now)
+                            epoch_elapsed = max(now - epoch_start, 1e-12)
+                            steps_this_run = state["new_steps"] + 1
+                            due = (batch == 1 or batch == total_batches or
+                                   completed % max(1, self.config.log_every_steps) == 0 or
+                                   now - state["last_logged"] >= self.config.log_every_seconds)
+                            if due:
+                                rate = batch / epoch_elapsed
+                                self._log_event(f"{stage}_batch", epoch=epoch_number,
+                                                epoch_batch=batch, total_batches=total_batches,
+                                                completed_steps=int(completed),
+                                                optimizer_steps=int(completed),
+                                                train_nll=float(losses[-1]),
+                                                seconds_per_step=epoch_elapsed / batch,
+                                                epoch_eta_seconds=(total_batches - batch) / max(rate, 1e-12),
+                                                elapsed_seconds=elapsed)
+                                state["last_logged"] = now
+                            state["last_steps"] = completed
+                            state["last_batch"] = batch
+                            state["new_steps"] = steps_this_run
+            return local_trace
+
+        def global_trace(frame, event, arg):
+            return local_trace if frame.f_code is code else None
+
+        sys.settrace(global_trace)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            sys.settrace(previous_trace)
 
     def _normalized_memmap(self, values):
         started = time.perf_counter()
@@ -1416,8 +1483,11 @@ class MNRFViewProbe:
                     raise ValueError("resume rejected: completed Flow checkpoint has no valid completion reason")
                 feature_stats_path = self.output_dir / "heads" / "feature_statistics.npz"
                 declared_feature_stats = manifest.get("feature_statistics_sha256")
-                if (not declared_feature_stats or not feature_stats_path.is_file()
-                        or _sha256_file(feature_stats_path) != declared_feature_stats):
+                legacy_feature_stats = manifest.get("input_statistics_sha256")
+                feature_hash = _sha256_file(feature_stats_path) if feature_stats_path.is_file() else None
+                if (not feature_hash or
+                        (declared_feature_stats is not None and feature_hash != declared_feature_stats) or
+                        (declared_feature_stats is None and legacy_feature_stats != feature_hash)):
                     raise ValueError("resume rejected: Flow feature statistics binding is missing or changed")
                 with np.load(feature_stats_path, allow_pickle=False) as stats:
                     mean = np.asarray(stats["mean"])
@@ -1460,8 +1530,24 @@ class MNRFViewProbe:
                 raise ValueError("resume rejected: normalized cache hash differs")
             input_stats_path = self.output_dir / "input_statistics.npz"
             declared_input_stats = manifest.get("input_statistics_sha256")
-            if declared_input_stats is not None and (not input_stats_path.is_file() or _sha256_file(input_stats_path) != declared_input_stats):
-                raise ValueError("resume rejected: input statistics hash differs")
+            # Releases before the separate raw/feature fields stored the Flow
+            # feature-statistics hash under ``input_statistics_sha256``.  A
+            # legacy Flow artifact is accepted only when that value exactly
+            # matches feature_statistics.npz and the independent raw binding
+            # below still matches input_statistics.npz.
+            legacy_flow_feature_binding = (
+                self.config.mode == "flow" and declared_input_stats is not None
+                and (self.output_dir / "heads" / "feature_statistics.npz").is_file()
+                and _sha256_file(self.output_dir / "heads" / "feature_statistics.npz") == declared_input_stats
+            )
+            if declared_input_stats is not None and not legacy_flow_feature_binding:
+                if (not input_stats_path.is_file() or _sha256_file(input_stats_path) != declared_input_stats):
+                    raise ValueError("resume rejected: input statistics hash differs")
+            if self.config.mode == "flow":
+                declared_raw_input = manifest.get("raw_input_statistics_sha256")
+                if (not declared_raw_input or not input_stats_path.is_file()
+                        or _sha256_file(input_stats_path) != declared_raw_input):
+                    raise ValueError("resume rejected: Flow raw input statistics binding is missing or changed")
             feature_stats_path = self.output_dir / "heads" / "feature_statistics.npz"
             declared_feature_stats = manifest.get("feature_statistics_sha256")
             if declared_feature_stats is not None and (not feature_stats_path.is_file() or _sha256_file(feature_stats_path) != declared_feature_stats):
@@ -1913,7 +1999,8 @@ class MNRFViewProbe:
             manifest["stage2_identity"] = stage2_identity
             manifest["feature_statistics_sha256"] = _sha256_file(feature_stats_path)
             _atomic_json(manifest_path, manifest)
-        self.trainer.stage2(
+        self._run_trainer_with_progress(
+            "stage2", self.trainer.stage2,
             cache["train"], cache["validation"], self.output_dir / "checkpoints",
             log_path=self.output_dir / "training.jsonl", resume_id=self._run_identity,
             stage2_identity=stage2_identity,
@@ -1989,7 +2076,7 @@ class MNRFViewProbe:
                              "artifact_type": ARTIFACT_HEAD, "head_type": "flow",
                              "stage_status": "complete",
                              "flow_checkpoint_sha256": _sha256_file(self.output_dir / "checkpoints" / "best_fusion.pt"),
-                             "input_statistics_sha256": _sha256_file(self.output_dir / "heads" / "feature_statistics.npz"),
+                             "feature_statistics_sha256": _sha256_file(self.output_dir / "heads" / "feature_statistics.npz"),
                              "calibration_sha256": _sha256_file(self.output_dir / "heads" / "calibration.npz"),
                              "fixed_noise_sha256": _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
                              "test_nll_sha256": _sha256_file(self.output_dir / "results" / "test_nll.npy"),
@@ -2708,8 +2795,14 @@ def load_probe(path, device="cpu"):
             raise ValueError("view probe Flow artifact is incomplete: " + ", ".join(missing))
         if manifest.get("flow_checkpoint_sha256") != _sha256_file(flow_checkpoint):
             raise ValueError("view probe Flow checkpoint hash mismatch")
-        if manifest.get("input_statistics_sha256") != _sha256_file(flow_stats):
-            raise ValueError("view probe Flow feature statistics hash mismatch")
+        feature_hash = _sha256_file(flow_stats)
+        declared_feature_hash = manifest.get("feature_statistics_sha256")
+        legacy_feature_hash = manifest.get("input_statistics_sha256")
+        if declared_feature_hash is not None:
+            if declared_feature_hash != feature_hash:
+                raise ValueError("view probe Flow feature statistics hash mismatch")
+        elif legacy_feature_hash != feature_hash:
+            raise ValueError("view probe Flow feature statistics hash is missing or mismatched")
         if manifest.get("calibration_sha256") != _sha256_file(calibration_path):
             raise ValueError("view probe Flow calibration hash mismatch")
         if manifest.get("fixed_noise_sha256") != _sha256_file(noise_path):

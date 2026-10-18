@@ -16,6 +16,33 @@ from ts_benchmark.baselines.mnrf_view_probe import load_probe
 from ts_benchmark.baselines.mnrf_view_probe.probe import ARTIFACT_RESULTS, _validate_result_bundle
 
 
+def _metadata_shape_error(manifest):
+    """Return a precise structural error before any branch-specific access."""
+    config = manifest.get("config", {})
+    if not isinstance(config, dict):
+        return "probe_manifest.json: config must be an object"
+    layout = manifest.get("layout")
+    if "layout" in manifest and not isinstance(layout, dict):
+        return "probe_manifest.json: layout must be an object"
+    retention = manifest.get("retention_after")
+    if "retention_after" in manifest and not isinstance(retention, dict):
+        return "probe_manifest.json: retention_after must be an object"
+    if "selected_views" in manifest:
+        selected = manifest["selected_views"]
+    elif "selected_views" in config:
+        selected = config["selected_views"]
+    else:
+        selected = None
+    if selected is not None:
+        if isinstance(selected, (str, bytes)) or not isinstance(selected, (list, tuple)):
+            return "probe_manifest.json: selected_views must be a sequence of strings"
+        if any(not isinstance(value, str) for value in selected):
+            return "probe_manifest.json: selected_views contains a non-string value"
+    elif "selected_views" in manifest or "selected_views" in config:
+        return "probe_manifest.json: selected_views must be a sequence of strings"
+    return None
+
+
 def collect(root):
     rows = []
     for manifest_path in sorted(Path(root).glob("**/probe_manifest.json")):
@@ -37,6 +64,13 @@ def collect(root):
             run_status = {"status": "invalid_status", "reason": str(error)}
         if not isinstance(run_status, dict):
             run_status = {"status": "invalid_status", "reason": "run_status.json root must be an object"}
+        shape_error = _metadata_shape_error(manifest)
+        if shape_error is not None:
+            rows.append({"run": str(run), "task": manifest.get("task_name"),
+                         "run_status": run_status.get("status"), "validation_status": "invalid",
+                         "validation_reason": shape_error})
+            continue
+        config = manifest.get("config", {}) or {}
         result_path = run / "results" / "metrics.json"
         if manifest.get("artifact_type") == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
             validation_status = "invalid"
@@ -52,11 +86,11 @@ def collect(root):
             except Exception as error:
                 validation_reason = str(error)
             rows.append({
-                "run": str(run), "task": manifest.get("task_name", manifest.get("config", {}).get("task_name")),
-                "seed": manifest.get("config", {}).get("seed"), "seq_len": manifest.get("config", {}).get("seq_len"),
+                "run": str(run), "task": manifest.get("task_name", config.get("task_name")),
+                "seed": config.get("seed"), "seq_len": config.get("seq_len"),
                 "mode": manifest.get("mode"), "head": metrics.get("head"),
-                "selected_views": ",".join(manifest.get("selected_views", manifest.get("config", {}).get("selected_views", []))),
-                "selected_dim": manifest.get("selected_dim", manifest.get("config", {}).get("selected_dim")),
+                "selected_views": ",".join(manifest.get("selected_views", config.get("selected_views", []))),
+                "selected_dim": manifest.get("selected_dim", config.get("selected_dim")),
                 "layout_F": manifest.get("layout", {}).get("F"),
                 "run_status": run_status.get("status"), "artifact_type": ARTIFACT_RESULTS,
                 "artifact_policy": "results", "validation_status": validation_status,
@@ -85,18 +119,12 @@ def collect(root):
                 except Exception as error:
                     validation_status = "invalid"
                     validation_reason = str(error)
-            rows.append({"run": str(run), "task": manifest.get("config", {}).get("task_name"),
+            rows.append({"run": str(run), "task": config.get("task_name"),
                          "mode": manifest.get("mode"), "run_status": run_status.get("status"),
                          "artifact_type": manifest.get("artifact_type"),
                          "artifact_policy": manifest.get("artifact_policy", "full"),
                          "validation_status": validation_status, "validation_reason": validation_reason,
                          "status": "stage1_complete" if validation_status == "valid" else "missing_metrics"})
-            continue
-        config = manifest.get("config", {})
-        if not isinstance(config, dict):
-            rows.append({"run": str(run), "task": None, "run_status": run_status.get("status"),
-                         "validation_status": "invalid",
-                         "validation_reason": "manifest config must be an object"})
             continue
         try:
             metrics = json.loads(result_path.read_text())
