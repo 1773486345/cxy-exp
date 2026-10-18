@@ -16,6 +16,22 @@ def missing_contract_fields(contract):
     return [field for field in REQUIRED_CONTRACT_FIELDS if field not in contract]
 
 
+def time_semantics_compatible(expected_kind, expected_timezone, actual_kind, actual_timezone):
+    """Compare time coordinates by meaning, not by a display timezone name.
+
+    ``timestamp_utc_ns`` is already canonical absolute time.  A CSV round trip
+    may therefore change ``Asia/Shanghai`` to ``UTC`` without changing the
+    contract.  Naive timestamps and row-order coordinates have no such
+    absolute-time guarantee and keep their original metadata strict.
+    """
+    if str(expected_kind) != str(actual_kind):
+        return False
+    kind = str(expected_kind)
+    if kind == "timestamp_utc_ns":
+        return True
+    return expected_timezone == actual_timezone
+
+
 def endpoints_for_ranges(segment_ranges, lower, upper, seq_len):
     """Derive the complete endpoint sequence without subsampling."""
     result = []

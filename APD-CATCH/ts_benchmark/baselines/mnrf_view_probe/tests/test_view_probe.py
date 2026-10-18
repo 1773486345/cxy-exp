@@ -1,5 +1,6 @@
 import hashlib
 import json
+import random
 import shutil
 
 import numpy as np
@@ -359,6 +360,83 @@ def test_flow_resume_missing_stage2_checkpoint_is_read_only_rejected(tmp_path):
     after = {str(path.relative_to(damaged)): hashlib.sha256(path.read_bytes()).hexdigest()
              for path in damaged.rglob("*") if path.is_file()}
     assert after == before
+
+
+def test_flow_corrupt_checkpoint_payloads_are_rejected_before_any_write(tmp_path, monkeypatch):
+    """Real checkpoint corruption must fail in the read-only resume preflight."""
+    rng = np.random.default_rng(20261018)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("a", "b"),
+                         index=pd.date_range("2026-06-15", periods=n, freq="min"))
+    frame["label"] = 0
+    source_dir = tmp_path / "source"
+    MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                  stage2_epochs=1, patience=1, device="cpu", output_dir=str(source_dir),
+                  mode="stage1").fit(frame, train_length)
+    flow_dir = tmp_path / "flow"
+    kwargs = dict(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
+                  stage2_epochs=3, patience=3, device="cpu", output_dir=str(flow_dir),
+                  mode="flow", source_dir=str(source_dir))
+    original_validation = MNRFTrainer._stage2_validation
+    calls = {"count": 0}
+
+    def stop_after_checkpoint(self, features):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("controlled corruption fixture interruption")
+        return original_validation(self, features)
+
+    monkeypatch.setattr(MNRFTrainer, "_stage2_validation", stop_after_checkpoint)
+    with pytest.raises(RuntimeError, match="controlled corruption fixture"):
+        MNRFViewProbe(**kwargs).fit(frame, train_length)
+    monkeypatch.setattr(MNRFTrainer, "_stage2_validation", original_validation)
+    checkpoint_path = flow_dir / "checkpoints" / "stage2_latest.pt"
+    original = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert original["stage_status"] == "in_progress"
+    assert "fusion_identity.E" in original["flow"]
+    assert "variable_maps.0.weight" in original["flow"]
+    optimizer_state_id = next(iter(original["optimizer"]["state"]))
+    assert "exp_avg" in original["optimizer"]["state"][optimizer_state_id]
+
+    def snapshot(root):
+        return {
+            path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in root.rglob("*") if path.is_file()
+        }
+
+    corruptions = {
+        "missing-flow-key": lambda payload: payload["flow"].pop("fusion_identity.E"),
+        "bad-flow-shape": lambda payload: payload["flow"].__setitem__(
+            "variable_maps.0.weight", torch.ones(1)),
+        "bad-global-rng": lambda payload: payload["rng"].__setitem__(
+            "torch", torch.zeros(1, dtype=torch.uint8)),
+        "bad-optimizer-moment": lambda payload: payload["optimizer"]["state"][optimizer_state_id].__setitem__(
+            "exp_avg", torch.ones(1)),
+    }
+    for name, mutate in corruptions.items():
+        damaged = tmp_path / name
+        shutil.copytree(flow_dir, damaged)
+        damaged_checkpoint = damaged / "checkpoints" / "stage2_latest.pt"
+        payload = torch.load(damaged_checkpoint, map_location="cpu", weights_only=False)
+        mutate(payload)
+        torch.save(payload, damaged_checkpoint)
+        before_target = snapshot(damaged)
+        before_source = snapshot(source_dir)
+        process_python = random.getstate()
+        process_numpy = np.random.get_state()
+        process_torch = torch.get_rng_state().clone()
+        with pytest.raises(ValueError, match="resume rejected"):
+            MNRFViewProbe(**dict(kwargs, output_dir=str(damaged), resume_from=str(damaged))).fit(
+                frame, train_length
+            )
+        assert snapshot(damaged) == before_target, name
+        assert snapshot(source_dir) == before_source, name
+        assert random.getstate() == process_python
+        after_numpy = np.random.get_state()
+        assert after_numpy[0] == process_numpy[0]
+        assert np.array_equal(after_numpy[1], process_numpy[1])
+        assert after_numpy[2:] == process_numpy[2:]
+        assert torch.equal(torch.get_rng_state(), process_torch)
 
 
 def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):

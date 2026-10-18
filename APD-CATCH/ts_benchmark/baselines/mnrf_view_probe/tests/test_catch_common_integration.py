@@ -24,7 +24,7 @@ def test_float32_and_float64_calibration_reproduction():
 def test_real_probe_and_catch_common_train_register_strict_evaluate(tmp_path):
     rng = np.random.default_rng(7103)
     n, train_length = 520, 430
-    timestamps = pd.date_range("2026-05-01", periods=n, freq="min")
+    timestamps = pd.date_range("2026-05-01", periods=n, freq="min", tz="Asia/Shanghai")
     values = rng.normal(size=(n, 2)).astype(np.float32)
     labels = np.zeros(n, dtype=np.int64)
     labels[450::3] = 1
@@ -83,6 +83,8 @@ def test_real_probe_and_catch_common_train_register_strict_evaluate(tmp_path):
     registered = json.loads(common_manifest.read_text())
     assert registered["protocol"] == "CATCH-common"
     assert contract["raw_training_range"] == list(probe.source_identity["ranges"]["train"])
+    assert contract["time_kind"] == "timestamp_utc_ns"
+    assert contract["source_timezone"] == "Asia/Shanghai"
     with pytest.raises(ValueError, match="requires a frozen common contract"):
         evaluate(str(probe_scores), str(catch_scores), str(labels_path),
                  split_paths=(str(split_paths["train"]), str(split_paths["validation"]),

@@ -100,6 +100,16 @@ files. A damaged completed GMM variable is rejected before any target file is
 changed. Flow accepts either an independent stage-one source or the same frozen
 encoder/cache contained in a completed GMM artifact.
 
+Flow recovery has three explicit outcomes. An in-progress `stage2_latest.pt`
+is restored from its next epoch; a checkpoint marked complete only performs the
+remaining calibration/score finalization and takes no new optimizer steps; an
+invalid checkpoint is rejected before any run file is created or changed. The
+preflight strictly loads the Flow and best-state keys/shapes/dtypes, validates
+AdamW parameter groups and moment shapes, and loads Python, NumPy, torch and
+available CUDA RNG states into private objects. It preserves the caller's RNG
+state while constructing the validation model, so a rejected check cannot
+change the subsequent run.
+
 `IndexedViewProbeStrategy` preserves timestamp indices. Timestamp gaps and
 entity/session boundaries are hard window boundaries; row-order data without a
 real timestamp is explicitly recorded as the row-order protocol. It never
@@ -161,6 +171,14 @@ not an endpoint rewrite.  Timestamped CATCH runs consume the Probe-frozen
 training cadence from this contract; cadence is never re-estimated from
 overlapping windows or later test entities, so short entities can contribute
 to raw training identity even when they cannot form a window.
+
+Time identity is canonical absolute time for `timestamp_utc_ns`: a CSV round
+trip may change a display/source timezone name (for example,
+`Asia/Shanghai` to `UTC`) when the UTC nanosecond sequence is unchanged. The
+runner accepts that representation change only when the time kind, length and
+canonical hash still match. Naive timestamps and row-order coordinates retain
+strict metadata semantics; a real shift, gap, reorder, or aware/naive change is
+rejected.
 
 Calibration thresholds are generated and verified with the saved score array's
 dtype and NumPy linear-quantile rule. The evaluator uses the external evidence

@@ -35,7 +35,7 @@ from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
 from ts_benchmark.baselines.mnrf_view_probe.probe import _all_boundary_ids, _chunked_array_hash, _hash_strings
 from ts_benchmark.baselines.mnrf_view_probe.common_contract import (
     CONTRACT_SCHEMA, endpoints_for_ranges, expected_contract_endpoints,
-    missing_contract_fields,
+    missing_contract_fields, time_semantics_compatible,
 )
 
 
@@ -362,8 +362,9 @@ def run(args):
         if _chunked_array_hash(values) != contract.get("data_identity"):
             raise ValueError("common contract feature data identity differs")
         time_index = MNRFLiteV2._time_index(frame)
-        if (time_index.kind != contract.get("time_kind")
-                or time_index.source_timezone != contract.get("source_timezone")):
+        if not time_semantics_compatible(
+                contract.get("time_kind"), contract.get("source_timezone"),
+                time_index.kind, time_index.source_timezone):
             raise ValueError("common contract time kind/timezone differs")
         if _chunked_array_hash(time_index.values_ns) != contract.get("time_identity"):
             raise ValueError("common contract time identity differs")

@@ -148,4 +148,12 @@ CATCH context, export fails before creating a usable contract.
 To resume a ViewProbe run, pass its exact existing directory through
 `VIEW_PROBE_RESUME_FROM` and use the same data, layout, source and GMM/Flow
 configuration. A rejected resume is read-only; it does not rewrite the old
-run. Stage-one, GMM and Flow artifacts must not be mixed across runs.
+run. Flow resumes an in-progress checkpoint at its next epoch, while a
+completed Flow checkpoint only finalizes calibration and scoring. Before either
+case writes, the checkpoint's model state, optimizer moments, RNG states and
+frozen statistics are validated strictly; damaged or cross-run artifacts are
+rejected without creating logs or temporary files. Stage-one, GMM and Flow
+artifacts must not be mixed across runs. For timestamped common evaluation,
+timezone display names may differ after CSV parsing only when the canonical
+`timestamp_utc_ns` sequence is identical; actual time changes and aware/naive
+semantic changes remain errors.

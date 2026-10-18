@@ -25,7 +25,8 @@ from threadpoolctl import threadpool_info, threadpool_limits
 from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
 from ts_benchmark.baselines.mnrf_lite_v2.layout import FeatureLayout, require_layout
 from ts_benchmark.baselines.mnrf_lite_v2.training import (
-    EndWindowDataset, MNRFTrainer, atomic_torch_save, purged_ranges, seed_all,
+    EndWindowDataset, MNRFTrainer, _capture_rng, _restore_rng,
+    atomic_torch_save, purged_ranges, seed_all,
 )
 from ts_benchmark.baselines.mnrf_lite_v2.windows import (
     TimeIndex, continuous_segments, infer_expected_interval, intersect_segments, window_endpoints,
@@ -117,6 +118,111 @@ def _strict_integer_indices(value, name):
 
 def _safe_name(value):
     return "".join(char if char.isalnum() or char in "._-" else "_" for char in str(value))
+
+
+def _validate_checkpoint_state_dict(payload, module, name):
+    """Strictly validate a serialized module state without mutating a model."""
+    if not isinstance(payload, dict):
+        raise ValueError(f"resume rejected: Flow {name} state payload is not a mapping")
+    expected = module.state_dict()
+    actual_keys = set(payload)
+    expected_keys = set(expected)
+    if actual_keys != expected_keys:
+        missing = sorted(expected_keys - actual_keys)
+        unexpected = sorted(actual_keys - expected_keys)
+        raise ValueError(
+            f"resume rejected: Flow {name} state keys differ; missing={missing}, unexpected={unexpected}"
+        )
+    for key, reference in expected.items():
+        value = payload[key]
+        if not torch.is_tensor(value):
+            raise ValueError(f"resume rejected: Flow {name} state {key} is not a tensor")
+        if tuple(value.shape) != tuple(reference.shape) or value.dtype != reference.dtype:
+            raise ValueError(
+                f"resume rejected: Flow {name} state {key} shape/dtype differs; "
+                f"expected={tuple(reference.shape)}/{reference.dtype}, "
+                f"actual={tuple(value.shape)}/{value.dtype}"
+            )
+        if torch.is_floating_point(value) and not torch.isfinite(value).all():
+            raise ValueError(f"resume rejected: non-finite Flow {name} state {key}")
+
+
+def _validate_flow_optimizer_state(serialized, trainer, optimizer):
+    """Validate AdamW groups and lazy state tensors before a resume write."""
+    if not isinstance(serialized, dict):
+        raise ValueError("resume rejected: Flow optimizer state is not a mapping")
+    groups = serialized.get("param_groups")
+    states = serialized.get("state")
+    if not isinstance(groups, list) or not isinstance(states, dict):
+        raise ValueError("resume rejected: Flow optimizer state has invalid groups/state")
+    expected_groups = optimizer.param_groups
+    if len(groups) != len(expected_groups):
+        raise ValueError("resume rejected: Flow optimizer parameter-group count differs")
+    referenced = set()
+    for index, (saved, expected) in enumerate(zip(groups, expected_groups)):
+        if not isinstance(saved, dict) or not isinstance(saved.get("params"), list):
+            raise ValueError(f"resume rejected: Flow optimizer group {index} is invalid")
+        referenced.update(saved["params"])
+        if len(saved["params"]) != len(expected["params"]):
+            raise ValueError(f"resume rejected: Flow optimizer group {index} parameter count differs")
+        if set(saved).difference(expected) - {"params"}:
+            raise ValueError(f"resume rejected: Flow optimizer group {index} has unknown options")
+        for field, expected_value in expected.items():
+            if field == "params":
+                continue
+            if field not in saved:
+                raise ValueError(f"resume rejected: Flow optimizer {field} is missing")
+            if field == "lr":
+                if not math.isclose(float(saved[field]), float(expected_value), rel_tol=0.0, abs_tol=1e-15):
+                    raise ValueError("resume rejected: Flow optimizer learning rate differs")
+            elif saved[field] != expected_value:
+                raise ValueError(f"resume rejected: Flow optimizer {field} differs")
+    if set(states) - referenced:
+        raise ValueError("resume rejected: Flow optimizer contains unbound parameter state")
+    try:
+        optimizer.load_state_dict(serialized)
+    except Exception as error:
+        raise ValueError("resume rejected: Flow optimizer state is incompatible") from error
+    for parameter, state in optimizer.state.items():
+        if not isinstance(state, dict):
+            raise ValueError("resume rejected: Flow optimizer parameter state is invalid")
+        for key, value in state.items():
+            if key == "step":
+                if torch.is_tensor(value):
+                    if value.numel() != 1 or not torch.isfinite(value).all():
+                        raise ValueError("resume rejected: Flow optimizer step is invalid")
+                elif not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                    raise ValueError("resume rejected: Flow optimizer step is invalid")
+            elif key in {"exp_avg", "exp_avg_sq", "max_exp_avg_sq"}:
+                if not torch.is_tensor(value) or tuple(value.shape) != tuple(parameter.shape):
+                    raise ValueError(f"resume rejected: Flow optimizer {key} shape differs")
+                if torch.is_floating_point(value) and not torch.isfinite(value).all():
+                    raise ValueError(f"resume rejected: Flow optimizer {key} is non-finite")
+            else:
+                raise ValueError(f"resume rejected: unknown Flow optimizer state field {key}")
+
+
+def _validate_global_rng_state(rng_state):
+    """Load all serialized RNG states into private objects only."""
+    if not isinstance(rng_state, dict):
+        raise ValueError("resume rejected: Flow global RNG state is invalid")
+    try:
+        if not isinstance(rng_state.get("torch"), torch.Tensor) or rng_state["torch"].dtype != torch.uint8:
+            raise ValueError("torch RNG state is invalid")
+        torch.Generator(device="cpu").set_state(rng_state["torch"])
+        private_python = random.Random()
+        private_python.setstate(rng_state["python"])
+        private_numpy = np.random.RandomState()
+        private_numpy.set_state(rng_state["numpy"])
+        if "cuda" in rng_state:
+            if not torch.cuda.is_available() or not isinstance(rng_state["cuda"], (list, tuple)):
+                raise ValueError("CUDA RNG state cannot be validated on this runtime")
+            for index, state in enumerate(rng_state["cuda"]):
+                if not isinstance(state, torch.Tensor) or state.dtype != torch.uint8:
+                    raise ValueError(f"CUDA RNG state {index} is invalid")
+                torch.Generator(device=f"cuda:{index}").set_state(state)
+    except Exception as error:
+        raise ValueError("resume rejected: Flow global RNG state is not loadable") from error
 
 
 def _all_boundary_ids(frame):
@@ -1006,11 +1112,6 @@ class MNRFViewProbe:
                 expected_shape = (len(self.variable_names), self.config.layout.total_dim)
                 if any((not isinstance(stage2[name], dict)) for name in ("flow", "best_state")):
                     raise ValueError("resume rejected: Flow checkpoint state payload is invalid")
-                for state_name in ("flow", "best_state"):
-                    if not stage2[state_name] or any(
-                            not torch.is_tensor(value) or not torch.isfinite(value).all()
-                            for value in stage2[state_name].values()):
-                        raise ValueError(f"resume rejected: non-finite Flow {state_name} state")
                 if stage2["sampler_rng"].numel() == 0:
                     raise ValueError("resume rejected: Flow sampler RNG state is empty")
                 try:
@@ -1018,26 +1119,24 @@ class MNRFViewProbe:
                 except Exception as error:
                     raise ValueError("resume rejected: Flow sampler RNG state is not loadable") from error
                 rng_state = stage2.get("rng")
-                if (not isinstance(rng_state, dict)
-                        or not isinstance(rng_state.get("torch"), torch.Tensor)
-                        or rng_state["torch"].dtype != torch.uint8
-                        or not isinstance(rng_state.get("numpy"), tuple)
-                        or not isinstance(rng_state.get("python"), tuple)):
-                    raise ValueError("resume rejected: Flow global RNG state is invalid")
+                _validate_global_rng_state(rng_state)
                 if (not np.isfinite(float(stage2.get("best", np.inf)))
                         or isinstance(stage2.get("patience"), bool)
                         or not isinstance(stage2.get("patience"), int)
                         or not isinstance(stage2.get("history"), list)):
                     raise ValueError("resume rejected: Flow best/patience/history state is invalid")
+                process_rng = _capture_rng()
                 try:
                     trainer_probe = self._make_trainer(len(self.variable_names))
+                    _validate_checkpoint_state_dict(stage2["flow"], trainer_probe.flow, "flow")
+                    _validate_checkpoint_state_dict(stage2["best_state"], trainer_probe.flow, "best_state")
                     optimizer_probe = torch.optim.AdamW(
                         trainer_probe.flow.parameters(), lr=self.config.mnrf.learning_rate,
                         weight_decay=self.config.mnrf.weight_decay,
                     )
-                    optimizer_probe.load_state_dict(stage2["optimizer"])
-                except Exception as error:
-                    raise ValueError("resume rejected: Flow optimizer state is incompatible") from error
+                    _validate_flow_optimizer_state(stage2["optimizer"], trainer_probe, optimizer_probe)
+                finally:
+                    _restore_rng(process_rng)
                 declared_identity = (manifest or {}).get("stage2_identity")
                 if declared_identity is not None and stage2.get("stage2_identity") != declared_identity:
                     raise ValueError("resume rejected: Flow stage2 identity differs from manifest")
