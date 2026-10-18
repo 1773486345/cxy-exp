@@ -8,6 +8,7 @@ directories or changes their model/scoring code.
 import hashlib
 import json
 import math
+import numbers
 import os
 import pickle
 import platform
@@ -147,6 +148,26 @@ def _validate_checkpoint_state_dict(payload, module, name):
             raise ValueError(f"resume rejected: non-finite Flow {name} state {key}")
 
 
+def _validate_optimizer_step(value, parameter_id):
+    """Validate AdamW's scalar step before PyTorch can coerce its type."""
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"resume rejected: Flow optimizer step for parameter {parameter_id} is bool")
+    if torch.is_tensor(value):
+        if value.numel() != 1 or torch.is_complex(value) or value.dtype == torch.bool:
+            raise ValueError(f"resume rejected: Flow optimizer step for parameter {parameter_id} is not a scalar")
+        scalar = value.detach().cpu().reshape(-1)[0].item()
+    elif isinstance(value, numbers.Real):
+        scalar = value
+    else:
+        raise ValueError(f"resume rejected: Flow optimizer step for parameter {parameter_id} is not numeric")
+    try:
+        numeric = float(scalar)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError(f"resume rejected: Flow optimizer step for parameter {parameter_id} is not numeric") from error
+    if not math.isfinite(numeric) or numeric < 0 or not numeric.is_integer():
+        raise ValueError(f"resume rejected: Flow optimizer step for parameter {parameter_id} must be a non-negative integer")
+
+
 def _validate_flow_optimizer_state(serialized, trainer, optimizer):
     """Validate AdamW groups and lazy state tensors before a resume write."""
     if not isinstance(serialized, dict):
@@ -162,7 +183,10 @@ def _validate_flow_optimizer_state(serialized, trainer, optimizer):
     for index, (saved, expected) in enumerate(zip(groups, expected_groups)):
         if not isinstance(saved, dict) or not isinstance(saved.get("params"), list):
             raise ValueError(f"resume rejected: Flow optimizer group {index} is invalid")
-        referenced.update(saved["params"])
+        try:
+            referenced.update(saved["params"])
+        except TypeError as error:
+            raise ValueError(f"resume rejected: Flow optimizer group {index} parameter binding is invalid") from error
         if len(saved["params"]) != len(expected["params"]):
             raise ValueError(f"resume rejected: Flow optimizer group {index} parameter count differs")
         if set(saved).difference(expected) - {"params"}:
@@ -179,6 +203,33 @@ def _validate_flow_optimizer_state(serialized, trainer, optimizer):
                 raise ValueError(f"resume rejected: Flow optimizer {field} differs")
     if set(states) - referenced:
         raise ValueError("resume rejected: Flow optimizer contains unbound parameter state")
+    parameter_amsgrad = {}
+    for group in groups:
+        for parameter_id in group["params"]:
+            parameter_amsgrad[parameter_id] = bool(group.get("amsgrad", False))
+    allowed_state_fields = {"step", "exp_avg", "exp_avg_sq", "max_exp_avg_sq"}
+    for parameter_id, state in states.items():
+        if not isinstance(state, dict):
+            raise ValueError(f"resume rejected: Flow optimizer state for parameter {parameter_id} is invalid")
+        # No state entry or an empty entry is the legitimate lazy-optimizer
+        # case. Once any field exists, AdamW must have a complete state.
+        if not state:
+            continue
+        missing = {"step", "exp_avg", "exp_avg_sq"}.difference(state)
+        if parameter_amsgrad.get(parameter_id, False):
+            missing.add("max_exp_avg_sq")
+        if missing:
+            raise ValueError(
+                f"resume rejected: Flow optimizer state for parameter {parameter_id} "
+                f"is missing required field(s) {sorted(missing)}"
+            )
+        unknown = set(state).difference(allowed_state_fields)
+        if unknown:
+            raise ValueError(
+                f"resume rejected: Flow optimizer state for parameter {parameter_id} "
+                f"has unknown field(s) {sorted(unknown)}"
+            )
+        _validate_optimizer_step(state["step"], parameter_id)
     try:
         optimizer.load_state_dict(serialized)
     except Exception as error:

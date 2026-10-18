@@ -124,12 +124,14 @@ def test_flow_real_epoch_checkpoint_resumes_from_next_epoch(tmp_path, monkeypatc
                          index=pd.date_range("2026-04-20", periods=n, freq="min"))
     frame["label"] = 0
     source_dir = tmp_path / "source"
-    MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
-                  stage2_epochs=1, patience=1, device="cpu", output_dir=str(source_dir),
+    MNRFViewProbe(seq_len=32, pattern_len=32, evolution_dim=3, pattern_dim=5,
+                  relation_dim=7, batch_size=64, stage1_epochs=1, stage2_epochs=1,
+                  patience=1, device="cpu", output_dir=str(source_dir),
                   mode="stage1").fit(frame, train_length)
     flow_dir = tmp_path / "flow"
-    kwargs = dict(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
-                  stage2_epochs=3, patience=3, device="cpu", output_dir=str(flow_dir),
+    kwargs = dict(seq_len=32, pattern_len=32, evolution_dim=3, pattern_dim=5,
+                  relation_dim=7, batch_size=64, stage1_epochs=1, stage2_epochs=3,
+                  patience=3, device="cpu", output_dir=str(flow_dir),
                   mode="flow", source_dir=str(source_dir))
     original_validation = MNRFTrainer._stage2_validation
     calls = {"count": 0}
@@ -152,6 +154,8 @@ def test_flow_real_epoch_checkpoint_resumes_from_next_epoch(tmp_path, monkeypatc
     resumed = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert resumed["completed_steps"] > interrupted["completed_steps"]
     assert resumed["next_epoch"] >= 2
+    assert [item["epoch"] for item in resumed["history"]] == [1, 2, 3]
+    assert resumed["stage_status"] == "completed"
 
 
 def test_view_selection_uses_canonical_layout_and_rejects_invalid_views():
@@ -362,18 +366,20 @@ def test_flow_resume_missing_stage2_checkpoint_is_read_only_rejected(tmp_path):
     assert after == before
 
 
-def test_flow_corrupt_checkpoint_payloads_are_rejected_before_any_write(tmp_path, monkeypatch):
-    """Real checkpoint corruption must fail in the read-only resume preflight."""
+@pytest.fixture(scope="module")
+def interrupted_flow_fixture(tmp_path_factory):
+    """Create one real epoch-boundary interruption for all corruption cases."""
     rng = np.random.default_rng(20261018)
     n, train_length = 520, 430
     frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("a", "b"),
                          index=pd.date_range("2026-06-15", periods=n, freq="min"))
     frame["label"] = 0
-    source_dir = tmp_path / "source"
+    root = tmp_path_factory.mktemp("flow-corruption")
+    source_dir = root / "source"
     MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
                   stage2_epochs=1, patience=1, device="cpu", output_dir=str(source_dir),
                   mode="stage1").fit(frame, train_length)
-    flow_dir = tmp_path / "flow"
+    flow_dir = root / "flow"
     kwargs = dict(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
                   stage2_epochs=3, patience=3, device="cpu", output_dir=str(flow_dir),
                   mode="flow", source_dir=str(source_dir))
@@ -386,10 +392,12 @@ def test_flow_corrupt_checkpoint_payloads_are_rejected_before_any_write(tmp_path
             raise RuntimeError("controlled corruption fixture interruption")
         return original_validation(self, features)
 
-    monkeypatch.setattr(MNRFTrainer, "_stage2_validation", stop_after_checkpoint)
-    with pytest.raises(RuntimeError, match="controlled corruption fixture"):
-        MNRFViewProbe(**kwargs).fit(frame, train_length)
-    monkeypatch.setattr(MNRFTrainer, "_stage2_validation", original_validation)
+    MNRFTrainer._stage2_validation = stop_after_checkpoint
+    try:
+        with pytest.raises(RuntimeError, match="controlled corruption fixture"):
+            MNRFViewProbe(**kwargs).fit(frame, train_length)
+    finally:
+        MNRFTrainer._stage2_validation = original_validation
     checkpoint_path = flow_dir / "checkpoints" / "stage2_latest.pt"
     original = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert original["stage_status"] == "in_progress"
@@ -397,6 +405,67 @@ def test_flow_corrupt_checkpoint_payloads_are_rejected_before_any_write(tmp_path
     assert "variable_maps.0.weight" in original["flow"]
     optimizer_state_id = next(iter(original["optimizer"]["state"]))
     assert "exp_avg" in original["optimizer"]["state"][optimizer_state_id]
+    original_step = original["optimizer"]["state"][optimizer_state_id]["step"]
+    assert torch.is_tensor(original_step) and original_step.numel() == 1
+    assert float(original_step.item()) > 0 and float(original_step.item()).is_integer()
+    return {
+        "root": root, "source_dir": source_dir, "flow_dir": flow_dir,
+        "frame": frame, "train_length": train_length, "kwargs": kwargs,
+        "optimizer_state_id": optimizer_state_id,
+    }
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "missing-flow-key", "bad-flow-shape", "bad-global-rng", "bad-optimizer-moment",
+        "missing-exp-avg", "missing-exp-avg-sq", "missing-step",
+        "negative-tensor-step", "boolean-tensor-step", "fractional-tensor-step",
+        "negative-python-step", "boolean-python-step", "fractional-python-step",
+    ),
+    ids=lambda value: value,
+)
+def test_flow_corrupt_checkpoint_payload_is_rejected_before_any_write(interrupted_flow_fixture, corruption):
+    """Each real checkpoint corruption is independently visible in pytest output."""
+    fixture = interrupted_flow_fixture
+    source_dir = fixture["source_dir"]
+    flow_dir = fixture["flow_dir"]
+    root = fixture["root"]
+    optimizer_state_id = fixture["optimizer_state_id"]
+    damaged = root / corruption
+    shutil.copytree(flow_dir, damaged)
+    damaged_checkpoint = damaged / "checkpoints" / "stage2_latest.pt"
+    payload = torch.load(damaged_checkpoint, map_location="cpu", weights_only=False)
+    state = payload["optimizer"]["state"][optimizer_state_id]
+    if corruption == "missing-flow-key":
+        payload["flow"].pop("fusion_identity.E")
+    elif corruption == "bad-flow-shape":
+        payload["flow"]["variable_maps.0.weight"] = torch.ones(1)
+    elif corruption == "bad-global-rng":
+        payload["rng"]["torch"] = torch.zeros(1, dtype=torch.uint8)
+    elif corruption == "bad-optimizer-moment":
+        state["exp_avg"] = torch.ones(1)
+    elif corruption == "missing-exp-avg":
+        state.pop("exp_avg")
+    elif corruption == "missing-exp-avg-sq":
+        state.pop("exp_avg_sq")
+    elif corruption == "missing-step":
+        state.pop("step")
+    elif corruption == "negative-tensor-step":
+        state["step"] = torch.tensor(-1.0)
+    elif corruption == "boolean-tensor-step":
+        state["step"] = torch.tensor(True, dtype=torch.bool)
+    elif corruption == "fractional-tensor-step":
+        state["step"] = torch.tensor(0.5)
+    elif corruption == "negative-python-step":
+        state["step"] = -1.0
+    elif corruption == "boolean-python-step":
+        state["step"] = True
+    elif corruption == "fractional-python-step":
+        state["step"] = 0.5
+    else:
+        raise AssertionError(corruption)
+    torch.save(payload, damaged_checkpoint)
 
     def snapshot(root):
         return {
@@ -404,39 +473,25 @@ def test_flow_corrupt_checkpoint_payloads_are_rejected_before_any_write(tmp_path
             for path in root.rglob("*") if path.is_file()
         }
 
-    corruptions = {
-        "missing-flow-key": lambda payload: payload["flow"].pop("fusion_identity.E"),
-        "bad-flow-shape": lambda payload: payload["flow"].__setitem__(
-            "variable_maps.0.weight", torch.ones(1)),
-        "bad-global-rng": lambda payload: payload["rng"].__setitem__(
-            "torch", torch.zeros(1, dtype=torch.uint8)),
-        "bad-optimizer-moment": lambda payload: payload["optimizer"]["state"][optimizer_state_id].__setitem__(
-            "exp_avg", torch.ones(1)),
-    }
-    for name, mutate in corruptions.items():
-        damaged = tmp_path / name
-        shutil.copytree(flow_dir, damaged)
-        damaged_checkpoint = damaged / "checkpoints" / "stage2_latest.pt"
-        payload = torch.load(damaged_checkpoint, map_location="cpu", weights_only=False)
-        mutate(payload)
-        torch.save(payload, damaged_checkpoint)
-        before_target = snapshot(damaged)
-        before_source = snapshot(source_dir)
-        process_python = random.getstate()
-        process_numpy = np.random.get_state()
-        process_torch = torch.get_rng_state().clone()
-        with pytest.raises(ValueError, match="resume rejected"):
-            MNRFViewProbe(**dict(kwargs, output_dir=str(damaged), resume_from=str(damaged))).fit(
-                frame, train_length
-            )
-        assert snapshot(damaged) == before_target, name
-        assert snapshot(source_dir) == before_source, name
-        assert random.getstate() == process_python
-        after_numpy = np.random.get_state()
-        assert after_numpy[0] == process_numpy[0]
-        assert np.array_equal(after_numpy[1], process_numpy[1])
-        assert after_numpy[2:] == process_numpy[2:]
-        assert torch.equal(torch.get_rng_state(), process_torch)
+    before_target = snapshot(damaged)
+    before_source = snapshot(source_dir)
+    process_python = random.getstate()
+    process_numpy = np.random.get_state()
+    process_torch = torch.get_rng_state().clone()
+    optimizer_corruption = corruption not in {"missing-flow-key", "bad-flow-shape", "bad-global-rng"}
+    expected_message = "resume rejected: Flow optimizer" if optimizer_corruption else "resume rejected"
+    with pytest.raises(ValueError, match=expected_message):
+        MNRFViewProbe(**dict(fixture["kwargs"], output_dir=str(damaged), resume_from=str(damaged))).fit(
+            fixture["frame"], fixture["train_length"]
+        )
+    assert snapshot(damaged) == before_target, corruption
+    assert snapshot(source_dir) == before_source, corruption
+    assert random.getstate() == process_python
+    after_numpy = np.random.get_state()
+    assert after_numpy[0] == process_numpy[0]
+    assert np.array_equal(after_numpy[1], process_numpy[1])
+    assert after_numpy[2:] == process_numpy[2:]
+    assert torch.equal(torch.get_rng_state(), process_torch)
 
 
 def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):
