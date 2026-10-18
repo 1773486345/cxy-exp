@@ -222,3 +222,29 @@ object only after checking its embedded copy is identical, and verifies the
 calibration endpoint array against the frozen calibration split. A report is
 strict CATCH-common only after these checks; it is not equivalent to a paper
 reference or an index-intersection-only comparison.
+
+### Runtime logging and result retention
+
+The five task scripts capture their read-only preflight into the same live
+`run.log` as the Python run. Once the run directory has been created, the log
+is flushed incrementally and includes stage/cache/GMM/calibration/scoring
+progress, stderr, warnings, and tracebacks; a rejected resume keeps its
+preflight log outside the target run without modifying that run. SIGINT and
+SIGTERM return nonzero and preserve the recovery tree.
+
+`artifact_policy=results` describes the requested final retention policy. An
+interrupted Stage 1, GMM, or Flow run remains resumable while its recovery
+artifacts are present. Only a validated, committed `result_bundle` is terminal
+for model loading or training resume. Result coordinates, time values, labels,
+valid masks, counts, coverage, and AUCs are cross-checked against the frozen
+source identity before cleanup. If deletion of disposable training artifacts
+fails after that validation, the run is reported as
+`results_valid_cleanup_failed`; the scores remain usable and
+`organize_mnrf_view_probe.py` retries the same retention transaction without
+retraining or rewriting metrics.
+
+GMM progress uses a versioned numerical identity that excludes logging,
+storage, retention, and load-device fields while retaining model, sample,
+statistics, noise, cache, endpoint, and source bindings. Progress written by
+the previous release is accepted only after its persisted configuration is
+reconstructed and all immutable bindings match, then migrated atomically.

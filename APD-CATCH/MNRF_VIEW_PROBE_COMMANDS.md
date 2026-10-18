@@ -24,6 +24,11 @@ task entries so results do not accumulate large reusable artifacts. For a
 reusable full artifact, edit the script literal `ARTIFACT_POLICY="results"` to
 `full` before starting a new run; do not change an existing run in place.
 The log can be followed with `tail -f <RUN_DIR>/run.log` while a task runs.
+The requested `results` policy does not disable recovery: interrupted stage,
+GMM, and Flow runs keep their model/cache/checkpoint tree until completion.
+After scoring, validation and cleanup are separate; a cleanup error is
+reported as `results_valid_cleanup_failed` and can be retried with
+`python scripts/organize_mnrf_view_probe.py <RUN_DIR>`.
 
 ## Task commands
 

@@ -28,20 +28,24 @@ def validate(run_dir):
     status = json.loads(status_path.read_text())
     if manifest.get("schema") != PROBE_SCHEMA:
         raise ValueError("unsupported probe schema")
-    if status.get("status") not in {"complete", "stage1_complete"}:
-        raise ValueError(f"run is not complete: {status.get('status')}")
     mode = manifest.get("mode")
     artifact_type = manifest.get("artifact_type")
     if artifact_type == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
-        checked = _validate_result_bundle(run)
+        checked = _validate_result_bundle(
+            run, allow_in_progress=manifest.get("result_cleanup_status") != "complete"
+        )
         metrics = checked["metrics"]
-        return {"status": "results_valid", "run": str(run), "mode": mode,
+        return {"status": "results_valid" if checked.get("cleanup_status") == "complete" else "results_valid_cleanup_failed",
+                "run": str(run), "mode": mode,
                 "artifact_type": ARTIFACT_RESULTS,
                 "cleanup_status": checked["cleanup_status"],
+                "cleanup_error": manifest.get("cleanup_error"),
                 "task_name": manifest.get("task_name", manifest.get("config", {}).get("task_name")),
                 "auc_roc": metrics.get("auc_roc"), "auc_pr": metrics.get("auc_pr"),
                 "valid_points": metrics.get("valid_points"),
                 "capabilities": manifest.get("capabilities", {})}
+    if status.get("status") not in {"complete", "stage1_complete"}:
+        raise ValueError(f"run is not complete: {status.get('status')}")
     head_type = manifest.get("head_type")
     if artifact_type not in {"source_encoder", "probe_head"}:
         raise ValueError("manifest has no recognized artifact_type")

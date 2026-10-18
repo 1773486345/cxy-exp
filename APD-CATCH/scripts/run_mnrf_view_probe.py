@@ -9,6 +9,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
+import signal
 import sys
 import tempfile
 import traceback
@@ -92,7 +94,15 @@ def main():
     parser.add_argument("--log-every-steps", type=int, default=100)
     parser.add_argument("--log-every-seconds", type=float, default=30.0)
     parser.add_argument("--gmm-log-every-iters", type=int, default=10)
+    parser.add_argument("--startup-log", default="",
+                        help="shell preflight log to include in the durable run log")
     args = parser.parse_args()
+
+    def _terminate(signum, _frame):
+        raise RuntimeError("received signal {}".format(signum))
+
+    signal.signal(signal.SIGINT, _terminate)
+    signal.signal(signal.SIGTERM, _terminate)
     # Keep one durable log for each run without creating anything in the run
     # directory before resume preflight has completed.  This is deliberately a
     # CLI concern so the library API remains usable without a logging policy.
@@ -102,27 +112,61 @@ def main():
     log_handle = temporary_log.open("a", encoding="utf-8", buffering=1)
     original_stdout, original_stderr = sys.stdout, sys.stderr
 
+    startup_log = Path(args.startup_log).expanduser() if args.startup_log else None
+    if startup_log is not None and startup_log.is_file():
+        with startup_log.open("rb") as source:
+            initial = source.read()
+        if initial:
+            log_handle.write(initial.decode("utf-8", errors="replace"))
+            log_handle.flush()
+    output_path = Path(args.output_dir or args.resume_from).expanduser().resolve()
+
     class _Tee:
-        def __init__(self, primary, secondary):
+        def __init__(self, primary, secondary, target_path, attach_when, state):
             self.primary, self.secondary = primary, secondary
+            self.target_path, self.attach_when = target_path, attach_when
+            self.state = state
+
+        def _attach(self):
+            if self.state["target"] is not None or not self.attach_when():
+                return
+            self.secondary.flush()
+            self.target_path.parent.mkdir(parents=True, exist_ok=True)
+            exists = self.target_path.is_file() and self.target_path.stat().st_size > 0
+            self.state["target"] = self.target_path.open("ab")
+            if exists:
+                self.state["target"].write(b"\n--- resumed live log ---\n")
+            with temporary_log.open("rb") as source:
+                shutil.copyfileobj(source, self.state["target"])
+            self.state["target"].flush()
 
         def write(self, value):
             self.primary.write(value)
             self.secondary.write(value)
             self.primary.flush()
             self.secondary.flush()
+            self._attach()
             return len(value)
 
         def flush(self):
             self.primary.flush()
             self.secondary.flush()
+            if self.state["target"] is not None:
+                self.state["target"].flush()
 
         def isatty(self):
             return self.primary.isatty()
 
-    sys.stdout = _Tee(original_stdout, log_handle)
-    sys.stderr = _Tee(original_stderr, log_handle)
-    output_path = Path(args.output_dir or args.resume_from).expanduser().resolve()
+    # ``probe._writes_started`` flips only after read-only resume preflight and
+    # directory preparation.  Thus rejected resumes never modify their target
+    # run.log, while accepted runs become durable as soon as the first event is
+    # emitted after preparation.
+    target_path = output_path / "run.log"
+    live_state = {"target": None}
+    sys.stdout = _Tee(original_stdout, log_handle, target_path,
+                      lambda: probe is not None and getattr(probe, "_writes_started", False), live_state)
+    sys.stderr = _Tee(original_stderr, log_handle, target_path,
+                      lambda: probe is not None and getattr(probe, "_writes_started", False), live_state)
     probe = None
     failed = None
     try:
@@ -188,14 +232,25 @@ def main():
         sys.stdout, sys.stderr = original_stdout, original_stderr
         log_handle.flush()
         log_handle.close()
-        if output_path.is_dir() and (failed is None or getattr(probe, "_writes_started", False)):
-            target_log = output_path / "run.log"
-            with target_log.open("ab") as target, temporary_log.open("rb") as source:
-                target.write(b"\n" if target_log.stat().st_size else b"")
-                target.write(source.read())
-                target.flush()
-                os.fsync(target.fileno())
-        temporary_log.unlink(missing_ok=True)
+        if live_state["target"] is not None:
+            live_state["target"].flush()
+            os.fsync(live_state["target"].fileno())
+            live_state["target"].close()
+        # The live Tee normally attached after _prepare_dirs.  Keep a
+        # preflight-only log outside the run directory so a rejected resume is
+        # fully read-only and still leaves an actionable diagnostic.
+        attached = output_path.is_dir() and getattr(probe, "_writes_started", False)
+        if attached and not (output_path / "run.log").is_file():
+            with (output_path / "run.log").open("ab") as target, temporary_log.open("rb") as source:
+                target.write(source.read()); target.flush(); os.fsync(target.fileno())
+        if startup_log is not None and startup_log.is_file() and (failed is None or attached):
+            startup_log.unlink(missing_ok=True)
+        if failed is None or attached:
+            temporary_log.unlink(missing_ok=True)
+        else:
+            if startup_log is not None and startup_log.is_file():
+                print("MNRF startup_log={}".format(startup_log), file=original_stderr, flush=True)
+            print("MNRF preflight_log={}".format(temporary_log), file=original_stderr, flush=True)
     if failed is not None:
         raise SystemExit(1) from failed
 

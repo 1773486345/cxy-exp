@@ -112,6 +112,42 @@ def _runtime_free_config(config):
     return value
 
 
+GMM_PROGRESS_IDENTITY_VERSION = 2
+
+
+def _gmm_numeric_config(config):
+    """Project only numerical/head semantics into the GMM progress contract.
+
+    Logging cadence, artifact retention, paths and the execution device do not
+    change a fitted GMM.  They are intentionally excluded so changing them on
+    resume cannot invalidate an otherwise identical numerical run.
+    """
+    value = dict(config.to_dict() if hasattr(config, "to_dict") else config)
+    excluded = {
+        "output_dir", "resume_from", "artifact_policy", "device",
+        "log_every_steps", "log_every_seconds", "gmm_log_every_iters",
+    }
+    for key in excluded:
+        value.pop(key, None)
+    return value
+
+
+def _gmm_progress_payload(config, sample_hash, statistics_hash, noise_hash,
+                          cache_hashes, endpoint_hashes, selected_indices,
+                          source_identity):
+    return {
+        "version": GMM_PROGRESS_IDENTITY_VERSION,
+        "config": _gmm_numeric_config(config),
+        "sample_hash": sample_hash,
+        "statistics_hash": statistics_hash,
+        "noise_hash": noise_hash,
+        "cache_hashes": cache_hashes,
+        "endpoint_hashes": endpoint_hashes,
+        "selected_indices": list(selected_indices),
+        "source": source_identity,
+    }
+
+
 def _strict_integer_indices(value, name):
     array = np.asarray(value)
     if array.ndim != 1 or array.dtype.kind not in "iu" or array.dtype.kind == "b":
@@ -387,98 +423,7 @@ class MNRFViewProbe:
 
     def _finalize_results_artifact(self):
         """Commit a validated result-only bundle after all scoring is done."""
-        manifest_path = self.output_dir / "probe_manifest.json"
-        manifest = json.loads(manifest_path.read_text())
-        metrics_path = self.output_dir / "results" / "metrics.json"
-        aligned_path = self.output_dir / "results" / "aligned_scores.npz"
-        if not metrics_path.is_file() or not aligned_path.is_file():
-            raise ValueError("results artifact cannot be organized before metrics and scores exist")
-        metrics = json.loads(metrics_path.read_text())
-        if metrics.get("status") != "complete":
-            raise ValueError("results artifact cleanup requires complete metrics; recovery files are retained")
-        # Validate the saved arrays before deleting any recovery material.
-        self._log_event("result_validation_start")
-        _validate_result_bundle(self.output_dir, allow_in_progress=True)
-        self._log_event("result_validation_complete")
-        known_root = {"probe_manifest.json", "run_status.json", "run.log", "training.jsonl",
-                      "results", "checkpoints", "cache", "heads", "run_request.json",
-                      "input_statistics.npz"}
-        unknown_root = [child.name for child in self.output_dir.iterdir() if child.name not in known_root]
-        allowed_results = {"metrics.json", "aligned_scores.npz", "test_nll.npy"}
-        unknown_results = [child.name for child in (self.output_dir / "results").iterdir()
-                           if child.name not in allowed_results]
-        if unknown_root or unknown_results:
-            raise ValueError("refusing results cleanup with unknown paths: "
-                             + ", ".join(unknown_root + [f"results/{name}" for name in unknown_results]))
-        # The CLI appends its temporary Tee log after fit() returns; reserve
-        # the final path now so retention counts include the required log.
-        (self.output_dir / "run.log").touch(exist_ok=True)
-        before_count, before_bytes = self._tree_size(self.output_dir)
-        manifest.update({
-            "schema": PROBE_SCHEMA,
-            "artifact_type": ARTIFACT_RESULTS,
-            "artifact_policy": "results",
-            "result_bundle_schema": RESULT_SCHEMA,
-            "result_cleanup_status": "in_progress",
-            "capabilities": {
-                "validate_results": True, "recompute_metrics": True,
-                "load_model": False, "resume_training": False,
-                "reuse_source": False, "strict_common_recompute": False,
-            },
-            "retention_before": {"file_count": before_count, "bytes": before_bytes},
-        })
-        _atomic_json(manifest_path, manifest)
-        self._log_event("artifact_cleanup_start", files_before=before_count, bytes_before=before_bytes)
-        self._set_run_status("organizing_results", artifact_type=ARTIFACT_RESULTS,
-                             result_cleanup_status="in_progress")
-        keep = {
-            self.output_dir / "probe_manifest.json",
-            self.output_dir / "run_status.json",
-            self.output_dir / "run.log",
-            self.output_dir / "training.jsonl",
-            self.output_dir / "results" / "metrics.json",
-            self.output_dir / "results" / "aligned_scores.npz",
-        }
-        for name in ("checkpoints", "cache", "heads"):
-            candidate = self.output_dir / name
-            if candidate.is_symlink() or (candidate.exists() and not candidate.is_dir()):
-                raise ValueError(f"refusing to organize unknown artifact path: {candidate}")
-            if candidate.is_dir():
-                shutil.rmtree(candidate)
-        request_path = self.output_dir / "run_request.json"
-        if request_path.exists():
-            request_path.unlink()
-        results_dir = self.output_dir / "results"
-        for child in results_dir.iterdir():
-            if child not in {metrics_path, aligned_path}:
-                if child.is_symlink() or child.is_file():
-                    child.unlink()
-                elif child.is_dir():
-                    shutil.rmtree(child)
-        for child in self.output_dir.iterdir():
-            if child in keep or child == self.output_dir / "results":
-                continue
-            if child.is_symlink() or child.is_file():
-                child.unlink()
-            elif child.is_dir():
-                shutil.rmtree(child)
-        after_count, after_bytes = self._tree_size(self.output_dir)
-        manifest = json.loads(manifest_path.read_text())
-        manifest.update({
-            "result_cleanup_status": "complete",
-            "retention_after": {"file_count": after_count, "bytes": after_bytes},
-            "retention_released_bytes": max(0, before_bytes - after_bytes),
-            "retention_released_files": max(0, before_count - after_count),
-        })
-        _atomic_json(manifest_path, manifest)
-        self._set_run_status("complete", artifact_type=ARTIFACT_RESULTS,
-                             result_cleanup_status="complete",
-                             artifact_policy="results",
-                             retention_released_bytes=max(0, before_bytes - after_bytes))
-        self._log_event("artifact_cleanup_complete", files_before=before_count,
-                        files_after=after_count, bytes_before=before_bytes,
-                        bytes_after=after_bytes,
-                        released_bytes=max(0, before_bytes - after_bytes))
+        return _organize_results_transaction(self.output_dir, log=self._log_event)
 
     @staticmethod
     def required_hyper_params():
@@ -655,6 +600,11 @@ class MNRFViewProbe:
     def _stage1_with_progress(self, normalized):
         """Observe the existing stage-one calls without changing its schedule."""
         original = self.trainer._pretrain_batch
+        train_window_count = len(EndWindowDataset(
+            normalized, *self.ranges["train"], self.config.seq_len,
+            self.ranges["segment_ranges"]["train"],
+        ))
+        total_batches = max(1, int(math.ceil(train_window_count / float(self.config.batch_size))))
         state = {"steps": 0, "last_log": time.perf_counter(), "started": time.perf_counter()}
 
         def observed(windows, task, *args, **kwargs):
@@ -666,9 +616,17 @@ class MNRFViewProbe:
                 due = (state["steps"] == 1 or state["steps"] % self.config.log_every_steps == 0
                        or time.perf_counter() - state["last_log"] >= self.config.log_every_seconds)
                 if due:
+                    epoch = (state["steps"] - 1) // total_batches + 1
+                    epoch_batch = (state["steps"] - 1) % total_batches + 1
+                    remaining = max(0, total_batches - epoch_batch)
+                    seconds_per_step = elapsed / state["steps"]
                     self._log_event("stage1_batch", completed_steps=state["steps"], task=task,
+                                    optimizer_steps=state["steps"], epoch=epoch,
+                                    epoch_batch=epoch_batch, total_batches=total_batches,
                                     train_nll=float(loss.detach().cpu()),
-                                    seconds_per_step=elapsed / state["steps"])
+                                    seconds_per_step=seconds_per_step,
+                                    epoch_eta_seconds=(remaining * seconds_per_step
+                                                       if remaining else 0.0))
                     state["last_log"] = time.perf_counter()
             return loss
 
@@ -713,6 +671,7 @@ class MNRFViewProbe:
         # Test windows use endpoints from the post-boundary sequence and retain
         # full-series coordinates; build the cache with the same encoder path.
         selected = np.asarray(test_endpoints, dtype=np.int64)
+        self._log_event("cache_start", split="test", windows=len(selected))
         np.save(test_indices, selected)
         mmap = np.lib.format.open_memmap(test_path.with_suffix(".partial.npy"), mode="w+", dtype=np.float32,
                                          shape=(len(selected), self.trainer.variables, self.trainer.feature_dim))
@@ -722,6 +681,8 @@ class MNRFViewProbe:
             windows = np.stack([normalized[e - self.config.seq_len + 1:e + 1] for e in endpoints])
             feature = self.trainer.encoder.encode_views(torch.as_tensor(windows, device=self.device))["features"]
             mmap[start:start + len(endpoints)] = feature.detach().cpu().numpy()
+            if start == 0 or start + len(endpoints) == len(selected) or (start // batch_size + 1) % max(1, self.config.log_every_steps) == 0:
+                self._log_event("cache_progress", split="test", windows=start + len(endpoints), total=len(selected))
         mmap.flush(); del mmap
         os.replace(test_path.with_suffix(".partial.npy"), test_path)
         cache["test"] = np.load(test_path, mmap_mode="r")
@@ -763,6 +724,8 @@ class MNRFViewProbe:
         for offset in range(0, len(endpoints), batch_size):
             batch = endpoints[offset:offset + batch_size]
             mmap[offset:offset + len(batch)] = np.asarray(normalized[batch], dtype=np.float32)[:, :, None]
+            if offset == 0 or offset + len(batch) == len(endpoints) or (offset // batch_size + 1) % max(1, self.config.log_every_steps) == 0:
+                self._log_event("cache_progress", split="test", windows=offset + len(batch), total=len(endpoints))
         mmap.flush(); del mmap
         os.replace(path.with_suffix(".partial.npy"), path)
         index_path = self.output_dir / "cache" / "test_window_end_indices.npy"
@@ -820,6 +783,7 @@ class MNRFViewProbe:
             "endpoint_sha256": {name: _sha256_file(path) for name, path in endpoint_paths.items()},
             "feature_fingerprint": self.trainer.fingerprint(),
             "source_identity": self.source_identity,
+            "source_identity_sha256": _json_hash(self.source_identity),
             "cache_shapes": {name: list(cache[name].shape) for name in cache},
             "cache_dtypes": {name: str(cache[name].dtype) for name in cache},
             "cache_feature_dim": int(next(iter(cache.values())).shape[-1]),
@@ -853,6 +817,7 @@ class MNRFViewProbe:
             "temporal_rule": self.temporal_rule,
             "source_dir": str(Path(self.config.source_dir).resolve()) if self.config.source_dir else "",
             "source_identity": self.source_identity,
+            "source_identity_sha256": _json_hash(self.source_identity),
             "source_feature_fingerprint": None if source_manifest is None else source_manifest.get("feature_fingerprint"),
             "selected_views": list(self.config.selected_views),
             "selected_indices": self.config.selected_indices, "selected_dim": self.config.selected_dim,
@@ -1035,9 +1000,6 @@ class MNRFViewProbe:
         variable_dir = self.output_dir / "heads" / "gmm_variables"
         variable_dir.mkdir(exist_ok=True)
         progress_path = self.output_dir / "heads" / "gmm_progress.json"
-        fit_config = self.config.to_dict()
-        fit_config.pop("output_dir", None)
-        fit_config.pop("resume_from", None)
         source_cache_identity = None if source_manifest is None else {
             "source_dir": str(Path(self.config.source_dir).resolve()),
             "source_identity": self.source_identity,
@@ -1048,22 +1010,58 @@ class MNRFViewProbe:
             manifest = json.loads(manifest_path.read_text())
         else:
             manifest = {}
-        progress_identity = _json_hash({"config": fit_config, "sample_hash": sample_hash,
-                                        "statistics_hash": _sha256_file(statistics_path),
-                                        "noise_hash": _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
-                                        "cache_hashes": (manifest.get("source_cache_sha256") if source_manifest is not None
-                                                         else manifest.get("cache_sha256")),
-                                        "endpoint_hashes": (manifest.get("source_endpoint_sha256") if source_manifest is not None
-                                                            else manifest.get("endpoint_sha256")),
-                                        "selected_indices": self.config.selected_indices,
-                                        "source": source_cache_identity})
-        progress = {"schema": PROBE_SCHEMA, "identity": progress_identity, "completed": {}}
+        cache_hashes = (manifest.get("source_cache_sha256") if source_manifest is not None
+                        else manifest.get("cache_sha256"))
+        endpoint_hashes = (manifest.get("source_endpoint_sha256") if source_manifest is not None
+                           else manifest.get("endpoint_sha256"))
+        identity_payload = _gmm_progress_payload(
+            self.config, sample_hash, _sha256_file(statistics_path),
+            _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
+            cache_hashes, endpoint_hashes, self.config.selected_indices,
+            source_cache_identity,
+        )
+        progress_identity = _json_hash(identity_payload)
+        progress = {"schema": PROBE_SCHEMA, "identity_version": GMM_PROGRESS_IDENTITY_VERSION,
+                    "identity": progress_identity, "identity_payload": identity_payload,
+                    "config_projection": identity_payload["config"], "completed": {}}
         if self.config.resume_from:
             if not progress_path.is_file():
                 raise ValueError("GMM resume rejected: gmm_progress.json is missing")
             progress = json.loads(progress_path.read_text())
             if progress.get("identity") != progress_identity:
-                raise ValueError("GMM resume rejected: head configuration or fitting sample differs")
+                # Artifacts written before the versioned projection existed
+                # contain only the legacy hash.  Reconstruct that hash from
+                # the persisted configuration and immutable current artifacts;
+                # never rewrite it during a failed preflight.
+                persisted = getattr(self, "_legacy_gmm_config", None)
+                request_path = self.output_dir / "run_request.json"
+                if persisted is None and request_path.is_file():
+                    persisted = json.loads(request_path.read_text()).get("config")
+                if persisted is None:
+                    persisted = manifest.get("config")
+                if persisted is None:
+                    raise ValueError("GMM resume rejected: versioned or legacy numerical identity is missing")
+                legacy_config = dict(persisted)
+                legacy_config.pop("output_dir", None)
+                legacy_config.pop("resume_from", None)
+                legacy_payload = {"config": legacy_config, "sample_hash": sample_hash,
+                                  "statistics_hash": _sha256_file(statistics_path),
+                                  "noise_hash": _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
+                                  "cache_hashes": cache_hashes,
+                                  "endpoint_hashes": endpoint_hashes,
+                                  "selected_indices": self.config.selected_indices,
+                                  "source": source_cache_identity}
+                if progress.get("identity") != _json_hash(legacy_payload):
+                    raise ValueError("GMM resume rejected: numerical head configuration or fitting sample differs")
+                # The read-only preflight has already verified every binding;
+                # migrate the legacy envelope atomically now so a second
+                # resume with changed logging fields remains repeatable.
+                progress.update({"identity_version": GMM_PROGRESS_IDENTITY_VERSION,
+                                 "identity": progress_identity,
+                                 "identity_payload": identity_payload,
+                                 "config_projection": identity_payload["config"],
+                                 "legacy_identity_verified": True})
+                _atomic_json(progress_path, progress)
         else:
             _atomic_json(progress_path, progress)
         request_path = self.output_dir / "run_request.json"
@@ -1275,6 +1273,17 @@ class MNRFViewProbe:
             payload["actual"] = actual
             payload["aligned_actual"] = np.full(int(self._test_length), -1, dtype=np.asarray(actual).dtype)
             payload["aligned_actual"][local] = actual
+        manifest_path = self.output_dir / "probe_manifest.json"
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text())
+            manifest.update({
+                "test_length": int(self._test_length),
+                "test_endpoint_sha256": _chunked_array_hash(np.asarray(test_endpoints, dtype=np.int64)),
+                "test_endpoint_count": int(len(test_endpoints)),
+                "test_local_indices_sha256": _chunked_array_hash(local),
+                "test_time_values_sha256": _chunked_array_hash(np.asarray(self._time_values_ns[test_endpoints], dtype=np.int64)),
+            })
+            _atomic_json(manifest_path, manifest)
         np.savez_compressed(self.output_dir / "results" / "aligned_scores.npz", **payload)
         _atomic_json(self.output_dir / "results" / "metrics.json", metrics)
         self._log_event("scoring_complete", valid_points=len(score), auc_roc=metrics.get("auc_roc"),
@@ -1319,9 +1328,14 @@ class MNRFViewProbe:
         manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else None
         request = json.loads(request_path.read_text()) if request_path.is_file() else None
         status = json.loads((self.output_dir / "run_status.json").read_text())
+        # ``artifact_policy=results`` is a retention request, not evidence
+        # that training is complete.  Interrupted stage/GMM/Flow runs retain
+        # their recovery tree and remain resumable.  Only a committed result
+        # bundle (or a result marked valid with cleanup complete) is terminal.
         if ((manifest or {}).get("artifact_type") == ARTIFACT_RESULTS
-                or (manifest or {}).get("artifact_policy") == "results"):
-            raise ValueError("resume rejected: results artifact is metrics-only and cannot resume training")
+                or ((manifest or {}).get("result_valid") and
+                    (manifest or {}).get("result_cleanup_status") == "complete")):
+            raise ValueError("resume rejected: completed results artifact is metrics-only")
         identity_record = manifest or request
         if identity_record.get("schema") != PROBE_SCHEMA or status.get("schema") != PROBE_SCHEMA:
             raise ValueError("resume preflight failed: unsupported artifact schema")
@@ -1633,9 +1647,6 @@ class MNRFViewProbe:
                                   * self.config.train_noise_std).numpy()
                 if noise.dtype != np.float32 or noise.shape != expected_noise.shape or not np.array_equal(noise, expected_noise):
                     raise ValueError("resume rejected: fixed noise artifact differs")
-                fit_config = self.config.to_dict()
-                fit_config.pop("output_dir", None)
-                fit_config.pop("resume_from", None)
                 source_cache_identity = None if not self.config.source_dir else {
                     "source_dir": str(Path(self.config.source_dir).resolve()),
                     "source_identity": self.source_identity,
@@ -1650,18 +1661,33 @@ class MNRFViewProbe:
                                         else (manifest or {}).get("cache_sha256"))
                 current_endpoint_hashes = ((manifest or {}).get("source_endpoint_sha256") if self.config.source_dir
                                            else (manifest or {}).get("endpoint_sha256"))
-                expected_progress_identity = _json_hash({
-                    "config": fit_config,
-                    "sample_hash": _sha256_file(sample_path),
-                    "statistics_hash": _sha256_file(stats_path),
-                    "noise_hash": _sha256_file(noise_path),
-                    "cache_hashes": current_cache_hashes,
-                    "endpoint_hashes": current_endpoint_hashes,
-                    "selected_indices": self.config.selected_indices,
-                    "source": source_cache_identity,
-                })
+                identity_payload = _gmm_progress_payload(
+                    self.config, _sha256_file(sample_path), _sha256_file(stats_path),
+                    _sha256_file(noise_path), current_cache_hashes,
+                    current_endpoint_hashes, self.config.selected_indices,
+                    source_cache_identity,
+                )
+                expected_progress_identity = _json_hash(identity_payload)
                 if progress.get("identity") != expected_progress_identity:
-                    raise ValueError("resume rejected: GMM progress identity differs")
+                    persisted_config = (request or {}).get("config") or (manifest or {}).get("config")
+                    legacy_payload = None
+                    if persisted_config is not None:
+                        legacy_config = dict(persisted_config)
+                        legacy_config.pop("output_dir", None)
+                        legacy_config.pop("resume_from", None)
+                        legacy_payload = {
+                            "config": legacy_config,
+                            "sample_hash": _sha256_file(sample_path),
+                            "statistics_hash": _sha256_file(stats_path),
+                            "noise_hash": _sha256_file(noise_path),
+                            "cache_hashes": current_cache_hashes,
+                            "endpoint_hashes": current_endpoint_hashes,
+                            "selected_indices": self.config.selected_indices,
+                            "source": source_cache_identity,
+                        }
+                    if legacy_payload is None or progress.get("identity") != _json_hash(legacy_payload):
+                        raise ValueError("resume rejected: GMM numerical progress identity differs")
+                    self._legacy_gmm_config = persisted_config
 
     def fit(self, frame, train_length, labels=None):
         self._fit_started = time.perf_counter()
@@ -1838,7 +1864,21 @@ class MNRFViewProbe:
             return self
         except Exception as error:
             if write_allowed:
-                self._set_run_status("failed", repr(error))
+                # A result-only run can fail after score validation while
+                # deleting disposable training material.  Preserve the valid
+                # metrics and cleanup_failed state instead of hiding it as a
+                # calculation failure.
+                manifest_path = self.output_dir / "probe_manifest.json"
+                cleanup_failed = False
+                if self.config.artifact_policy == "results" and manifest_path.is_file():
+                    try:
+                        current = json.loads(manifest_path.read_text())
+                        cleanup_failed = bool(current.get("result_valid") and
+                                              current.get("result_cleanup_status") == "failed")
+                    except Exception:
+                        cleanup_failed = False
+                if not cleanup_failed:
+                    self._set_run_status("failed", repr(error))
             raise
 
     def _fit_flow(self, cache, labels, test_endpoints):
@@ -1932,6 +1972,17 @@ class MNRFViewProbe:
             result_payload["actual"] = actual
             result_payload["aligned_actual"] = np.full(int(self._test_length), -1, dtype=np.asarray(actual).dtype)
             result_payload["aligned_actual"][local] = actual
+        manifest_path = self.output_dir / "probe_manifest.json"
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text())
+            manifest.update({
+                "test_length": int(self._test_length),
+                "test_endpoint_sha256": _chunked_array_hash(np.asarray(test_endpoints, dtype=np.int64)),
+                "test_endpoint_count": int(len(test_endpoints)),
+                "test_local_indices_sha256": _chunked_array_hash(local),
+                "test_time_values_sha256": _chunked_array_hash(np.asarray(self._time_values_ns[test_endpoints], dtype=np.int64)),
+            })
+            _atomic_json(manifest_path, manifest)
         np.savez_compressed(self.output_dir / "results" / "aligned_scores.npz", **result_payload)
         _atomic_json(self.output_dir / "results" / "metrics.json", payload)
         manifest_path = self.output_dir / "probe_manifest.json"
@@ -2034,7 +2085,7 @@ def _validate_result_bundle(path, allow_in_progress=False):
         raise ValueError("results cleanup status is invalid")
     if not allow_in_progress and cleanup_status != "complete":
         raise ValueError(f"results cleanup is not complete: {cleanup_status}")
-    allowed_status = {"complete", "organizing_results", "failed"}
+    allowed_status = {"complete", "organizing_results", "failed", "cleanup_failed"}
     if allow_in_progress:
         allowed_status.update({"gmm_fitting", "flow_training"})
     if status.get("status") not in allowed_status:
@@ -2069,6 +2120,7 @@ def _validate_result_bundle(path, allow_in_progress=False):
         scores = np.asarray(payload["scores"])
         predictions = np.asarray(payload["predictions"])
         endpoints = np.asarray(payload["time_indices"])
+        time_values = np.asarray(payload["time_values_ns"]) if "time_values_ns" in payload.files else None
         local = np.asarray(payload["local_indices"])
         valid = np.asarray(payload["valid_mask"])
         aligned_scores = np.asarray(payload["aligned_scores"])
@@ -2077,6 +2129,8 @@ def _validate_result_bundle(path, allow_in_progress=False):
             raise ValueError("results vectors must be one-dimensional")
         if endpoints.dtype.kind not in "iu" or local.dtype.kind not in "iu" or valid.dtype.kind != "b":
             raise ValueError("results coordinates or valid_mask have invalid dtype")
+        if time_values is None or time_values.ndim != 1 or len(time_values) != len(endpoints) or time_values.dtype.kind not in "iu":
+            raise ValueError("results time_values_ns is missing or invalid")
         if len(scores) != len(predictions) or len(scores) != len(endpoints) or len(scores) != len(local):
             raise ValueError("results vector lengths disagree")
         if len(np.unique(endpoints)) != len(endpoints) or len(np.unique(local)) != len(local):
@@ -2092,6 +2146,40 @@ def _validate_result_bundle(path, allow_in_progress=False):
             raise ValueError("results predictions do not match scores and threshold")
         if len(aligned_scores) != len(valid) or len(aligned_predictions) != len(valid):
             raise ValueError("results aligned vectors disagree")
+        source_identity = manifest.get("source_identity") or {}
+        source_identity_hash = manifest.get("source_identity_sha256")
+        if source_identity_hash and _json_hash(source_identity) != source_identity_hash:
+            raise ValueError("results source identity binding differs")
+        train_length = source_identity.get("train_length")
+        input_length = source_identity.get("input_length")
+        if train_length is None or input_length is None:
+            raise ValueError("results source identity is missing train/input length")
+        if len(valid) != int(input_length) - int(train_length):
+            raise ValueError("results test length does not match frozen source identity")
+        if len(local) and not np.array_equal(endpoints, int(train_length) + local):
+            raise ValueError("results time_indices are not train_length plus local_indices")
+        expected_endpoint_hash = source_identity.get("test_endpoints_sha256")
+        expected_endpoint_count = source_identity.get("test_endpoints_count")
+        if expected_endpoint_hash and _chunked_array_hash(endpoints) != expected_endpoint_hash:
+            raise ValueError("results endpoints differ from frozen test endpoint identity")
+        if expected_endpoint_count is not None and len(endpoints) != int(expected_endpoint_count):
+            raise ValueError("results endpoint count differs from frozen test protocol")
+        declared_endpoint_hash = manifest.get("test_endpoint_sha256")
+        if declared_endpoint_hash and _chunked_array_hash(endpoints) != declared_endpoint_hash:
+            raise ValueError("results endpoint hash binding differs")
+        declared_time_hash = manifest.get("test_time_values_sha256")
+        if declared_time_hash and _chunked_array_hash(time_values) != declared_time_hash:
+            raise ValueError("results time value hash binding differs")
+        expected_segments = source_identity.get("test_segments", [])
+        seq_len = int(source_identity.get("seq_len", manifest.get("config", {}).get("seq_len", 0)))
+        for endpoint in endpoints:
+            if not any(int(left) + seq_len - 1 <= int(endpoint) < int(right)
+                       for left, right in expected_segments):
+                raise ValueError("results endpoint crosses a frozen test segment boundary")
+        expected_local = np.zeros(len(valid), dtype=bool)
+        expected_local[local] = True
+        if not np.array_equal(valid, expected_local):
+            raise ValueError("results valid_mask is not exactly the scored local coordinates")
         if not np.array_equal(valid[local], np.ones(len(local), dtype=bool)):
             raise ValueError("results valid mask does not cover score coordinates")
         if not np.allclose(aligned_scores[local], scores, rtol=0, atol=1e-7):
@@ -2104,6 +2192,21 @@ def _validate_result_bundle(path, allow_in_progress=False):
             actual = np.asarray(payload["actual"])
             if actual.ndim != 1 or len(actual) != len(scores):
                 raise ValueError("results actual labels are invalid")
+            if actual.dtype.kind not in "biuf":
+                raise ValueError("results labels have invalid dtype")
+            if actual.dtype.kind == "f" and not np.isfinite(actual).all():
+                raise ValueError("results labels contain NaN or Inf")
+            if not np.all(np.isin(actual, [0, 1])):
+                raise ValueError("results labels must be binary")
+            if "aligned_actual" not in payload.files:
+                raise ValueError("results aligned_actual is missing")
+            aligned_actual = np.asarray(payload["aligned_actual"])
+            if aligned_actual.ndim != 1 or len(aligned_actual) != len(valid):
+                raise ValueError("results aligned_actual is invalid")
+            if not np.array_equal(aligned_actual[local], actual):
+                raise ValueError("results aligned_actual does not match actual labels")
+            if np.any(aligned_actual[~valid] != -1):
+                raise ValueError("results invalid label positions have incorrect sentinels")
             from sklearn.metrics import average_precision_score, roc_auc_score
             expected_pr = float(average_precision_score(actual, scores))
             if metrics.get("auc_pr") is None or not np.isclose(float(metrics["auc_pr"]), expected_pr, rtol=0, atol=1e-6):
@@ -2112,17 +2215,45 @@ def _validate_result_bundle(path, allow_in_progress=False):
                 expected_roc = float(roc_auc_score(actual, scores))
                 if metrics.get("auc_roc") is None or not np.isclose(float(metrics["auc_roc"]), expected_roc, rtol=0, atol=1e-6):
                     raise ValueError("results AUC-ROC does not reproduce")
+            elif metrics.get("auc_roc") is not None:
+                raise ValueError("results AUC-ROC must be null for a single-class test")
+        elif metrics.get("auc_pr") is not None or metrics.get("auc_roc") is not None:
+            raise ValueError("results metrics contain AUC values without aligned labels")
+        if int(metrics.get("valid_points", -1)) != len(scores):
+            raise ValueError("results valid_points does not match score vector")
+        if int(metrics.get("excluded_points", -1)) != int(np.count_nonzero(~valid)):
+            raise ValueError("results excluded_points does not match valid_mask")
+        expected_coverage = float(len(scores) / max(len(valid), 1))
+        if not np.isclose(float(metrics.get("coverage")), expected_coverage, rtol=0, atol=1e-7):
+            raise ValueError("results coverage does not match valid_mask")
     return {"status": "valid", "artifact_type": ARTIFACT_RESULTS,
             "cleanup_status": cleanup_status, "metrics": metrics}
 
 
-def organize_results(path):
-    """Idempotently finish a previously interrupted results cleanup."""
+def _organize_results_transaction(path, log=None):
+    """Validate once, then perform the shared result-retention transaction.
+
+    Cleanup is deliberately separate from calculation validity.  If a delete
+    fails after a validated score bundle exists, the metrics remain valid and
+    the run is marked ``cleanup_failed`` for a later explicit retry.
+    """
     path = Path(path).resolve()
-    manifest = json.loads((path / "probe_manifest.json").read_text())
+    manifest_path = path / "probe_manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError("results cleanup requires a probe manifest")
+    manifest = json.loads(manifest_path.read_text())
     if manifest.get("artifact_policy") != "results":
         raise ValueError("only artifact_policy=results runs can be organized")
-    _validate_result_bundle(path, allow_in_progress=True)
+    if log:
+        log("result_validation_start")
+    checked = _validate_result_bundle(path, allow_in_progress=True)
+    metrics_path = path / "results" / "metrics.json"
+    aligned_path = path / "results" / "aligned_scores.npz"
+    metrics = checked["metrics"]
+    if metrics.get("status") != "complete":
+        raise ValueError("results artifact cleanup requires complete metrics; recovery files are retained")
+    if log:
+        log("result_validation_complete")
     known_root = {"probe_manifest.json", "run_status.json", "run.log", "training.jsonl",
                   "results", "checkpoints", "cache", "heads", "run_request.json",
                   "input_statistics.npz"}
@@ -2130,47 +2261,95 @@ def organize_results(path):
     allowed_results = {"metrics.json", "aligned_scores.npz", "test_nll.npy"}
     unknown_results = [child.name for child in (path / "results").iterdir()
                        if child.name not in allowed_results]
-    if unknown_root or unknown_results:
-        raise ValueError("refusing results cleanup with unknown paths: "
-                         + ", ".join(unknown_root + [f"results/{name}" for name in unknown_results]))
+    (path / "run.log").touch(exist_ok=True)
+    before_count, before_bytes = MNRFViewProbe._tree_size(path)
+    manifest.update({
+        "schema": PROBE_SCHEMA, "artifact_type": ARTIFACT_RESULTS,
+        "artifact_policy": "results", "result_bundle_schema": RESULT_SCHEMA,
+        "calculation_status": "complete", "result_valid": True,
+        "result_cleanup_status": "in_progress",
+        "capabilities": {"validate_results": True, "recompute_metrics": True,
+                         "load_model": False, "resume_training": False,
+                         "reuse_source": False, "strict_common_recompute": False},
+        "retention_before": {"file_count": before_count, "bytes": before_bytes},
+    })
+    _atomic_json(manifest_path, manifest)
+    status_path = path / "run_status.json"
+    status = json.loads(status_path.read_text()) if status_path.is_file() else {}
+    status.update({"schema": PROBE_SCHEMA, "status": "organizing_results",
+                   "artifact_type": ARTIFACT_RESULTS, "artifact_policy": "results",
+                   "run_identity": manifest.get("run_identity"),
+                   "result_cleanup_status": "in_progress", "calculation_status": "complete",
+                   "result_valid": True})
+    _atomic_json(status_path, status)
+    if log:
+        log("artifact_cleanup_start", files_before=before_count, bytes_before=before_bytes)
     keep = {path / "probe_manifest.json", path / "run_status.json", path / "run.log",
-            path / "training.jsonl", path / "results" / "metrics.json",
-            path / "results" / "aligned_scores.npz"}
-    for name in ("checkpoints", "cache", "heads"):
-        candidate = path / name
-        if candidate.is_symlink():
-            raise ValueError(f"refusing to follow symlink during cleanup: {candidate}")
-        if candidate.is_dir():
-            shutil.rmtree(candidate)
-    request = path / "run_request.json"
-    if request.exists():
-        request.unlink()
-    results_dir = path / "results"
-    keep_results = {results_dir / "metrics.json", results_dir / "aligned_scores.npz"}
-    for child in results_dir.iterdir():
-        if child not in keep_results:
+            path / "training.jsonl", metrics_path, aligned_path}
+    try:
+        if unknown_root or unknown_results:
+            raise ValueError("refusing results cleanup with unknown paths: "
+                             + ", ".join(unknown_root + [f"results/{name}" for name in unknown_results]))
+        for name in ("checkpoints", "cache", "heads"):
+            candidate = path / name
+            if candidate.is_symlink() or (candidate.exists() and not candidate.is_dir()):
+                raise ValueError(f"refusing to organize unknown artifact path: {candidate}")
+            if candidate.is_dir():
+                shutil.rmtree(candidate)
+        request_path = path / "run_request.json"
+        if request_path.exists():
+            request_path.unlink()
+        results_dir = path / "results"
+        for child in results_dir.iterdir():
+            if child not in {metrics_path, aligned_path}:
+                if child.is_symlink() or child.is_file():
+                    child.unlink()
+                elif child.is_dir():
+                    shutil.rmtree(child)
+        for child in path.iterdir():
+            if child in keep or child == path / "results":
+                continue
             if child.is_symlink() or child.is_file():
                 child.unlink()
             elif child.is_dir():
                 shutil.rmtree(child)
-    for child in path.iterdir():
-        if child in keep or child == path / "results":
-            continue
-        if child.is_symlink() or child.is_file():
-            child.unlink()
-        elif child.is_dir():
-            shutil.rmtree(child)
-    manifest = json.loads((path / "probe_manifest.json").read_text())
-    count, size = MNRFViewProbe._tree_size(path)
-    manifest["result_cleanup_status"] = "complete"
-    manifest["retention_after"] = {"file_count": count, "bytes": size}
-    _atomic_json(path / "probe_manifest.json", manifest)
-    _atomic_json(path / "run_status.json", {
-        "schema": PROBE_SCHEMA, "status": "complete", "artifact_type": ARTIFACT_RESULTS,
-        "run_identity": manifest.get("run_identity"), "result_cleanup_status": "complete",
-        "artifact_policy": "results",
-    })
+        after_count, after_bytes = MNRFViewProbe._tree_size(path)
+        manifest = json.loads(manifest_path.read_text())
+        manifest.update({"result_cleanup_status": "complete",
+                         "retention_after": {"file_count": after_count, "bytes": after_bytes},
+                         "retention_released_bytes": max(0, before_bytes - after_bytes),
+                         "retention_released_files": max(0, before_count - after_count)})
+        _atomic_json(manifest_path, manifest)
+        _atomic_json(status_path, {"schema": PROBE_SCHEMA, "status": "complete",
+                                   "artifact_type": ARTIFACT_RESULTS,
+                                   "run_identity": manifest.get("run_identity"),
+                                   "result_cleanup_status": "complete",
+                                   "artifact_policy": "results", "calculation_status": "complete",
+                                   "result_valid": True})
+    except Exception as error:
+        manifest = json.loads(manifest_path.read_text())
+        manifest.update({"result_cleanup_status": "failed", "calculation_status": "complete",
+                         "result_valid": True, "cleanup_error": repr(error)})
+        _atomic_json(manifest_path, manifest)
+        status = json.loads(status_path.read_text())
+        status.update({"status": "cleanup_failed", "result_cleanup_status": "failed",
+                       "calculation_status": "complete", "result_valid": True,
+                       "cleanup_error": repr(error)})
+        _atomic_json(status_path, status)
+        if log:
+            log("artifact_cleanup_failed", error=repr(error))
+        raise
+    if log:
+        log("artifact_cleanup_complete", files_before=before_count, files_after=after_count,
+            bytes_before=before_bytes, bytes_after=after_bytes,
+            released_bytes=max(0, before_bytes - after_bytes))
     return _validate_result_bundle(path)
+
+
+def organize_results(path):
+    """Idempotently finish a previously interrupted results cleanup."""
+    path = Path(path).resolve()
+    return _organize_results_transaction(path)
 
 
 def load_probe(path, device="cpu"):
@@ -2181,7 +2360,10 @@ def load_probe(path, device="cpu"):
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("schema") != PROBE_SCHEMA:
         raise ValueError("view probe artifact schema is unsupported; re-export with the current probe")
-    if manifest.get("artifact_type") == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
+    if (manifest.get("artifact_type") == ARTIFACT_RESULTS
+            or (manifest.get("artifact_policy") == "results"
+                and manifest.get("result_valid")
+                and manifest.get("result_cleanup_status") == "complete")):
         raise ValueError("results artifact is metrics-only and has no model/cache; rerun with artifact_policy=full for loading or source reuse")
     run_status_path = path / "run_status.json"
     if not run_status_path.is_file():

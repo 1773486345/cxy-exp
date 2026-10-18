@@ -20,17 +20,28 @@ def collect(root):
     rows = []
     for manifest_path in sorted(Path(root).glob("**/probe_manifest.json")):
         run = manifest_path.parent
-        manifest = json.loads(manifest_path.read_text())
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except Exception as error:
+            rows.append({"run": str(run), "validation_status": "invalid",
+                         "validation_reason": f"invalid probe_manifest.json: {error}"})
+            continue
         status_path = run / "run_status.json"
-        run_status = json.loads(status_path.read_text()) if status_path.is_file() else {"status": "missing_status"}
+        try:
+            run_status = json.loads(status_path.read_text()) if status_path.is_file() else {"status": "missing_status"}
+        except Exception as error:
+            run_status = {"status": "invalid_status", "reason": str(error)}
         result_path = run / "results" / "metrics.json"
         if manifest.get("artifact_type") == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
             validation_status = "invalid"
             validation_reason = ""
             metrics = {}
             try:
-                checked = _validate_result_bundle(run)
-                validation_status = "results_valid"
+                checked = _validate_result_bundle(
+                    run, allow_in_progress=manifest.get("result_cleanup_status") != "complete"
+                )
+                validation_status = ("results_valid" if checked.get("cleanup_status") == "complete"
+                                     else "results_valid_cleanup_failed")
                 metrics = checked["metrics"]
             except Exception as error:
                 validation_reason = str(error)
@@ -51,6 +62,7 @@ def collect(root):
                 "fit_time_seconds": metrics.get("fit_time_seconds"),
                 "inference_time_seconds": metrics.get("inference_time_seconds"),
                 "result_cleanup_status": manifest.get("result_cleanup_status"),
+                "cleanup_error": manifest.get("cleanup_error"),
                 "retention_after_bytes": manifest.get("retention_after", {}).get("bytes"),
                 "retention_released_bytes": manifest.get("retention_released_bytes"),
             })
@@ -74,8 +86,14 @@ def collect(root):
                          "validation_status": validation_status, "validation_reason": validation_reason,
                          "status": "stage1_complete" if validation_status == "valid" else "missing_metrics"})
             continue
-        metrics = json.loads(result_path.read_text())
         config = manifest.get("config", {})
+        try:
+            metrics = json.loads(result_path.read_text())
+        except Exception as error:
+            rows.append({"run": str(run), "task": config.get("task_name") if isinstance(config, dict) else None,
+                         "run_status": run_status.get("status"), "validation_status": "invalid",
+                         "validation_reason": f"invalid metrics.json: {error}"})
+            continue
         gmm_status_path = run / "heads" / "gmm_status.json"
         gmm_status = json.loads(gmm_status_path.read_text()) if gmm_status_path.is_file() else {}
         validation_status = "not_applicable"
