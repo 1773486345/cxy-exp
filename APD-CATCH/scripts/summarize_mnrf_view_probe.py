@@ -26,11 +26,17 @@ def collect(root):
             rows.append({"run": str(run), "validation_status": "invalid",
                          "validation_reason": f"invalid probe_manifest.json: {error}"})
             continue
+        if not isinstance(manifest, dict):
+            rows.append({"run": str(run), "validation_status": "invalid",
+                         "validation_reason": "probe_manifest.json root must be an object"})
+            continue
         status_path = run / "run_status.json"
         try:
             run_status = json.loads(status_path.read_text()) if status_path.is_file() else {"status": "missing_status"}
         except Exception as error:
             run_status = {"status": "invalid_status", "reason": str(error)}
+        if not isinstance(run_status, dict):
+            run_status = {"status": "invalid_status", "reason": "run_status.json root must be an object"}
         result_path = run / "results" / "metrics.json"
         if manifest.get("artifact_type") == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
             validation_status = "invalid"
@@ -87,6 +93,11 @@ def collect(root):
                          "status": "stage1_complete" if validation_status == "valid" else "missing_metrics"})
             continue
         config = manifest.get("config", {})
+        if not isinstance(config, dict):
+            rows.append({"run": str(run), "task": None, "run_status": run_status.get("status"),
+                         "validation_status": "invalid",
+                         "validation_reason": "manifest config must be an object"})
+            continue
         try:
             metrics = json.loads(result_path.read_text())
         except Exception as error:
@@ -94,8 +105,23 @@ def collect(root):
                          "run_status": run_status.get("status"), "validation_status": "invalid",
                          "validation_reason": f"invalid metrics.json: {error}"})
             continue
+        if not isinstance(metrics, dict):
+            rows.append({"run": str(run), "task": None, "run_status": run_status.get("status"),
+                         "validation_status": "invalid",
+                         "validation_reason": "metrics.json root must be an object"})
+            continue
         gmm_status_path = run / "heads" / "gmm_status.json"
-        gmm_status = json.loads(gmm_status_path.read_text()) if gmm_status_path.is_file() else {}
+        gmm_status = {}
+        if gmm_status_path.is_file():
+            try:
+                gmm_status = json.loads(gmm_status_path.read_text())
+                if not isinstance(gmm_status, dict):
+                    raise ValueError("gmm_status.json root must be an object")
+            except Exception as error:
+                rows.append({"run": str(run), "task": config.get("task_name") if isinstance(config, dict) else None,
+                             "run_status": run_status.get("status"), "validation_status": "invalid",
+                             "validation_reason": f"invalid gmm_status.json: {error}"})
+                continue
         validation_status = "not_applicable"
         validation_reason = ""
         if run_status.get("status") in {"complete", "stage1_complete"}:

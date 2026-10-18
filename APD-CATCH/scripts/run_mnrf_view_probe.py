@@ -141,11 +141,19 @@ def main():
             self.state["target"].flush()
 
         def write(self, value):
+            # Attach before writing the current chunk.  The temporary log is
+            # copied exactly once; after that point the same chunk is written
+            # to the durable target and the temporary mirror.
+            self._attach()
             self.primary.write(value)
             self.secondary.write(value)
+            if self.state["target"] is not None:
+                encoded = value.encode("utf-8", errors="replace") if isinstance(value, str) else value
+                self.state["target"].write(encoded)
             self.primary.flush()
             self.secondary.flush()
-            self._attach()
+            if self.state["target"] is not None:
+                self.state["target"].flush()
             return len(value)
 
         def flush(self):

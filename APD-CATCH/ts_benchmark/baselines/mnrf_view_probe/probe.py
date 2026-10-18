@@ -159,6 +159,29 @@ def _strict_integer_indices(value, name):
     return np.asarray(array, dtype=np.int64)
 
 
+def _strict_count(value, name):
+    """Read a result count without truncating malformed numeric values."""
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        raise ValueError(f"{name} must be a finite non-negative integer")
+    numeric = float(value)
+    if not np.isfinite(numeric) or numeric < 0 or not numeric.is_integer():
+        raise ValueError(f"{name} must be a finite non-negative integer")
+    return int(numeric)
+
+
+def _strict_binary_predictions(value, name, expected_length=None):
+    array = np.asarray(value)
+    if array.ndim != 1 or array.dtype.kind not in "iuf":
+        raise ValueError(f"{name} must be a one-dimensional numeric array")
+    if array.dtype.kind == "f" and not np.isfinite(array).all():
+        raise ValueError(f"{name} contains NaN or Inf")
+    if not np.all(np.isin(array, [0, 1])):
+        raise ValueError(f"{name} must contain exact binary values")
+    if expected_length is not None and len(array) != expected_length:
+        raise ValueError(f"{name} has an unexpected length")
+    return array
+
+
 def _safe_name(value):
     return "".join(char if char.isalnum() or char in "._-" else "_" for char in str(value))
 
@@ -598,47 +621,20 @@ class MNRFViewProbe:
         return trainer
 
     def _stage1_with_progress(self, normalized):
-        """Observe the existing stage-one calls without changing its schedule."""
-        original = self.trainer._pretrain_batch
-        train_window_count = len(EndWindowDataset(
-            normalized, *self.ranges["train"], self.config.seq_len,
-            self.ranges["segment_ranges"]["train"],
-        ))
-        total_batches = max(1, int(math.ceil(train_window_count / float(self.config.batch_size))))
-        state = {"steps": 0, "last_log": time.perf_counter(), "started": time.perf_counter()}
+        """Run the protected trainer without inventing pre-step progress.
 
-        def observed(windows, task, *args, **kwargs):
-            loss = original(windows, task, *args, **kwargs)
-            # Validation uses eval mode; only training calls count here.
-            if self.trainer.encoder.training and self.trainer.auxiliary.training:
-                state["steps"] += 1
-                elapsed = time.perf_counter() - state["started"]
-                due = (state["steps"] == 1 or state["steps"] % self.config.log_every_steps == 0
-                       or time.perf_counter() - state["last_log"] >= self.config.log_every_seconds)
-                if due:
-                    epoch = (state["steps"] - 1) // total_batches + 1
-                    epoch_batch = (state["steps"] - 1) % total_batches + 1
-                    remaining = max(0, total_batches - epoch_batch)
-                    seconds_per_step = elapsed / state["steps"]
-                    self._log_event("stage1_batch", completed_steps=state["steps"], task=task,
-                                    optimizer_steps=state["steps"], epoch=epoch,
-                                    epoch_batch=epoch_batch, total_batches=total_batches,
-                                    train_nll=float(loss.detach().cpu()),
-                                    seconds_per_step=seconds_per_step,
-                                    epoch_eta_seconds=(remaining * seconds_per_step
-                                                       if remaining else 0.0))
-                    state["last_log"] = time.perf_counter()
-            return loss
-
-        self.trainer._pretrain_batch = observed
-        try:
-            return self.trainer.stage1(
-                normalized, self.ranges["train"], self.ranges["validation"],
-                self.output_dir / "checkpoints", self.segments,
-                self.output_dir / "training.jsonl", self._run_identity,
-            )
-        finally:
-            self.trainer._pretrain_batch = original
+        The shared trainer writes its epoch record only after ``optimizer.step``
+        returns and persists ``completed_steps`` in the same checkpoint.  An
+        adapter-side wrapper around ``_pretrain_batch`` cannot observe that
+        boundary and previously reported forward-call counts as optimizer
+        steps, so progress is intentionally delegated to the authoritative
+        trainer record.
+        """
+        return self.trainer.stage1(
+            normalized, self.ranges["train"], self.ranges["validation"],
+            self.output_dir / "checkpoints", self.segments,
+            self.output_dir / "training.jsonl", self._run_identity,
+        )
 
     def _normalized_memmap(self, values):
         started = time.perf_counter()
@@ -1940,6 +1936,7 @@ class MNRFViewProbe:
                    "head_parameter_count": sum(parameter.numel() for parameter in self.trainer.flow.parameters()),
                    "fit_time_seconds": float(getattr(self, "_fit_elapsed", 0.0)),
                    "inference_time_seconds": float(time.perf_counter() - inference_start),
+                   "valid_points": int(len(score)),
                    "coverage": float(len(score) / max(int(self._test_length), 1)),
                    "excluded_points": int(self._test_length - len(score))}
         local = np.asarray(test_endpoints, dtype=np.int64) - int(self._test_offset)
@@ -2141,11 +2138,18 @@ def _validate_result_bundle(path, allow_in_progress=False):
             raise ValueError("results scores contain NaN or Inf")
         if not np.isclose(float(np.asarray(payload["threshold"])), threshold, rtol=0, atol=1e-7):
             raise ValueError("results threshold copy differs from metrics")
+        _strict_binary_predictions(predictions, "results predictions", len(scores))
         expected_predictions = (scores > threshold).astype(np.int64)
-        if not np.array_equal(predictions.astype(np.int64), expected_predictions):
+        if not np.array_equal(predictions, expected_predictions):
             raise ValueError("results predictions do not match scores and threshold")
         if len(aligned_scores) != len(valid) or len(aligned_predictions) != len(valid):
             raise ValueError("results aligned vectors disagree")
+        if aligned_predictions.dtype.kind not in "iuf":
+            raise ValueError("results aligned_predictions have invalid dtype")
+        if aligned_predictions.dtype.kind == "f" and not np.isfinite(aligned_predictions).all():
+            raise ValueError("results aligned_predictions contain NaN or Inf")
+        if not np.all(np.isin(aligned_predictions[valid], [0, 1])):
+            raise ValueError("results aligned_predictions must be exact binary values")
         source_identity = manifest.get("source_identity") or {}
         source_identity_hash = manifest.get("source_identity_sha256")
         if source_identity_hash and _json_hash(source_identity) != source_identity_hash:
@@ -2184,7 +2188,7 @@ def _validate_result_bundle(path, allow_in_progress=False):
             raise ValueError("results valid mask does not cover score coordinates")
         if not np.allclose(aligned_scores[local], scores, rtol=0, atol=1e-7):
             raise ValueError("results aligned scores do not match scores")
-        if not np.array_equal(aligned_predictions[local].astype(np.int64), predictions.astype(np.int64)):
+        if not np.array_equal(aligned_predictions[local], predictions):
             raise ValueError("results aligned predictions do not match predictions")
         if np.any(aligned_predictions[~valid] != -1) or np.any(np.isfinite(aligned_scores[~valid])):
             raise ValueError("results invalid positions have incorrect sentinels")
@@ -2219,12 +2223,20 @@ def _validate_result_bundle(path, allow_in_progress=False):
                 raise ValueError("results AUC-ROC must be null for a single-class test")
         elif metrics.get("auc_pr") is not None or metrics.get("auc_roc") is not None:
             raise ValueError("results metrics contain AUC values without aligned labels")
-        if int(metrics.get("valid_points", -1)) != len(scores):
+        valid_points = _strict_count(metrics.get("valid_points"), "results valid_points")
+        excluded_points = _strict_count(metrics.get("excluded_points"), "results excluded_points")
+        if valid_points != len(scores):
             raise ValueError("results valid_points does not match score vector")
-        if int(metrics.get("excluded_points", -1)) != int(np.count_nonzero(~valid)):
+        if excluded_points != int(np.count_nonzero(~valid)):
             raise ValueError("results excluded_points does not match valid_mask")
+        coverage = metrics.get("coverage")
+        if isinstance(coverage, (bool, np.bool_)) or not isinstance(coverage, numbers.Real):
+            raise ValueError("results coverage must be a finite numeric value")
+        coverage = float(coverage)
         expected_coverage = float(len(scores) / max(len(valid), 1))
-        if not np.isclose(float(metrics.get("coverage")), expected_coverage, rtol=0, atol=1e-7):
+        if not np.isfinite(coverage) or coverage < 0 or coverage > 1:
+            raise ValueError("results coverage is outside [0, 1]")
+        if not np.isclose(coverage, expected_coverage, rtol=0, atol=1e-7):
             raise ValueError("results coverage does not match valid_mask")
     return {"status": "valid", "artifact_type": ARTIFACT_RESULTS,
             "cleanup_status": cleanup_status, "metrics": metrics}

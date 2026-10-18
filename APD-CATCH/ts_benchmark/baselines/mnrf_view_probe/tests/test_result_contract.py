@@ -99,3 +99,56 @@ def test_gmm_identity_projection_excludes_logging_and_storage_fields():
     changed = dict(config, log_every_steps=999, log_every_seconds=999.0,
                    gmm_log_every_iters=999, device="cuda:0", output_dir="/other")
     assert probe_module._gmm_numeric_config(config) == probe_module._gmm_numeric_config(changed)
+
+
+def _refresh_result_hash(run):
+    manifest_path = run / "probe_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["aligned_scores_sha256"] = probe_module._sha256_file(run / "results" / "aligned_scores.npz")
+    manifest["metrics_sha256"] = probe_module._sha256_file(run / "results" / "metrics.json")
+    manifest_path.write_text(json.dumps(manifest))
+
+
+def test_result_validator_rejects_fractional_predictions_and_counts_after_rebinding(tmp_path):
+    run = _bundle(tmp_path)
+    with np.load(run / "results" / "aligned_scores.npz", allow_pickle=False) as source:
+        payload = {key: source[key] for key in source.files}
+    payload["predictions"] = payload["predictions"].astype(np.float32)
+    payload["predictions"][0] = 0.5
+    payload["aligned_predictions"] = payload["aligned_predictions"].astype(np.float32)
+    payload["aligned_predictions"][payload["local_indices"][0]] = 0.5
+    np.savez_compressed(run / "results" / "aligned_scores.npz", **payload)
+    _refresh_result_hash(run)
+    with np.testing.assert_raises(ValueError):
+        probe_module._validate_result_bundle(run, allow_in_progress=True)
+
+
+def test_summary_isolates_corrupt_gmm_status_from_valid_runs(tmp_path, monkeypatch):
+    from scripts import summarize_mnrf_view_probe as summary
+
+    for name, corrupt in (("valid", False), ("broken", True)):
+        run = tmp_path / name
+        (run / "results").mkdir(parents=True)
+        (run / "heads").mkdir()
+        (run / "probe_manifest.json").write_text(json.dumps({
+            "artifact_type": "probe_head", "artifact_policy": "full", "mode": "full_gmm",
+            "config": {"task_name": name, "seed": 2021}, "head_status": "complete",
+        }))
+        (run / "run_status.json").write_text(json.dumps({"status": "complete"}))
+        (run / "results" / "metrics.json").write_text(json.dumps({"status": "complete", "auc_roc": 0.5}))
+        (run / "heads" / "gmm_status.json").write_text("{ broken" if corrupt else "{}")
+    monkeypatch.setattr(summary, "load_probe", lambda *args, **kwargs: object())
+    frame = summary.collect(tmp_path)
+    assert set(frame["task"]) == {"valid", "broken"}
+    assert frame.loc[frame["task"] == "valid", "validation_status"].iloc[0] == "valid"
+    broken_reason = frame.loc[frame["task"] == "broken", "validation_reason"].iloc[0]
+    assert "gmm_status.json" in broken_reason
+
+    run = _bundle(tmp_path / "counts")
+    metrics_path = run / "results" / "metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    metrics["valid_points"] = 59.9
+    metrics_path.write_text(json.dumps(metrics))
+    _refresh_result_hash(run)
+    with np.testing.assert_raises(ValueError):
+        probe_module._validate_result_bundle(run, allow_in_progress=True)

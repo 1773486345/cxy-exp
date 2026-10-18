@@ -93,6 +93,15 @@ python scripts/organize_mnrf_view_probe.py /absolute/path/to/run
 The organizer validates the result hashes before removing recovery material.
 `load_probe`, source reuse and resume reject a results-only bundle explicitly.
 
+The live log is attached before the first post-preflight output chunk; that
+chunk is copied once and every later stdout/stderr write is flushed to the
+same `run.log`. The shell preflight records both the Python and `tee` exit
+statuses, so a logging failure cannot start training. Flow and GMM result
+metrics both contain `valid_points`, `excluded_points`, and `coverage`; the
+validator checks these as finite, non-negative integer/range values without
+truncating malformed decimals. Predictions must be exact binary values (with
+`-1` only at invalid aligned positions).
+
 This round does not make a performance claim. Paper CATCH values and any
 CATCH-original result are references only; they are not substituted for probe
 results. AUC-ROC/AUC-PR are measured only on the valid endpoint intersection

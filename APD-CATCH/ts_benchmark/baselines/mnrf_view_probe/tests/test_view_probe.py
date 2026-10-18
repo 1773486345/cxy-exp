@@ -111,6 +111,9 @@ def test_flow_feature_statistics_shape_and_completed_stage2_resume_only_finishes
     monkeypatch.setattr(MNRFTrainer, "calibrate", original_calibrate)
     restored = MNRFViewProbe(**dict(kwargs, resume_from=str(flow_dir)))
     restored.fit(frame, train_length)
+    metrics = json.loads((flow_dir / "results" / "metrics.json").read_text())
+    assert metrics["valid_points"] == 59
+    assert metrics["excluded_points"] == 31
     checkpoint_after = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert checkpoint_after["completed_steps"] == checkpoint_before["completed_steps"]
     assert checkpoint_after["next_epoch"] == checkpoint_before["next_epoch"]
