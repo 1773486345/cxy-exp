@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ts_benchmark.baselines.mnrf_view_probe import load_probe
+from ts_benchmark.baselines.mnrf_view_probe.probe import ARTIFACT_RESULTS, _validate_result_bundle
 
 
 def collect(root):
@@ -23,6 +24,37 @@ def collect(root):
         status_path = run / "run_status.json"
         run_status = json.loads(status_path.read_text()) if status_path.is_file() else {"status": "missing_status"}
         result_path = run / "results" / "metrics.json"
+        if manifest.get("artifact_type") == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
+            validation_status = "invalid"
+            validation_reason = ""
+            metrics = {}
+            try:
+                checked = _validate_result_bundle(run)
+                validation_status = "results_valid"
+                metrics = checked["metrics"]
+            except Exception as error:
+                validation_reason = str(error)
+            rows.append({
+                "run": str(run), "task": manifest.get("task_name", manifest.get("config", {}).get("task_name")),
+                "seed": manifest.get("config", {}).get("seed"), "seq_len": manifest.get("config", {}).get("seq_len"),
+                "mode": manifest.get("mode"), "head": metrics.get("head"),
+                "selected_views": ",".join(manifest.get("selected_views", manifest.get("config", {}).get("selected_views", []))),
+                "selected_dim": manifest.get("selected_dim", manifest.get("config", {}).get("selected_dim")),
+                "layout_F": manifest.get("layout", {}).get("F"),
+                "run_status": run_status.get("status"), "artifact_type": ARTIFACT_RESULTS,
+                "artifact_policy": "results", "validation_status": validation_status,
+                "validation_reason": validation_reason, "status": metrics.get("status", run_status.get("status")),
+                "failure_reason": run_status.get("reason"), "auc_roc": metrics.get("auc_roc"),
+                "auc_pr": metrics.get("auc_pr"), "threshold": metrics.get("threshold"),
+                "valid_points": metrics.get("valid_points"), "coverage": metrics.get("coverage"),
+                "excluded_points": metrics.get("excluded_points"),
+                "fit_time_seconds": metrics.get("fit_time_seconds"),
+                "inference_time_seconds": metrics.get("inference_time_seconds"),
+                "result_cleanup_status": manifest.get("result_cleanup_status"),
+                "retention_after_bytes": manifest.get("retention_after", {}).get("bytes"),
+                "retention_released_bytes": manifest.get("retention_released_bytes"),
+            })
+            continue
         if not result_path.is_file():
             completed_stage1 = (run_status.get("status") == "stage1_complete"
                                 and manifest.get("artifact_type") == "source_encoder"
@@ -38,6 +70,7 @@ def collect(root):
             rows.append({"run": str(run), "task": manifest.get("config", {}).get("task_name"),
                          "mode": manifest.get("mode"), "run_status": run_status.get("status"),
                          "artifact_type": manifest.get("artifact_type"),
+                         "artifact_policy": manifest.get("artifact_policy", "full"),
                          "validation_status": validation_status, "validation_reason": validation_reason,
                          "status": "stage1_complete" if validation_status == "valid" else "missing_metrics"})
             continue
@@ -66,6 +99,7 @@ def collect(root):
             "gmm_fit_endpoint_count": metrics.get("gmm_fit_endpoint_count", gmm_status.get("fit_endpoint_count")),
             "run_status": run_status.get("status"), "head_status": manifest.get("head_status"),
             "artifact_type": manifest.get("artifact_type"), "head_type": manifest.get("head_type"),
+            "artifact_policy": manifest.get("artifact_policy", "full"),
             "validation_status": validation_status, "validation_reason": validation_reason,
             "status": metrics.get("status"), "failure_reason": run_status.get("reason"),
             "auc_roc": metrics.get("auc_roc"), "auc_pr": metrics.get("auc_pr"),

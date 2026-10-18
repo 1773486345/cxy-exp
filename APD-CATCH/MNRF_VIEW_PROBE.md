@@ -65,13 +65,33 @@ sampler, and best-state information at epoch boundaries.
 
 ## Artifacts and safety
 
-Each run contains `probe_manifest.json`, `input_statistics.npz`, encoder
-checkpoints, read-only-source references, `cache/`, `heads/`, and
-`results/metrics.json` plus `aligned_scores.npz`. A source directory is never
-modified. Layout, variable order, selected views and source identity are
-checked before reuse. A missing or incompatible source artifact fails rather
-than defaulting to 1/8/8. The current model's strict FeatureLayout and time
-window protocols remain in force.
+Each run writes a flushed `run.log` containing startup configuration, the
+read-only preflight result, stage/cache/GMM/calibration/scoring progress and
+any traceback. The full artifact policy (the generic API default) additionally
+contains `training.jsonl`, `run_request.json`, `input_statistics.npz`, encoder
+checkpoints, source references, `cache/`, `heads/`, and the result files. A
+source directory is never modified. Layout, variable order, selected views
+and source identity are checked before reuse. A missing or incompatible source
+artifact fails rather than defaulting to 1/8/8. The current model's strict
+FeatureLayout and time window protocols remain in force.
+
+The five prepared task scripts intentionally use `artifact_policy=results`.
+After scores and metrics have been validated, the run performs an atomic
+retention transaction and keeps only `run.log`, optional `training.jsonl`,
+`probe_manifest.json`, `run_status.json`, `results/metrics.json`, and
+`results/aligned_scores.npz`. Its manifest declares that model loading,
+training resume, source reuse and strict common recomputation are unavailable;
+`validate_mnrf_view_probe.py` and `summarize_mnrf_view_probe.py` can still
+validate/recompute the saved result metrics. Use the generic CLI or set
+`ARTIFACT_POLICY=full` for a reusable full run. An interrupted cleanup can be
+finished without training with:
+
+```bash
+python scripts/organize_mnrf_view_probe.py /absolute/path/to/run
+```
+
+The organizer validates the result hashes before removing recovery material.
+`load_probe`, source reuse and resume reject a results-only bundle explicitly.
 
 This round does not make a performance claim. Paper CATCH values and any
 CATCH-original result are references only; they are not substituted for probe

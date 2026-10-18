@@ -86,6 +86,10 @@ def test_scripts_capture_literal_configuration_without_environment_override(tmp_
         assert "<--evolution-dim> <8>" in run
         assert "<--pattern-dim> <8>" in run
         assert "<--relation-dim> <8>" in run
+        assert "<--artifact-policy> <results>" in run
+        assert "<--log-every-steps> <100>" in run
+        assert "<--log-every-seconds> <30>" in run
+        assert "<--gmm-log-every-iters> <10>" in run
         assert "<--learning-rate> <0.001>" in run
         assert "<--weight-decay> <0.0001>" in run
         assert "<--source-dir> <>" in run

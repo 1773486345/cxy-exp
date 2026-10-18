@@ -13,7 +13,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ts_benchmark.baselines.mnrf_view_probe import load_probe
-from ts_benchmark.baselines.mnrf_view_probe.probe import PROBE_SCHEMA, _sha256_file
+from ts_benchmark.baselines.mnrf_view_probe.probe import (
+    ARTIFACT_RESULTS, PROBE_SCHEMA, _sha256_file, _validate_result_bundle,
+)
 
 
 def validate(run_dir):
@@ -30,6 +32,16 @@ def validate(run_dir):
         raise ValueError(f"run is not complete: {status.get('status')}")
     mode = manifest.get("mode")
     artifact_type = manifest.get("artifact_type")
+    if artifact_type == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
+        checked = _validate_result_bundle(run)
+        metrics = checked["metrics"]
+        return {"status": "results_valid", "run": str(run), "mode": mode,
+                "artifact_type": ARTIFACT_RESULTS,
+                "cleanup_status": checked["cleanup_status"],
+                "task_name": manifest.get("task_name", manifest.get("config", {}).get("task_name")),
+                "auc_roc": metrics.get("auc_roc"), "auc_pr": metrics.get("auc_pr"),
+                "valid_points": metrics.get("valid_points"),
+                "capabilities": manifest.get("capabilities", {})}
     head_type = manifest.get("head_type")
     if artifact_type not in {"source_encoder", "probe_head"}:
         raise ValueError("manifest has no recognized artifact_type")

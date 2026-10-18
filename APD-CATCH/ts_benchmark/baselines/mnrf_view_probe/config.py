@@ -47,6 +47,10 @@ class ViewProbeConfig:
     gmm_max_iter: int = 100
     gmm_fit_max_windows: int = 20000
     cpu_threads: int = 1
+    artifact_policy: str = "full"
+    log_every_steps: int = 100
+    log_every_seconds: float = 30.0
+    gmm_log_every_iters: int = 10
 
     def __post_init__(self):
         if isinstance(self.selected_views, str):
@@ -81,6 +85,12 @@ class ViewProbeConfig:
             raise ValueError("gmm_covariance_type must be full, tied, diag, or spherical")
         if self.gmm_reg_covar <= 0 or self.cpu_threads < 1:
             raise ValueError("gmm_reg_covar and cpu_threads must be positive")
+        if self.artifact_policy not in {"full", "results"}:
+            raise ValueError("artifact_policy must be full or results")
+        if self.mode == "stage1" and self.artifact_policy == "results":
+            raise ValueError("stage1 requires artifact_policy=full so its source remains reusable")
+        if self.log_every_steps < 1 or self.log_every_seconds <= 0 or self.gmm_log_every_iters < 1:
+            raise ValueError("log intervals must be positive")
 
     @property
     def mnrf(self) -> MNRFConfig:

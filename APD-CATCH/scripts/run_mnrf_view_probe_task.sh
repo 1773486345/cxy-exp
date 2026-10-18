@@ -20,6 +20,10 @@ SOURCE_DIR="${VIEW_PROBE_SOURCE_DIR:-}"
 VIEWS="${VIEW_PROBE_VIEWS:-S,E,P,R}"
 STAGE2_EPOCHS="${STAGE2_EPOCHS:-30}"
 RESUME_FROM="${VIEW_PROBE_RESUME_FROM:-}"
+ARTIFACT_POLICY="${ARTIFACT_POLICY:-full}"
+LOG_EVERY_STEPS="${LOG_EVERY_STEPS:-100}"
+LOG_EVERY_SECONDS="${LOG_EVERY_SECONDS:-30}"
+GMM_LOG_EVERY_ITERS="${GMM_LOG_EVERY_ITERS:-10}"
 
 if [[ "${GPU_ID}" == "cpu" ]]; then
   DEVICE=cpu
@@ -62,4 +66,6 @@ exec python "${ROOT}/scripts/run_mnrf_view_probe.py" \
   --gmm-reg-covar "${GMM_REG_COVAR:-0.001}" --gmm-n-init "${GMM_N_INIT:-1}" \
   --gmm-max-iter "${GMM_MAX_ITER:-100}" --gmm-fit-max-windows "${GMM_FIT_MAX_WINDOWS:-20000}" \
   --train-noise-std "${TRAIN_NOISE_STD:-0.01}" --noise-seed "${NOISE_SEED:-20261013}" \
-  --cpu-threads "${CPU_THREADS:-1}" --resume-from "${RESUME_PATH}"
+  --cpu-threads "${CPU_THREADS:-1}" --resume-from "${RESUME_PATH}" \
+  --artifact-policy "${ARTIFACT_POLICY}" --log-every-steps "${LOG_EVERY_STEPS}" \
+  --log-every-seconds "${LOG_EVERY_SECONDS}" --gmm-log-every-iters "${GMM_LOG_EVERY_ITERS}"

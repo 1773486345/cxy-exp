@@ -13,6 +13,7 @@ import os
 import pickle
 import platform
 import random
+import shutil
 import time
 from pathlib import Path
 
@@ -38,6 +39,8 @@ from .config import VALID_VIEWS, ViewProbeConfig
 PROBE_SCHEMA = "mnrf-view-probe-v2"
 ARTIFACT_SOURCE = "source_encoder"
 ARTIFACT_HEAD = "probe_head"
+ARTIFACT_RESULTS = "result_bundle"
+RESULT_SCHEMA = "mnrf-view-probe-results-v1"
 
 
 def _sha256_file(path):
@@ -101,7 +104,10 @@ def _json_hash(payload):
 def _runtime_free_config(config):
     """Return the persisted configuration fields that define an artifact."""
     value = dict(config.to_dict() if hasattr(config, "to_dict") else config)
-    for key in ("output_dir", "resume_from", "resolved_layout", "selected_indices", "selected_dim"):
+    # Logging cadence and retention are execution/storage metadata. They must
+    # be persisted, but changing them must not invalidate numerical recovery.
+    for key in ("output_dir", "resume_from", "resolved_layout", "selected_indices", "selected_dim",
+                "artifact_policy", "log_every_steps", "log_every_seconds", "gmm_log_every_iters"):
         value.pop(key, None)
     return value
 
@@ -355,6 +361,124 @@ class MNRFViewProbe:
         self._feature_scale = None
         self._noise_vectors = None
         self._run_identity = None
+        self._writes_started = False
+
+    def _log_event(self, event, **fields):
+        """Emit a flushed, human-readable event without an extra model pass."""
+        values = [f"event={event}"]
+        for key, value in fields.items():
+            if isinstance(value, float):
+                value = f"{value:.6g}"
+            values.append(f"{key}={value}")
+        print("MNRF " + " ".join(values), flush=True)
+
+    @staticmethod
+    def _tree_size(path):
+        total = 0
+        count = 0
+        root = Path(path)
+        if not root.exists():
+            return count, total
+        for item in root.rglob("*"):
+            if item.is_file() and not item.is_symlink():
+                count += 1
+                total += item.stat().st_size
+        return count, total
+
+    def _finalize_results_artifact(self):
+        """Commit a validated result-only bundle after all scoring is done."""
+        manifest_path = self.output_dir / "probe_manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        metrics_path = self.output_dir / "results" / "metrics.json"
+        aligned_path = self.output_dir / "results" / "aligned_scores.npz"
+        if not metrics_path.is_file() or not aligned_path.is_file():
+            raise ValueError("results artifact cannot be organized before metrics and scores exist")
+        metrics = json.loads(metrics_path.read_text())
+        if metrics.get("status") != "complete":
+            raise ValueError("results artifact cleanup requires complete metrics; recovery files are retained")
+        # Validate the saved arrays before deleting any recovery material.
+        self._log_event("result_validation_start")
+        _validate_result_bundle(self.output_dir, allow_in_progress=True)
+        self._log_event("result_validation_complete")
+        known_root = {"probe_manifest.json", "run_status.json", "run.log", "training.jsonl",
+                      "results", "checkpoints", "cache", "heads", "run_request.json",
+                      "input_statistics.npz"}
+        unknown_root = [child.name for child in self.output_dir.iterdir() if child.name not in known_root]
+        allowed_results = {"metrics.json", "aligned_scores.npz", "test_nll.npy"}
+        unknown_results = [child.name for child in (self.output_dir / "results").iterdir()
+                           if child.name not in allowed_results]
+        if unknown_root or unknown_results:
+            raise ValueError("refusing results cleanup with unknown paths: "
+                             + ", ".join(unknown_root + [f"results/{name}" for name in unknown_results]))
+        # The CLI appends its temporary Tee log after fit() returns; reserve
+        # the final path now so retention counts include the required log.
+        (self.output_dir / "run.log").touch(exist_ok=True)
+        before_count, before_bytes = self._tree_size(self.output_dir)
+        manifest.update({
+            "schema": PROBE_SCHEMA,
+            "artifact_type": ARTIFACT_RESULTS,
+            "artifact_policy": "results",
+            "result_bundle_schema": RESULT_SCHEMA,
+            "result_cleanup_status": "in_progress",
+            "capabilities": {
+                "validate_results": True, "recompute_metrics": True,
+                "load_model": False, "resume_training": False,
+                "reuse_source": False, "strict_common_recompute": False,
+            },
+            "retention_before": {"file_count": before_count, "bytes": before_bytes},
+        })
+        _atomic_json(manifest_path, manifest)
+        self._log_event("artifact_cleanup_start", files_before=before_count, bytes_before=before_bytes)
+        self._set_run_status("organizing_results", artifact_type=ARTIFACT_RESULTS,
+                             result_cleanup_status="in_progress")
+        keep = {
+            self.output_dir / "probe_manifest.json",
+            self.output_dir / "run_status.json",
+            self.output_dir / "run.log",
+            self.output_dir / "training.jsonl",
+            self.output_dir / "results" / "metrics.json",
+            self.output_dir / "results" / "aligned_scores.npz",
+        }
+        for name in ("checkpoints", "cache", "heads"):
+            candidate = self.output_dir / name
+            if candidate.is_symlink() or (candidate.exists() and not candidate.is_dir()):
+                raise ValueError(f"refusing to organize unknown artifact path: {candidate}")
+            if candidate.is_dir():
+                shutil.rmtree(candidate)
+        request_path = self.output_dir / "run_request.json"
+        if request_path.exists():
+            request_path.unlink()
+        results_dir = self.output_dir / "results"
+        for child in results_dir.iterdir():
+            if child not in {metrics_path, aligned_path}:
+                if child.is_symlink() or child.is_file():
+                    child.unlink()
+                elif child.is_dir():
+                    shutil.rmtree(child)
+        for child in self.output_dir.iterdir():
+            if child in keep or child == self.output_dir / "results":
+                continue
+            if child.is_symlink() or child.is_file():
+                child.unlink()
+            elif child.is_dir():
+                shutil.rmtree(child)
+        after_count, after_bytes = self._tree_size(self.output_dir)
+        manifest = json.loads(manifest_path.read_text())
+        manifest.update({
+            "result_cleanup_status": "complete",
+            "retention_after": {"file_count": after_count, "bytes": after_bytes},
+            "retention_released_bytes": max(0, before_bytes - after_bytes),
+            "retention_released_files": max(0, before_count - after_count),
+        })
+        _atomic_json(manifest_path, manifest)
+        self._set_run_status("complete", artifact_type=ARTIFACT_RESULTS,
+                             result_cleanup_status="complete",
+                             artifact_policy="results",
+                             retention_released_bytes=max(0, before_bytes - after_bytes))
+        self._log_event("artifact_cleanup_complete", files_before=before_count,
+                        files_after=after_count, bytes_before=before_bytes,
+                        bytes_after=after_bytes,
+                        released_bytes=max(0, before_bytes - after_bytes))
 
     @staticmethod
     def required_hyper_params():
@@ -528,7 +652,39 @@ class MNRFViewProbe:
         trainer = MNRFTrainer(config, variables, self.device)
         return trainer
 
+    def _stage1_with_progress(self, normalized):
+        """Observe the existing stage-one calls without changing its schedule."""
+        original = self.trainer._pretrain_batch
+        state = {"steps": 0, "last_log": time.perf_counter(), "started": time.perf_counter()}
+
+        def observed(windows, task, *args, **kwargs):
+            loss = original(windows, task, *args, **kwargs)
+            # Validation uses eval mode; only training calls count here.
+            if self.trainer.encoder.training and self.trainer.auxiliary.training:
+                state["steps"] += 1
+                elapsed = time.perf_counter() - state["started"]
+                due = (state["steps"] == 1 or state["steps"] % self.config.log_every_steps == 0
+                       or time.perf_counter() - state["last_log"] >= self.config.log_every_seconds)
+                if due:
+                    self._log_event("stage1_batch", completed_steps=state["steps"], task=task,
+                                    train_nll=float(loss.detach().cpu()),
+                                    seconds_per_step=elapsed / state["steps"])
+                    state["last_log"] = time.perf_counter()
+            return loss
+
+        self.trainer._pretrain_batch = observed
+        try:
+            return self.trainer.stage1(
+                normalized, self.ranges["train"], self.ranges["validation"],
+                self.output_dir / "checkpoints", self.segments,
+                self.output_dir / "training.jsonl", self._run_identity,
+            )
+        finally:
+            self.trainer._pretrain_batch = original
+
     def _normalized_memmap(self, values):
+        started = time.perf_counter()
+        self._log_event("feature_normalization_start", rows=len(values), train_rows=self.ranges["train"][1] - self.ranges["train"][0])
         path = self.output_dir / "cache" / "normalized_values.npy"
         mmap = np.lib.format.open_memmap(path.with_suffix(".partial.npy"), mode="w+", dtype=np.float32, shape=values.shape)
         self.trainer.fixed_input.fit(values[self.ranges["train"][0]:self.ranges["train"][1]])
@@ -536,16 +692,23 @@ class MNRFViewProbe:
             mmap[offset:offset + min(65536, len(values) - offset)] = self.trainer.fixed_input.transform_chunk(values[offset:offset + 65536])
         mmap.flush(); del mmap
         os.replace(path.with_suffix(".partial.npy"), path)
+        self._log_event("feature_normalization_complete", rows=len(values), path=path,
+                        elapsed_seconds=time.perf_counter() - started)
         return np.load(path, mmap_mode="r")
 
     def _cache_all(self, normalized, values, test_endpoints):
         cache = {}
         for name in ("train", "validation", "calibration"):
+            started = time.perf_counter()
+            self._log_event("cache_start", split=name)
             path, count, index_path = self.trainer.extract_cache(
                 normalized, self.ranges[name], name, self.output_dir / "cache", self.segments
             )
             cache[name] = np.load(path, mmap_mode="r")
+            self._log_event("cache_complete", split=name, windows=len(cache[name]), path=path,
+                            elapsed_seconds=time.perf_counter() - started)
         test_path = self.output_dir / "cache" / "test_features.npy"
+        test_started = time.perf_counter()
         test_indices = self.output_dir / "cache" / "test_window_end_indices.npy"
         # Test windows use endpoints from the post-boundary sequence and retain
         # full-series coordinates; build the cache with the same encoder path.
@@ -562,6 +725,8 @@ class MNRFViewProbe:
         mmap.flush(); del mmap
         os.replace(test_path.with_suffix(".partial.npy"), test_path)
         cache["test"] = np.load(test_path, mmap_mode="r")
+        self._log_event("cache_complete", split="test", windows=len(cache["test"]), path=test_path,
+                        elapsed_seconds=time.perf_counter() - test_started)
         return cache, {name: self.output_dir / "cache" / f"{name}_window_end_indices.npy" for name in ("train", "validation", "calibration", "test")}
 
     def _cache_s_only(self, normalized, test_endpoints):
@@ -569,6 +734,8 @@ class MNRFViewProbe:
         cache = {}
         endpoint_paths = {}
         for name, (start, end) in [(name, self.ranges[name]) for name in ("train", "validation", "calibration")]:
+            started = time.perf_counter()
+            self._log_event("cache_start", split=name)
             endpoints = window_endpoints(
                 intersect_segments(self.ranges["segment_ranges"][name], start, end),
                 self.config.seq_len,
@@ -585,7 +752,10 @@ class MNRFViewProbe:
             np.save(index_path, endpoints)
             cache[name] = np.load(path, mmap_mode="r")
             endpoint_paths[name] = index_path
+            self._log_event("cache_complete", split=name, windows=len(cache[name]), path=path,
+                            elapsed_seconds=time.perf_counter() - started)
         endpoints = np.asarray(test_endpoints, dtype=np.int64)
+        started = time.perf_counter()
         path = self.output_dir / "cache" / "test_features.npy"
         mmap = np.lib.format.open_memmap(path.with_suffix(".partial.npy"), mode="w+", dtype=np.float32,
                                          shape=(len(endpoints), len(self.variable_names), 1))
@@ -599,6 +769,8 @@ class MNRFViewProbe:
         np.save(index_path, endpoints)
         cache["test"] = np.load(path, mmap_mode="r")
         endpoint_paths["test"] = index_path
+        self._log_event("cache_complete", split="test", windows=len(cache["test"]), path=path,
+                        elapsed_seconds=time.perf_counter() - started)
         return cache, endpoint_paths
 
     def _expected_endpoints(self, name):
@@ -639,6 +811,7 @@ class MNRFViewProbe:
         payload = {
             "schema": PROBE_SCHEMA, "mode": mode, "task_name": self.config.task_name,
             "artifact_type": ARTIFACT_SOURCE, "head_type": None,
+            "artifact_policy": "full",
             "config": self.config.to_dict(), "layout": self.config.layout.to_dict(),
             "variable_names": list(self.variable_names), "temporal_rule": self.temporal_rule,
             "ranges": {name: list(self.ranges[name]) for name in ("train", "validation", "calibration")},
@@ -671,6 +844,7 @@ class MNRFViewProbe:
     def _save_probe_metadata(self, mode, source_manifest=None):
         payload = {
             "schema": PROBE_SCHEMA, "mode": mode, "artifact_type": ARTIFACT_HEAD,
+            "artifact_policy": self.config.artifact_policy,
             "head_type": "flow" if mode == "flow" else None,
             "head_status": "in_progress" if mode == "flow" else None,
             "stage_status": "flow_training" if mode == "flow" else ("source_reused" if source_manifest else "cache_ready"),
@@ -802,6 +976,10 @@ class MNRFViewProbe:
 
     def _fit_gmm(self, cache, source_manifest=None):
         train = cache["train"]
+        self._log_event("gmm_start", variables=train.shape[1], feature_dim=self.config.selected_dim,
+                        sample_limit=min(self.config.gmm_fit_max_windows, len(train)),
+                        components=self.config.gmm_components,
+                        covariance_type=self.config.gmm_covariance_type)
         statistics_path = self.output_dir / "heads" / "feature_statistics.npz"
         if self.config.resume_from and statistics_path.is_file():
             with np.load(statistics_path, allow_pickle=False) as saved_statistics:
@@ -905,6 +1083,7 @@ class MNRFViewProbe:
                 if entry and (not model_path.is_file() or _sha256_file(model_path) != entry.get("model_sha256")):
                     raise ValueError(f"GMM resume rejected: completed variable {variable} is missing or changed")
                 if entry and model_path.is_file():
+                    self._log_event("gmm_variable_reused", variable=variable, path=model_path)
                     with open(model_path, "rb") as handle:
                         model = pickle.load(handle)
                     statuses[variable] = entry["status"]
@@ -921,7 +1100,11 @@ class MNRFViewProbe:
                     n_init=self.config.gmm_n_init,
                     max_iter=self.config.gmm_max_iter,
                     random_state=self.config.seed,
+                    verbose=2,
+                    verbose_interval=self.config.gmm_log_every_iters,
                 )
+                variable_start = time.perf_counter()
+                self._log_event("gmm_variable_start", variable=variable, samples=len(values), dimension=values.shape[1])
                 model.fit(values)
                 if not model.converged_:
                     raise RuntimeError(f"GMM variable {variable} did not converge")
@@ -954,6 +1137,8 @@ class MNRFViewProbe:
                 }
                 statuses[variable]["model_sha256"] = progress["completed"][str(variable)]["model_sha256"]
                 _atomic_json(progress_path, progress)
+                self._log_event("gmm_variable_complete", variable=variable, n_iter=model.n_iter_,
+                                converged=model.converged_, elapsed_seconds=time.perf_counter() - variable_start)
         if any(model is None for model in self._gmm) or any(status is None for status in statuses):
             raise RuntimeError("GMM fitting did not produce every variable head")
         with open(self.output_dir / "heads" / "gmm_models.pkl", "wb") as handle:
@@ -976,6 +1161,7 @@ class MNRFViewProbe:
             manifest["gmm_fit_endpoints_sha256"] = sample_hash
             manifest["gmm_fit_endpoint_count"] = int(len(fit_indices))
             _atomic_json(manifest_path, manifest)
+        self._log_event("gmm_complete", variables=len(self._gmm), sample_count=len(fit_indices))
 
     def _fixed_noise_vectors(self):
         if self._noise_vectors is None:
@@ -985,7 +1171,7 @@ class MNRFViewProbe:
             ) * self.config.train_noise_std).numpy()
         return np.asarray(self._noise_vectors, dtype=np.float32)
 
-    def _gmm_scores(self, features, output_path=None):
+    def _gmm_scores(self, features, output_path=None, split_name="score"):
         if self._gmm is None:
             with open(self.output_dir / "heads" / "gmm_models.pkl", "rb") as handle:
                 self._gmm = pickle.load(handle)
@@ -1000,7 +1186,7 @@ class MNRFViewProbe:
         output[:] = 0.0
         noises = self._fixed_noise_vectors()
         with threadpool_limits(limits=self.config.cpu_threads):
-            for noise in noises:
+            for noise_index, noise in enumerate(noises):
                 for start in range(0, len(features), self.config.batch_size):
                     stop = min(len(features), start + self.config.batch_size)
                     for variable, model in enumerate(self._gmm):
@@ -1008,6 +1194,10 @@ class MNRFViewProbe:
                         values = (values - feature_mean[variable, selected]) / feature_scale[variable, selected]
                         values = values + noise[selected]
                         output[start:stop, variable] += -model.score_samples(values) / len(noises)
+                    batch_number = start // self.config.batch_size + 1
+                    if noise_index == len(noises) - 1 and (batch_number == 1 or stop == len(features)
+                                                           or batch_number % self.config.log_every_steps == 0):
+                        self._log_event("score_progress", split=split_name, windows=stop, total=len(features))
         if not np.isfinite(output).all():
             raise FloatingPointError("non-finite GMM NLL")
         if hasattr(output, "flush"):
@@ -1015,12 +1205,14 @@ class MNRFViewProbe:
         return output
 
     def _calibrate(self, cache):
-        validation = self._gmm_scores(cache["validation"], self.output_dir / "heads" / "validation_nll.npy")
+        started = time.perf_counter()
+        self._log_event("calibration_start", validation_windows=len(cache["validation"]), calibration_windows=len(cache["calibration"]))
+        validation = self._gmm_scores(cache["validation"], self.output_dir / "heads" / "validation_nll.npy", "validation")
         if not np.isfinite(validation).all():
             raise FloatingPointError("non-finite validation NLL")
         center = np.median(validation, axis=0).astype(np.float32)
         scale = np.maximum(1.4826 * np.median(np.abs(validation - center), axis=0), self.config.score_mad_floor).astype(np.float32)
-        calibration = self._gmm_scores(cache["calibration"], self.output_dir / "heads" / "calibration_nll.npy")
+        calibration = self._gmm_scores(cache["calibration"], self.output_dir / "heads" / "calibration_nll.npy", "calibration")
         aggregate = np.max((calibration - center) / scale, axis=1)
         threshold = float(np.quantile(aggregate, self.config.calibration_quantile))
         if not np.isfinite(threshold) or np.any(scale <= 0):
@@ -1028,10 +1220,14 @@ class MNRFViewProbe:
         self._probe_stats = {"center": center, "scale": scale, "threshold": threshold}
         np.savez(self.output_dir / "heads" / "calibration.npz", center=center, scale=scale,
                  threshold=np.asarray(threshold), quantile=np.asarray(self.config.calibration_quantile))
+        self._log_event("calibration_complete", threshold=threshold, quantile=self.config.calibration_quantile,
+                        elapsed_seconds=time.perf_counter() - started)
 
     def _write_scores(self, cache, test_endpoints, labels):
+        started = time.perf_counter()
+        self._log_event("scoring_start", test_windows=len(cache["test"]))
         inference_start = time.perf_counter()
-        nll = self._gmm_scores(cache["test"], self.output_dir / "results" / "test_nll.npy")
+        nll = self._gmm_scores(cache["test"], self.output_dir / "results" / "test_nll.npy", "test")
         score = np.max((nll - self._probe_stats["center"]) / self._probe_stats["scale"], axis=1)
         prediction = (score > self._probe_stats["threshold"]).astype(np.int64)
         local = np.asarray(test_endpoints, dtype=np.int64) - int(self._test_offset)
@@ -1081,10 +1277,22 @@ class MNRFViewProbe:
             payload["aligned_actual"][local] = actual
         np.savez_compressed(self.output_dir / "results" / "aligned_scores.npz", **payload)
         _atomic_json(self.output_dir / "results" / "metrics.json", metrics)
+        self._log_event("scoring_complete", valid_points=len(score), auc_roc=metrics.get("auc_roc"),
+                        auc_pr=metrics.get("auc_pr"), threshold=metrics.get("threshold"),
+                        elapsed_seconds=time.perf_counter() - started,
+                        result_path=self.output_dir / "results" / "metrics.json")
         return metrics
 
     def _set_protocol_identity(self, frame, train_length):
         values, test_endpoints, continuity = self._protocol(frame, int(train_length))
+        self._log_event("protocol_summary", train_rows=self.ranges["train"][1] - self.ranges["train"][0],
+                        validation_rows=self.ranges["validation"][1] - self.ranges["validation"][0],
+                        calibration_rows=self.ranges["calibration"][1] - self.ranges["calibration"][0],
+                        train_windows=self.ranges["window_counts"]["train"],
+                        validation_windows=self.ranges["window_counts"]["validation"],
+                        calibration_windows=self.ranges["window_counts"]["calibration"],
+                        test_windows=len(test_endpoints), segments=len(self.segments),
+                        temporal_rule=self.temporal_rule)
         self._test_offset = int(train_length)
         self._run_identity = _json_hash({
             "source_identity": self.source_identity,
@@ -1111,6 +1319,9 @@ class MNRFViewProbe:
         manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else None
         request = json.loads(request_path.read_text()) if request_path.is_file() else None
         status = json.loads((self.output_dir / "run_status.json").read_text())
+        if ((manifest or {}).get("artifact_type") == ARTIFACT_RESULTS
+                or (manifest or {}).get("artifact_policy") == "results"):
+            raise ValueError("resume rejected: results artifact is metrics-only and cannot resume training")
         identity_record = manifest or request
         if identity_record.get("schema") != PROBE_SCHEMA or status.get("schema") != PROBE_SCHEMA:
             raise ValueError("resume preflight failed: unsupported artifact schema")
@@ -1466,7 +1677,13 @@ class MNRFViewProbe:
                 # cache rewrite, or run-status mutation is performed.
                 self._fitted = True
                 return self
+            self._log_event("preflight_complete", mode=self.config.mode,
+                            train_windows=self.ranges["window_counts"]["train"],
+                            validation_windows=self.ranges["window_counts"]["validation"],
+                            calibration_windows=self.ranges["window_counts"]["calibration"],
+                            test_windows=len(self._current_test_endpoints))
         self._prepare_dirs()
+        self._writes_started = True
         write_allowed = True
         try:
             seed_all(self.config.seed)
@@ -1474,6 +1691,11 @@ class MNRFViewProbe:
             # this process; it does not change server-wide thread settings.
             torch.set_num_threads(self.config.cpu_threads)
             values, test_endpoints, continuity = self._set_protocol_identity(frame, int(train_length))
+            self._log_event("preflight_complete", mode=self.config.mode,
+                            train_windows=self.ranges["window_counts"]["train"],
+                            validation_windows=self.ranges["window_counts"]["validation"],
+                            calibration_windows=self.ranges["window_counts"]["calibration"],
+                            test_windows=len(test_endpoints))
             self._save_run_request(stage="running")
             self._set_run_status("running")
             self.trainer = self._make_trainer(len(self.variable_names))
@@ -1529,13 +1751,11 @@ class MNRFViewProbe:
             source_manifest = None
             if mode in {"random_gmm", "stage1", "full_gmm"}:
                 if mode != "random_gmm":
+                    self._log_event("stage1_start", epochs=self.config.stage1_epochs, patience=self.config.patience)
                     self._set_run_status("stage1_training")
                     self._save_run_request(stage="stage1_training")
-                    self.trainer.stage1(
-                        normalized, self.ranges["train"], self.ranges["validation"],
-                        self.output_dir / "checkpoints", self.segments,
-                        self.output_dir / "training.jsonl", self._run_identity,
-                    )
+                    self._stage1_with_progress(normalized)
+                    self._log_event("stage1_complete", checkpoint=self.output_dir / "checkpoints" / "best_encoder.pt")
             elif mode in {"select_gmm", "flow"} or (mode == "s_only" and self.config.source_dir):
                 if not self.config.source_dir:
                     raise ValueError(f"mode={mode} requires source_dir pointing to a validated stage-1 probe")
@@ -1573,7 +1793,9 @@ class MNRFViewProbe:
                     raise ValueError("flow mode requires the complete S,E,P,R layout")
                 self._set_run_status("flow_training")
                 self._save_run_request(stage="flow_training")
+                self._log_event("flow_start", epochs=self.config.stage2_epochs, patience=self.config.patience)
                 self._fit_flow(cache, labels, test_endpoints)
+                self._log_event("flow_complete")
             else:
                 self._set_run_status("gmm_fitting")
                 manifest_path = self.output_dir / "probe_manifest.json"
@@ -1592,6 +1814,7 @@ class MNRFViewProbe:
                 manifest = json.loads(manifest_path.read_text())
                 manifest.update({
                     "artifact_type": ARTIFACT_HEAD, "head": "gmm", "head_type": "gmm",
+                    "artifact_policy": self.config.artifact_policy,
                     "head_status": "complete", "stage_status": "complete",
                     "feature_statistics_sha256": _sha256_file(self.output_dir / "heads" / "feature_statistics.npz"),
                     "gmm_status_sha256": _sha256_file(self.output_dir / "heads" / "gmm_status.json"),
@@ -1602,7 +1825,16 @@ class MNRFViewProbe:
                 })
                 _atomic_json(manifest_path, manifest)
             self._fitted = True
-            self._set_run_status("complete")
+            if self.config.artifact_policy == "results":
+                # Release memmaps before the retention transaction removes the
+                # cache and head trees.  This keeps the cleanup portable to
+                # platforms that do not permit unlinking an open mapping.
+                cache = None
+                normalized = None
+                self._finalize_results_artifact()
+            else:
+                self._set_run_status("complete", artifact_type=ARTIFACT_HEAD,
+                                     artifact_policy="full")
             return self
         except Exception as error:
             if write_allowed:
@@ -1778,6 +2010,169 @@ class MNRFViewProbe:
                 "threshold": float(threshold)}
 
 
+def _validate_result_bundle(path, allow_in_progress=False):
+    """Validate a results-only bundle without constructing a model or RNG."""
+    path = Path(path)
+    manifest_path = path / "probe_manifest.json"
+    status_path = path / "run_status.json"
+    metrics_path = path / "results" / "metrics.json"
+    aligned_path = path / "results" / "aligned_scores.npz"
+    if not manifest_path.is_file() or not status_path.is_file():
+        raise ValueError("results bundle is missing manifest or run status")
+    manifest = json.loads(manifest_path.read_text())
+    status = json.loads(status_path.read_text())
+    if manifest.get("schema") != PROBE_SCHEMA:
+        raise ValueError("results bundle has unsupported probe schema")
+    if manifest.get("artifact_type") not in {ARTIFACT_RESULTS, ARTIFACT_HEAD}:
+        raise ValueError("artifact is not a results bundle")
+    if manifest.get("artifact_type") == ARTIFACT_RESULTS and manifest.get("result_bundle_schema") != RESULT_SCHEMA:
+        raise ValueError("results bundle schema is missing or unsupported")
+    if manifest.get("artifact_type") == ARTIFACT_HEAD and manifest.get("artifact_policy") != "results":
+        raise ValueError("probe head is not declared as artifact_policy=results")
+    cleanup_status = manifest.get("result_cleanup_status", "complete")
+    if cleanup_status not in {"complete", "in_progress", "failed"}:
+        raise ValueError("results cleanup status is invalid")
+    if not allow_in_progress and cleanup_status != "complete":
+        raise ValueError(f"results cleanup is not complete: {cleanup_status}")
+    allowed_status = {"complete", "organizing_results", "failed"}
+    if allow_in_progress:
+        allowed_status.update({"gmm_fitting", "flow_training"})
+    if status.get("status") not in allowed_status:
+        raise ValueError(f"results run status is invalid: {status.get('status')}")
+    if not metrics_path.is_file() or not aligned_path.is_file():
+        raise ValueError("results bundle is missing metrics.json or aligned_scores.npz")
+    if metrics_path.is_symlink() or aligned_path.is_symlink():
+        raise ValueError("results bundle must not use symlinked result files")
+    if not allow_in_progress and cleanup_status == "complete":
+        forbidden = ("checkpoints", "cache", "heads", "run_request.json",
+                     "input_statistics.npz")
+        if any((path / name).exists() for name in forbidden):
+            raise ValueError("results bundle retains forbidden training artifacts")
+        for child in (path / "results").iterdir():
+            if child not in {metrics_path, aligned_path}:
+                raise ValueError("results bundle contains an unapproved result artifact")
+    for field, artifact in (("metrics_sha256", metrics_path), ("aligned_scores_sha256", aligned_path)):
+        declared = manifest.get(field)
+        if not declared or _sha256_file(artifact) != declared:
+            raise ValueError(f"results bundle binding is missing or changed: {field}")
+    metrics = json.loads(metrics_path.read_text())
+    if metrics.get("status") not in {"complete", "incomplete"}:
+        raise ValueError("results metrics status is invalid")
+    threshold = float(metrics.get("threshold"))
+    if not np.isfinite(threshold):
+        raise ValueError("results threshold is not finite")
+    with np.load(aligned_path, allow_pickle=False) as payload:
+        required = {"scores", "predictions", "time_indices", "local_indices", "valid_mask",
+                    "aligned_scores", "aligned_predictions", "threshold"}
+        if not required.issubset(payload.files):
+            raise ValueError("results aligned score file is incomplete")
+        scores = np.asarray(payload["scores"])
+        predictions = np.asarray(payload["predictions"])
+        endpoints = np.asarray(payload["time_indices"])
+        local = np.asarray(payload["local_indices"])
+        valid = np.asarray(payload["valid_mask"])
+        aligned_scores = np.asarray(payload["aligned_scores"])
+        aligned_predictions = np.asarray(payload["aligned_predictions"])
+        if any(item.ndim != 1 for item in (scores, predictions, endpoints, local, valid)):
+            raise ValueError("results vectors must be one-dimensional")
+        if endpoints.dtype.kind not in "iu" or local.dtype.kind not in "iu" or valid.dtype.kind != "b":
+            raise ValueError("results coordinates or valid_mask have invalid dtype")
+        if len(scores) != len(predictions) or len(scores) != len(endpoints) or len(scores) != len(local):
+            raise ValueError("results vector lengths disagree")
+        if len(np.unique(endpoints)) != len(endpoints) or len(np.unique(local)) != len(local):
+            raise ValueError("results coordinates are not unique")
+        if np.any(local < 0) or np.any(local >= len(valid)):
+            raise ValueError("results local coordinates are out of range")
+        if not np.isfinite(scores).all() or not np.isfinite(aligned_scores[valid]).all():
+            raise ValueError("results scores contain NaN or Inf")
+        if not np.isclose(float(np.asarray(payload["threshold"])), threshold, rtol=0, atol=1e-7):
+            raise ValueError("results threshold copy differs from metrics")
+        expected_predictions = (scores > threshold).astype(np.int64)
+        if not np.array_equal(predictions.astype(np.int64), expected_predictions):
+            raise ValueError("results predictions do not match scores and threshold")
+        if len(aligned_scores) != len(valid) or len(aligned_predictions) != len(valid):
+            raise ValueError("results aligned vectors disagree")
+        if not np.array_equal(valid[local], np.ones(len(local), dtype=bool)):
+            raise ValueError("results valid mask does not cover score coordinates")
+        if not np.allclose(aligned_scores[local], scores, rtol=0, atol=1e-7):
+            raise ValueError("results aligned scores do not match scores")
+        if not np.array_equal(aligned_predictions[local].astype(np.int64), predictions.astype(np.int64)):
+            raise ValueError("results aligned predictions do not match predictions")
+        if np.any(aligned_predictions[~valid] != -1) or np.any(np.isfinite(aligned_scores[~valid])):
+            raise ValueError("results invalid positions have incorrect sentinels")
+        if "actual" in payload.files:
+            actual = np.asarray(payload["actual"])
+            if actual.ndim != 1 or len(actual) != len(scores):
+                raise ValueError("results actual labels are invalid")
+            from sklearn.metrics import average_precision_score, roc_auc_score
+            expected_pr = float(average_precision_score(actual, scores))
+            if metrics.get("auc_pr") is None or not np.isclose(float(metrics["auc_pr"]), expected_pr, rtol=0, atol=1e-6):
+                raise ValueError("results AUC-PR does not reproduce")
+            if np.unique(actual).size == 2:
+                expected_roc = float(roc_auc_score(actual, scores))
+                if metrics.get("auc_roc") is None or not np.isclose(float(metrics["auc_roc"]), expected_roc, rtol=0, atol=1e-6):
+                    raise ValueError("results AUC-ROC does not reproduce")
+    return {"status": "valid", "artifact_type": ARTIFACT_RESULTS,
+            "cleanup_status": cleanup_status, "metrics": metrics}
+
+
+def organize_results(path):
+    """Idempotently finish a previously interrupted results cleanup."""
+    path = Path(path).resolve()
+    manifest = json.loads((path / "probe_manifest.json").read_text())
+    if manifest.get("artifact_policy") != "results":
+        raise ValueError("only artifact_policy=results runs can be organized")
+    _validate_result_bundle(path, allow_in_progress=True)
+    known_root = {"probe_manifest.json", "run_status.json", "run.log", "training.jsonl",
+                  "results", "checkpoints", "cache", "heads", "run_request.json",
+                  "input_statistics.npz"}
+    unknown_root = [child.name for child in path.iterdir() if child.name not in known_root]
+    allowed_results = {"metrics.json", "aligned_scores.npz", "test_nll.npy"}
+    unknown_results = [child.name for child in (path / "results").iterdir()
+                       if child.name not in allowed_results]
+    if unknown_root or unknown_results:
+        raise ValueError("refusing results cleanup with unknown paths: "
+                         + ", ".join(unknown_root + [f"results/{name}" for name in unknown_results]))
+    keep = {path / "probe_manifest.json", path / "run_status.json", path / "run.log",
+            path / "training.jsonl", path / "results" / "metrics.json",
+            path / "results" / "aligned_scores.npz"}
+    for name in ("checkpoints", "cache", "heads"):
+        candidate = path / name
+        if candidate.is_symlink():
+            raise ValueError(f"refusing to follow symlink during cleanup: {candidate}")
+        if candidate.is_dir():
+            shutil.rmtree(candidate)
+    request = path / "run_request.json"
+    if request.exists():
+        request.unlink()
+    results_dir = path / "results"
+    keep_results = {results_dir / "metrics.json", results_dir / "aligned_scores.npz"}
+    for child in results_dir.iterdir():
+        if child not in keep_results:
+            if child.is_symlink() or child.is_file():
+                child.unlink()
+            elif child.is_dir():
+                shutil.rmtree(child)
+    for child in path.iterdir():
+        if child in keep or child == path / "results":
+            continue
+        if child.is_symlink() or child.is_file():
+            child.unlink()
+        elif child.is_dir():
+            shutil.rmtree(child)
+    manifest = json.loads((path / "probe_manifest.json").read_text())
+    count, size = MNRFViewProbe._tree_size(path)
+    manifest["result_cleanup_status"] = "complete"
+    manifest["retention_after"] = {"file_count": count, "bytes": size}
+    _atomic_json(path / "probe_manifest.json", manifest)
+    _atomic_json(path / "run_status.json", {
+        "schema": PROBE_SCHEMA, "status": "complete", "artifact_type": ARTIFACT_RESULTS,
+        "run_identity": manifest.get("run_identity"), "result_cleanup_status": "complete",
+        "artifact_policy": "results",
+    })
+    return _validate_result_bundle(path)
+
+
 def load_probe(path, device="cpu"):
     path = Path(path)
     manifest_path = path / "probe_manifest.json"
@@ -1786,6 +2181,8 @@ def load_probe(path, device="cpu"):
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("schema") != PROBE_SCHEMA:
         raise ValueError("view probe artifact schema is unsupported; re-export with the current probe")
+    if manifest.get("artifact_type") == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
+        raise ValueError("results artifact is metrics-only and has no model/cache; rerun with artifact_policy=full for loading or source reuse")
     run_status_path = path / "run_status.json"
     if not run_status_path.is_file():
         raise ValueError("view probe artifact has no run_status.json")

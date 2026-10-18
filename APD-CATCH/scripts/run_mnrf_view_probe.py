@@ -7,8 +7,11 @@ MNRF-Lite V2 run; source directories are read-only inputs.
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
+import traceback
 
 import pandas as pd
 
@@ -85,39 +88,116 @@ def main():
     parser.add_argument("--train-noise-std", type=float, default=0.01)
     parser.add_argument("--noise-seed", type=int, default=20261013)
     parser.add_argument("--resume-from", default="")
+    parser.add_argument("--artifact-policy", choices=("full", "results"), default="full")
+    parser.add_argument("--log-every-steps", type=int, default=100)
+    parser.add_argument("--log-every-seconds", type=float, default=30.0)
+    parser.add_argument("--gmm-log-every-iters", type=int, default=10)
     args = parser.parse_args()
-    frame, train_length, test_labels = _read_task(args.task, args.data_source)
-    kwargs = dict(seed=args.seed, seq_len=args.seq_len, pattern_len=args.pattern_len,
-                  hidden_dim=args.hidden_dim, batch_size=args.batch_size,
-                  stage1_epochs=args.stage1_epochs, stage2_epochs=args.stage2_epochs,
-                  patience=args.patience, learning_rate=args.learning_rate,
-                  weight_decay=args.weight_decay, feature_std_floor=args.feature_std_floor,
-                  score_mad_floor=args.score_mad_floor,
-                  calibration_quantile=args.calibration_quantile,
-                  device=args.device, cache_chunk_size=args.cache_chunk_size,
-                  encoding_batch_size=args.encoding_batch_size, view_dim=args.view_dim,
-                  evolution_dim=args.evolution_dim, pattern_dim=args.pattern_dim,
-                  relation_dim=args.relation_dim, mode=args.mode,
-                  selected_views=tuple(item for item in args.views.split(",") if item),
-                  source_dir=args.source_dir, output_dir=args.output_dir,
-                  resume_from=args.resume_from, data_source=args.data_source,
-                  task_name=f"{args.task}.csv",
-                  gmm_components=args.gmm_components, gmm_covariance_type=args.gmm_covariance_type,
-                  gmm_reg_covar=args.gmm_reg_covar, gmm_n_init=args.gmm_n_init,
-                  gmm_max_iter=args.gmm_max_iter, gmm_fit_max_windows=args.gmm_fit_max_windows,
-                  train_noise_std=args.train_noise_std, noise_seed=args.noise_seed,
-                  cpu_threads=args.cpu_threads)
-    probe = MNRFViewProbe(**kwargs)
-    strategy = IndexedViewProbeStrategy(probe)
-    if args.mode == "stage1":
-        # Source export has no test scoring, but still uses the same explicit
-        # train/test coordinate construction as every scored mode.
-        probe.fit(frame, train_length, None)
-    else:
-        strategy.run(frame.iloc[:train_length].copy(), frame.iloc[train_length:].copy(), test_labels)
-    print(json.dumps({"status": "complete", "task": args.task, "mode": args.mode,
-                      "output_dir": str(probe.output_dir), "selected_views": list(probe.config.selected_views),
-                      "selected_dim": probe.config.selected_dim, "layout": probe.config.layout.to_dict()}, sort_keys=True))
+    # Keep one durable log for each run without creating anything in the run
+    # directory before resume preflight has completed.  This is deliberately a
+    # CLI concern so the library API remains usable without a logging policy.
+    fd, temporary_log = tempfile.mkstemp(prefix="mnrf_view_probe-", suffix=".log")
+    os.close(fd)
+    temporary_log = Path(temporary_log)
+    log_handle = temporary_log.open("a", encoding="utf-8", buffering=1)
+    original_stdout, original_stderr = sys.stdout, sys.stderr
+
+    class _Tee:
+        def __init__(self, primary, secondary):
+            self.primary, self.secondary = primary, secondary
+
+        def write(self, value):
+            self.primary.write(value)
+            self.secondary.write(value)
+            self.primary.flush()
+            self.secondary.flush()
+            return len(value)
+
+        def flush(self):
+            self.primary.flush()
+            self.secondary.flush()
+
+        def isatty(self):
+            return self.primary.isatty()
+
+    sys.stdout = _Tee(original_stdout, log_handle)
+    sys.stderr = _Tee(original_stderr, log_handle)
+    output_path = Path(args.output_dir or args.resume_from).expanduser().resolve()
+    probe = None
+    failed = None
+    try:
+        print("MNRF event=startup task={} mode={} run_id={} pid={} output_dir={} log_path={} device={} "
+              "cuda_visible_devices={} seed={} seq_len={} batch_size={} encoding_batch_size={} "
+              "views={} dims=1/{}/{}/{} selected_dim={} artifact_policy={} cpu_threads={} "
+              "model_training=uninitialized grad_enabled={} debug_callback=None pytorch={} cuda_runtime={} cudnn={} gpu={}".format(
+                  args.task, args.mode, output_path.name, os.getpid(), output_path, output_path / "run.log", args.device,
+                  os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"), args.seed, args.seq_len,
+                  args.batch_size, args.encoding_batch_size or args.batch_size, args.views,
+                  args.evolution_dim if args.evolution_dim is not None else args.view_dim,
+                  args.pattern_dim if args.pattern_dim is not None else args.view_dim,
+                  args.relation_dim if args.relation_dim is not None else args.view_dim,
+                  1 + (args.evolution_dim if args.evolution_dim is not None else args.view_dim)
+                  + (args.pattern_dim if args.pattern_dim is not None else args.view_dim)
+                  + (args.relation_dim if args.relation_dim is not None else args.view_dim),
+                  args.artifact_policy, args.cpu_threads, __import__("torch").is_grad_enabled(),
+                  __import__("torch").__version__, getattr(__import__("torch").version, "cuda", None),
+                  getattr(__import__("torch").backends.cudnn, "version", lambda: None)(),
+                  __import__("torch").cuda.get_device_name(0) if __import__("torch").cuda.is_available() else "cpu"),
+              flush=True)
+        print("MNRF event=preflight_start", flush=True)
+        frame, train_length, test_labels = _read_task(args.task, args.data_source)
+        kwargs = dict(seed=args.seed, seq_len=args.seq_len, pattern_len=args.pattern_len,
+                      hidden_dim=args.hidden_dim, batch_size=args.batch_size,
+                      stage1_epochs=args.stage1_epochs, stage2_epochs=args.stage2_epochs,
+                      patience=args.patience, learning_rate=args.learning_rate,
+                      weight_decay=args.weight_decay, feature_std_floor=args.feature_std_floor,
+                      score_mad_floor=args.score_mad_floor,
+                      calibration_quantile=args.calibration_quantile,
+                      device=args.device, cache_chunk_size=args.cache_chunk_size,
+                      encoding_batch_size=args.encoding_batch_size, view_dim=args.view_dim,
+                      evolution_dim=args.evolution_dim, pattern_dim=args.pattern_dim,
+                      relation_dim=args.relation_dim, mode=args.mode,
+                      selected_views=tuple(item for item in args.views.split(",") if item),
+                      source_dir=args.source_dir, output_dir=args.output_dir,
+                      resume_from=args.resume_from, data_source=args.data_source,
+                      task_name=f"{args.task}.csv",
+                      gmm_components=args.gmm_components, gmm_covariance_type=args.gmm_covariance_type,
+                      gmm_reg_covar=args.gmm_reg_covar, gmm_n_init=args.gmm_n_init,
+                      gmm_max_iter=args.gmm_max_iter, gmm_fit_max_windows=args.gmm_fit_max_windows,
+                      train_noise_std=args.train_noise_std, noise_seed=args.noise_seed,
+                      cpu_threads=args.cpu_threads, artifact_policy=args.artifact_policy,
+                      log_every_steps=args.log_every_steps, log_every_seconds=args.log_every_seconds,
+                      gmm_log_every_iters=args.gmm_log_every_iters)
+        probe = MNRFViewProbe(**kwargs)
+        strategy = IndexedViewProbeStrategy(probe)
+        print("MNRF event=data_read_complete task={} train_rows={} test_rows={} device={}".format(
+            args.task, train_length, len(frame) - train_length, probe.device), flush=True)
+        if args.mode == "stage1":
+            probe.fit(frame, train_length, None)
+        else:
+            strategy.run(frame.iloc[:train_length].copy(), frame.iloc[train_length:].copy(), test_labels)
+        print("MNRF event=run_complete task={} output_dir={}".format(args.task, output_path), flush=True)
+        print(json.dumps({"status": "complete", "task": args.task, "mode": args.mode,
+                          "output_dir": str(probe.output_dir), "selected_views": list(probe.config.selected_views),
+                          "selected_dim": probe.config.selected_dim, "layout": probe.config.layout.to_dict()}, sort_keys=True))
+    except BaseException as error:
+        failed = error
+        print("MNRF event=run_failed error_type={} reason={}".format(type(error).__name__, error), flush=True)
+        traceback.print_exc()
+    finally:
+        sys.stdout, sys.stderr = original_stdout, original_stderr
+        log_handle.flush()
+        log_handle.close()
+        if output_path.is_dir() and (failed is None or getattr(probe, "_writes_started", False)):
+            target_log = output_path / "run.log"
+            with target_log.open("ab") as target, temporary_log.open("rb") as source:
+                target.write(b"\n" if target_log.stat().st_size else b"")
+                target.write(source.read())
+                target.flush()
+                os.fsync(target.fileno())
+        temporary_log.unlink(missing_ok=True)
+    if failed is not None:
+        raise SystemExit(1) from failed
 
 
 if __name__ == "__main__":

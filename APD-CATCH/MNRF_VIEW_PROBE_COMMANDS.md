@@ -17,6 +17,14 @@ and PID, so existing source runs are not overwritten. The default device is
 the inherited logical `cuda:0`; edit the literal `DEVICE="cuda:0"` near the
 top of one script to `cpu` when a CPU run is intended.
 
+The prepared scripts use `artifact_policy=results`: after successful scoring
+they retain the validated result bundle and `run.log`, but discard model,
+cache, checkpoint, head and request files. This is the default for these five
+task entries so results do not accumulate large reusable artifacts. For a
+reusable full artifact, edit the script literal `ARTIFACT_POLICY="results"` to
+`full` before starting a new run; do not change an existing run in place.
+The log can be followed with `tail -f <RUN_DIR>/run.log` while a task runs.
+
 ## Task commands
 
 ```bash
@@ -27,8 +35,8 @@ bash ./scripts/multivariate_detection/detect_score/SMD_script/MNRFViewProbe.sh
 bash ./scripts/multivariate_detection/detect_score/Genesis_script/MNRFViewProbe.sh
 ```
 
-Run these manually and sequentially. They are not a loop, runner, scheduler,
-or background launcher. The task scripts keep the following CATCH reference
+Run these manually as independent commands. They are not a loop, runner,
+scheduler, or background launcher. The task scripts keep the following CATCH reference
 window and batch values, but the MNRF training/head settings are independent:
 
 | task | CATCH reference seq_len | CATCH reference batch | MNRF stage1/stage2 | MNRF batch | MNRF views |
