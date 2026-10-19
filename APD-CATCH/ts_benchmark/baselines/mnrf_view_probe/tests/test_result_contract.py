@@ -175,3 +175,54 @@ def test_summary_isolates_nested_manifest_shape_errors(tmp_path):
     _refresh_result_hash(run)
     with np.testing.assert_raises(ValueError):
         probe_module._validate_result_bundle(run, allow_in_progress=True)
+
+
+def test_summary_rejects_malformed_run_status_without_blocking_valid_result(tmp_path):
+    from scripts import summarize_mnrf_view_probe as summary
+
+    valid = _bundle(tmp_path / "valid")
+    cases = (("list", []), ("object", {}), ("null", None), ("number", 7),
+             ("boolean", True), ("unknown", "not_a_probe_state"), ("missing", "__missing__"))
+    for name, value in cases:
+        run = _bundle(tmp_path / f"bad-{name}")
+        status_path = run / "run_status.json"
+        if value == "__missing__":
+            status_path.write_text(json.dumps({"schema": probe_module.PROBE_SCHEMA}))
+        else:
+            status_path.write_text(json.dumps({"schema": probe_module.PROBE_SCHEMA, "status": value}))
+    before = {path: (path.stat().st_size, path.stat().st_mtime_ns, path.read_bytes())
+              for path in tmp_path.rglob("*") if path.is_file()}
+    frame = summary.collect(tmp_path)
+    assert len(frame) == len(cases) + 1
+    assert frame.loc[frame["run"] == str(valid), "validation_status"].iloc[0] in {
+        "results_valid", "results_valid_cleanup_failed"
+    }
+    invalid = frame[frame["run"] != str(valid)]
+    assert len(invalid) == len(cases)
+    assert all(invalid["validation_status"] == "invalid")
+    assert all("run_status.json:" in reason for reason in invalid["validation_reason"])
+    after = {path: (path.stat().st_size, path.stat().st_mtime_ns, path.read_bytes())
+             for path in tmp_path.rglob("*") if path.is_file()}
+    assert before == after
+
+
+def test_summary_status_failures_and_csv_markdown_are_per_run(tmp_path, monkeypatch):
+    from scripts import summarize_mnrf_view_probe as summary
+
+    valid = _bundle(tmp_path / "valid")
+    failed = _bundle(tmp_path / "failed")
+    (failed / "run_status.json").write_text(json.dumps({
+        "schema": probe_module.PROBE_SCHEMA, "status": "failed", "reason": "controlled"
+    }))
+    monkeypatch.setattr(summary, "load_probe", lambda *args, **kwargs: object())
+    frame = summary.collect(tmp_path)
+    assert frame.loc[frame["run"] == str(valid), "validation_status"].iloc[0] in {
+        "results_valid", "results_valid_cleanup_failed"
+    }
+    assert frame.loc[frame["run"] == str(failed), "validation_status"].iloc[0] == "not_applicable"
+    output = tmp_path / "summary.csv"
+    monkeypatch.setattr("sys.argv", ["summarize_mnrf_view_probe.py", "--root", str(tmp_path),
+                                      "--output", str(output)])
+    summary.main()
+    assert output.is_file()
+    assert output.with_suffix(".md").is_file()

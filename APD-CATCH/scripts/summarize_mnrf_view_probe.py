@@ -43,58 +43,92 @@ def _metadata_shape_error(manifest):
     return None
 
 
-def collect(root):
-    rows = []
-    for manifest_path in sorted(Path(root).glob("**/probe_manifest.json")):
-        run = manifest_path.parent
-        try:
-            manifest = json.loads(manifest_path.read_text())
-        except Exception as error:
-            rows.append({"run": str(run), "validation_status": "invalid",
-                         "validation_reason": f"invalid probe_manifest.json: {error}"})
-            continue
-        if not isinstance(manifest, dict):
-            rows.append({"run": str(run), "validation_status": "invalid",
-                         "validation_reason": "probe_manifest.json root must be an object"})
-            continue
-        status_path = run / "run_status.json"
-        try:
-            run_status = json.loads(status_path.read_text()) if status_path.is_file() else {"status": "missing_status"}
-        except Exception as error:
-            run_status = {"status": "invalid_status", "reason": str(error)}
-        if not isinstance(run_status, dict):
-            run_status = {"status": "invalid_status", "reason": "run_status.json root must be an object"}
-        shape_error = _metadata_shape_error(manifest)
-        if shape_error is not None:
-            rows.append({"run": str(run), "task": manifest.get("task_name"),
-                         "run_status": run_status.get("status"), "validation_status": "invalid",
-                         "validation_reason": shape_error})
-            continue
-        config = manifest.get("config", {}) or {}
+_RUN_STATUS_VALUES = {
+    "running", "stage1_training", "stage1_complete", "gmm_fitting",
+    "flow_training", "organizing_results", "complete", "failed",
+    "cleanup_failed",
+}
+
+
+def _invalid_row(run, reason, manifest=None, status=None):
+    manifest = manifest if isinstance(manifest, dict) else {}
+    config = manifest.get("config", {})
+    task = manifest.get("task_name")
+    if task is None and isinstance(config, dict):
+        task = config.get("task_name")
+    return {"run": str(run), "task": task,
+            "run_status": status, "validation_status": "invalid",
+            "validation_reason": reason}
+
+
+def _read_run_status(run):
+    path = Path(run) / "run_status.json"
+    if not path.is_file():
+        raise ValueError("run_status.json: required file is missing")
+    try:
+        status = json.loads(path.read_text())
+    except Exception as error:
+        raise ValueError(f"run_status.json: invalid JSON: {error}") from error
+    if not isinstance(status, dict):
+        raise ValueError("run_status.json: root must be an object")
+    if "status" not in status:
+        raise ValueError("run_status.json: status is required")
+    value = status["status"]
+    if not isinstance(value, str) or value not in _RUN_STATUS_VALUES:
+        raise ValueError("run_status.json: status must be a known string state")
+    return status
+
+
+def _collect_run(manifest_path):
+    run = manifest_path.parent
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except Exception as error:
+        return _invalid_row(run, f"probe_manifest.json: invalid JSON: {error}")
+    if not isinstance(manifest, dict):
+        return _invalid_row(run, "probe_manifest.json: root must be an object")
+    task = manifest.get("task_name")
+    try:
+        run_status = _read_run_status(run)
+    except Exception as error:
+        return _invalid_row(run, str(error), manifest)
+    status_value = run_status["status"]
+    shape_error = _metadata_shape_error(manifest)
+    if shape_error is not None:
+        return _invalid_row(run, shape_error, manifest, status_value)
+    config = manifest.get("config", {}) or {}
+    try:
         result_path = run / "results" / "metrics.json"
         if manifest.get("artifact_type") == ARTIFACT_RESULTS or manifest.get("artifact_policy") == "results":
             validation_status = "invalid"
             validation_reason = ""
             metrics = {}
-            try:
-                checked = _validate_result_bundle(
-                    run, allow_in_progress=manifest.get("result_cleanup_status") != "complete"
-                )
-                validation_status = ("results_valid" if checked.get("cleanup_status") == "complete"
-                                     else "results_valid_cleanup_failed")
-                metrics = checked["metrics"]
-            except Exception as error:
-                validation_reason = str(error)
-            rows.append({
-                "run": str(run), "task": manifest.get("task_name", config.get("task_name")),
+            if status_value == "failed":
+                validation_status = "not_applicable"
+                validation_reason = "run_status.json: failed run is not a valid result bundle"
+            elif status_value in {"running", "stage1_training", "gmm_fitting", "flow_training"}:
+                validation_status = "not_applicable"
+                validation_reason = f"run_status.json: {status_value} run is incomplete"
+            else:
+                try:
+                    checked = _validate_result_bundle(
+                        run, allow_in_progress=manifest.get("result_cleanup_status") != "complete"
+                    )
+                    validation_status = ("results_valid" if checked.get("cleanup_status") == "complete"
+                                         else "results_valid_cleanup_failed")
+                    metrics = checked["metrics"]
+                except Exception as error:
+                    validation_reason = str(error)
+            return {
+                "run": str(run), "task": task or config.get("task_name"),
                 "seed": config.get("seed"), "seq_len": config.get("seq_len"),
                 "mode": manifest.get("mode"), "head": metrics.get("head"),
                 "selected_views": ",".join(manifest.get("selected_views", config.get("selected_views", []))),
                 "selected_dim": manifest.get("selected_dim", config.get("selected_dim")),
                 "layout_F": manifest.get("layout", {}).get("F"),
-                "run_status": run_status.get("status"), "artifact_type": ARTIFACT_RESULTS,
+                "run_status": status_value, "artifact_type": ARTIFACT_RESULTS,
                 "artifact_policy": "results", "validation_status": validation_status,
-                "validation_reason": validation_reason, "status": metrics.get("status", run_status.get("status")),
+                "validation_reason": validation_reason, "status": metrics.get("status", status_value),
                 "failure_reason": run_status.get("reason"), "auc_roc": metrics.get("auc_roc"),
                 "auc_pr": metrics.get("auc_pr"), "threshold": metrics.get("threshold"),
                 "valid_points": metrics.get("valid_points"), "coverage": metrics.get("coverage"),
@@ -105,10 +139,9 @@ def collect(root):
                 "cleanup_error": manifest.get("cleanup_error"),
                 "retention_after_bytes": manifest.get("retention_after", {}).get("bytes"),
                 "retention_released_bytes": manifest.get("retention_released_bytes"),
-            })
-            continue
+            }
         if not result_path.is_file():
-            completed_stage1 = (run_status.get("status") == "stage1_complete"
+            completed_stage1 = (status_value == "stage1_complete"
                                 and manifest.get("artifact_type") == "source_encoder"
                                 and manifest.get("stage_status") == "stage1_complete")
             validation_status = "valid" if completed_stage1 else "not_applicable"
@@ -119,57 +152,47 @@ def collect(root):
                 except Exception as error:
                     validation_status = "invalid"
                     validation_reason = str(error)
-            rows.append({"run": str(run), "task": config.get("task_name"),
-                         "mode": manifest.get("mode"), "run_status": run_status.get("status"),
-                         "artifact_type": manifest.get("artifact_type"),
-                         "artifact_policy": manifest.get("artifact_policy", "full"),
-                         "validation_status": validation_status, "validation_reason": validation_reason,
-                         "status": "stage1_complete" if validation_status == "valid" else "missing_metrics"})
-            continue
+            return {"run": str(run), "task": config.get("task_name"),
+                    "mode": manifest.get("mode"), "run_status": status_value,
+                    "artifact_type": manifest.get("artifact_type"),
+                    "artifact_policy": manifest.get("artifact_policy", "full"),
+                    "validation_status": validation_status, "validation_reason": validation_reason,
+                    "status": "stage1_complete" if validation_status == "valid" else status_value}
         try:
             metrics = json.loads(result_path.read_text())
         except Exception as error:
-            rows.append({"run": str(run), "task": config.get("task_name") if isinstance(config, dict) else None,
-                         "run_status": run_status.get("status"), "validation_status": "invalid",
-                         "validation_reason": f"invalid metrics.json: {error}"})
-            continue
+            return _invalid_row(run, f"results/metrics.json: invalid JSON: {error}", manifest, status_value)
         if not isinstance(metrics, dict):
-            rows.append({"run": str(run), "task": None, "run_status": run_status.get("status"),
-                         "validation_status": "invalid",
-                         "validation_reason": "metrics.json root must be an object"})
-            continue
+            return _invalid_row(run, "results/metrics.json: root must be an object", manifest, status_value)
         gmm_status_path = run / "heads" / "gmm_status.json"
         gmm_status = {}
         if gmm_status_path.is_file():
             try:
                 gmm_status = json.loads(gmm_status_path.read_text())
                 if not isinstance(gmm_status, dict):
-                    raise ValueError("gmm_status.json root must be an object")
+                    raise ValueError("root must be an object")
             except Exception as error:
-                rows.append({"run": str(run), "task": config.get("task_name") if isinstance(config, dict) else None,
-                             "run_status": run_status.get("status"), "validation_status": "invalid",
-                             "validation_reason": f"invalid gmm_status.json: {error}"})
-                continue
+                return _invalid_row(run, f"heads/gmm_status.json: invalid structure: {error}", manifest, status_value)
         validation_status = "not_applicable"
         validation_reason = ""
-        if run_status.get("status") in {"complete", "stage1_complete"}:
+        if status_value in {"complete", "stage1_complete"}:
             try:
                 load_probe(run, device="cpu")
                 validation_status = "valid"
             except Exception as error:
                 validation_status = "invalid"
                 validation_reason = str(error)
-        rows.append({
+        return {
             "run": str(run), "task": config.get("task_name"), "seed": config.get("seed"),
             "seq_len": config.get("seq_len"), "mode": manifest.get("mode"),
             "head": metrics.get("head"),
             "selected_views": ",".join(manifest.get("selected_views", config.get("selected_views", []))),
-            "selected_dim": manifest.get("selected_dim", manifest.get("config", {}).get("selected_dim")),
+            "selected_dim": manifest.get("selected_dim", config.get("selected_dim")),
             "layout_F": manifest.get("layout", {}).get("F"),
             "source_feature_fingerprint": manifest.get("source_feature_fingerprint", manifest.get("feature_fingerprint")),
             "gmm_components": config.get("gmm_components"), "gmm_covariance_type": config.get("gmm_covariance_type"),
             "gmm_fit_endpoint_count": metrics.get("gmm_fit_endpoint_count", gmm_status.get("fit_endpoint_count")),
-            "run_status": run_status.get("status"), "head_status": manifest.get("head_status"),
+            "run_status": status_value, "head_status": manifest.get("head_status"),
             "artifact_type": manifest.get("artifact_type"), "head_type": manifest.get("head_type"),
             "artifact_policy": manifest.get("artifact_policy", "full"),
             "validation_status": validation_status, "validation_reason": validation_reason,
@@ -181,7 +204,21 @@ def collect(root):
             "inference_time_seconds": metrics.get("inference_time_seconds"),
             "source_identity": manifest.get("source_identity"),
             "protocol": manifest.get("temporal_rule"),
-        })
+        }
+    except Exception as error:
+        return _invalid_row(run, f"run processing failed: {error}", manifest, status_value)
+
+
+def collect(root):
+    rows = []
+    for manifest_path in sorted(Path(root).glob("**/probe_manifest.json")):
+        try:
+            rows.append(_collect_run(manifest_path))
+        except Exception as error:
+            # This is a final per-run guard.  It must never turn one malformed
+            # run into a failure of the complete summary, while output errors
+            # in main() remain visible to the caller.
+            rows.append(_invalid_row(manifest_path.parent, f"run processing failed: {error}"))
     return pd.DataFrame(rows)
 
 

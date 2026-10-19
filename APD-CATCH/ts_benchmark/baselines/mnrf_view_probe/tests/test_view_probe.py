@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import random
@@ -94,7 +95,19 @@ def test_completed_stage1_resume_is_read_only_with_real_best_checkpoint(tmp_path
     MNRFViewProbe(**kwargs).fit(frame, train_length)
     names_before = sorted(path.relative_to(run).as_posix() for path in run.rglob("*") if path.is_file())
     hashes_before = {name: hashlib.sha256((run / name).read_bytes()).hexdigest() for name in names_before}
+    random.seed(4321)
+    np.random.seed(4321)
+    torch.manual_seed(4321)
+    python_before = random.getstate()
+    numpy_before = copy.deepcopy(np.random.get_state())
+    torch_before = torch.get_rng_state().clone()
     MNRFViewProbe(**dict(kwargs, resume_from=str(run))).fit(frame, train_length)
+    assert random.getstate() == python_before
+    numpy_after = np.random.get_state()
+    assert numpy_before[0] == numpy_after[0]
+    assert np.array_equal(numpy_before[1], numpy_after[1])
+    assert numpy_before[2:] == numpy_after[2:]
+    assert torch.equal(torch_before, torch.get_rng_state())
     names_after = sorted(path.relative_to(run).as_posix() for path in run.rglob("*") if path.is_file())
     hashes_after = {name: hashlib.sha256((run / name).read_bytes()).hexdigest() for name in names_after}
     assert names_after == names_before
@@ -188,6 +201,76 @@ def test_flow_real_epoch_checkpoint_resumes_from_next_epoch(tmp_path, monkeypatc
     assert resumed["next_epoch"] >= 2
     assert [item["epoch"] for item in resumed["history"]] == [1, 2, 3]
     assert resumed["stage_status"] == "completed"
+
+
+def test_rejected_flow_resume_preserves_callers_rng_and_files(tmp_path):
+    rng = np.random.default_rng(906)
+    n, train_length = 520, 430
+    frame = pd.DataFrame(rng.normal(size=(n, 2)).astype(np.float32), columns=("x", "y"),
+                         index=pd.date_range("2026-04-25", periods=n, freq="min"))
+    frame["label"] = np.r_[np.zeros(train_length, dtype=np.int64), np.arange(n - train_length) % 2]
+    base = dict(seq_len=32, pattern_len=32, batch_size=32, stage1_epochs=1,
+                stage2_epochs=1, patience=1, device="cpu", cpu_threads=1,
+                gmm_fit_max_windows=32, task_name="SYN.csv", mode="stage1")
+    source = tmp_path / "source"
+    MNRFViewProbe(**dict(base, output_dir=str(source), artifact_policy="full")).fit(frame, train_length)
+    flow_dir = tmp_path / "flow"
+    flow_kwargs = dict(base, mode="flow", source_dir=str(source), output_dir=str(flow_dir),
+                       artifact_policy="results")
+    probe = MNRFViewProbe(**flow_kwargs)
+    probe._finalize_results_artifact = lambda: (_ for _ in ()).throw(RuntimeError("controlled"))
+    with pytest.raises(RuntimeError, match="controlled"):
+        probe.fit(frame, train_length, frame["label"].to_numpy()[train_length:])
+    stats_path = flow_dir / "input_statistics.npz"
+    with np.load(stats_path, allow_pickle=False) as archive:
+        stats = {key: archive[key].copy() for key in archive.files}
+    stats["mean"].flat[0] += np.float32(0.1)
+    np.savez(stats_path, **stats)
+
+    def snapshot(path):
+        return {str(item.relative_to(path)): (item.stat().st_size, item.stat().st_mtime_ns,
+                hashlib.sha256(item.read_bytes()).hexdigest())
+                for item in path.rglob("*") if item.is_file()}
+
+    target_before = snapshot(flow_dir)
+    source_before = snapshot(source)
+    restored = MNRFViewProbe(**dict(flow_kwargs, resume_from=str(flow_dir)))
+
+    random.seed(1234)
+    np.random.seed(1234)
+    torch.manual_seed(1234)
+    python_before = random.getstate()
+    numpy_before = copy.deepcopy(np.random.get_state())
+    torch_before = torch.get_rng_state().clone()
+
+    def next_values(state):
+        random.setstate(copy.deepcopy(state[0]))
+        np.random.set_state(copy.deepcopy(state[1]))
+        torch.set_rng_state(state[2].clone())
+        return random.random(), np.random.rand(), torch.rand(3)
+
+    expected = next_values((python_before, numpy_before, torch_before))
+    random.setstate(python_before)
+    np.random.set_state(numpy_before)
+    torch.set_rng_state(torch_before)
+    for _ in range(2):
+        with pytest.raises(ValueError, match="raw input statistics binding"):
+            restored.fit(frame, train_length, frame["label"].to_numpy()[train_length:])
+        assert random.getstate() == python_before
+        current_numpy = np.random.get_state()
+        assert numpy_before[0] == current_numpy[0]
+        assert np.array_equal(numpy_before[1], current_numpy[1])
+        assert numpy_before[2:] == current_numpy[2:]
+        assert torch.equal(torch_before, torch.get_rng_state())
+        assert target_before == snapshot(flow_dir)
+        assert source_before == snapshot(source)
+        actual = next_values((random.getstate(), np.random.get_state(), torch.get_rng_state()))
+        assert actual[0] == expected[0]
+        assert actual[1] == expected[1]
+        assert torch.equal(actual[2], expected[2])
+        random.setstate(python_before)
+        np.random.set_state(numpy_before)
+        torch.set_rng_state(torch_before)
 
 
 def test_view_selection_uses_canonical_layout_and_rejects_invalid_views():

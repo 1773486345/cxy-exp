@@ -262,6 +262,24 @@ interval are logged without extra forward/backward work. Epoch-start events and
 the checkpoint's next epoch remain authoritative after recovery; a failed
 optimizer step does not produce a completion event.
 
+The summary treats `run_status.json` as a typed contract. Its `status` must be
+a known probe state (`running`, `stage1_training`, `stage1_complete`,
+`gmm_fitting`, `flow_training`, `organizing_results`, `complete`, `failed`, or
+`cleanup_failed`). A malformed root, missing field, boolean/number/list value,
+or unknown string produces one `invalid` row for that run with a file/field
+reason; it cannot stop other runs from being summarized. Legitimate incomplete
+states remain `not_applicable`, while a validated result with cleanup failure
+remains `results_valid_cleanup_failed`. Stale metrics in a failed run are not
+reported as a valid score. CSV and Markdown output errors remain fatal output
+errors rather than being swallowed by the per-run isolation.
+
+Resume preflight snapshots and restores Python, NumPy, PyTorch CPU, and the
+available CUDA RNG state around the entire read-only validation call. This
+includes temporary source encoders and optimizers constructed while checking
+source/cache/checkpoint bindings. Both rejected and successful preflights leave
+the caller's RNG unchanged; the subsequent real fit still follows its normal
+seed and checkpoint protocol.
+
 `artifact_policy=results` describes the requested final retention policy. An
 interrupted Stage 1, GMM, or Flow run remains resumable while its recovery
 artifacts are present. Only a validated, committed `result_bundle` is terminal

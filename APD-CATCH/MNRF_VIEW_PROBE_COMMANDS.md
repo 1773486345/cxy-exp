@@ -47,6 +47,15 @@ batch position, total and cumulative optimizer steps, NLL, speed, and ETA.
 The configured step/time intervals control observation frequency only and do
 not alter numerical training or recovery state.
 
+The read-only summary validates `run_status.json` before touching any run
+branch. Invalid status roots or values are retained as one `invalid` row with
+their precise reason; valid runs in the same root still appear in the CSV and
+Markdown. `failed` and other unfinished states are shown as not applicable,
+not as valid scores, while `cleanup_failed` keeps the already validated result
+metrics. Summary input trees are never rewritten. Resume preflight likewise
+restores the caller's random states even when source or statistics validation
+rejects a run, so no manual reseeding is required.
+
 ## Task commands
 
 ```bash

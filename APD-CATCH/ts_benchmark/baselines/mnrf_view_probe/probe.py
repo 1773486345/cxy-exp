@@ -1777,8 +1777,17 @@ class MNRFViewProbe:
             raise ValueError("full_gmm with source_dir is unsupported; use select_gmm or s_only")
         resume_preflight = bool(self.config.resume_from)
         if resume_preflight:
-            self._set_protocol_identity(frame, int(train_length))
-            self._validate_resume_preflight(frame, int(train_length))
+            # Resume validation is deliberately read-only.  It may construct
+            # temporary encoders/optimizers while checking source and
+            # checkpoint contracts, so preserve the caller's complete RNG
+            # state across both success and every rejection path.  Normal fit
+            # below still seeds and advances RNG according to the protocol.
+            preflight_rng = _capture_rng()
+            try:
+                self._set_protocol_identity(frame, int(train_length))
+                self._validate_resume_preflight(frame, int(train_length))
+            finally:
+                _restore_rng(preflight_rng)
             if getattr(self, "_resume_stage1_complete", False) and self.config.mode == "stage1":
                 # A validated stage-one export is already complete.  Returning
                 # here is intentionally read-only: no second encoder fit,
