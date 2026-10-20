@@ -1,0 +1,10 @@
+{
+  "artifact_policy": "results",
+  "artifact_type": "result_bundle",
+  "calculation_status": "complete",
+  "result_cleanup_status": "complete",
+  "result_valid": true,
+  "run_identity": null,
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete"
+}
