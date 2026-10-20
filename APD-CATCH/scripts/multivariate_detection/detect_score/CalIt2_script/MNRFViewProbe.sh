@@ -22,15 +22,23 @@ ANALYSIS_DIR="${ROOT}/result/analysis/MNRF-ViewProbe/${TASK}/${RUN_ID}"
 STARTUP_LOG="$(mktemp "${TMPDIR:-/tmp}/mnrf-view-probe-preflight.XXXXXX.log")"
 
 set +e
-python "${ROOT}/scripts/mnrf_lite_v2_preflight.py" --task "${TASK}" --data-source "${DATA_SOURCE}" --batch-size "${BATCH_SIZE}" --seq-len "${SEQ_LEN}" --encoding-batch-size "${ENCODING_BATCH_SIZE}" --view-dim "${VIEW_DIM}" --evolution-dim "${EVOLUTION_DIM}" --pattern-dim "${PATTERN_DIM}" --relation-dim "${RELATION_DIM}" 2>&1 | tee "${STARTUP_LOG}"
+python "${ROOT}/scripts/mnrf_lite_v2_preflight.py" --task "${TASK}" --data-source "${DATA_SOURCE}" --batch-size "${BATCH_SIZE}" --seq-len "${SEQ_LEN}" --encoding-batch-size "${ENCODING_BATCH_SIZE}" --view-dim "${VIEW_DIM}" --evolution-dim "${EVOLUTION_DIM}" --pattern-dim "${PATTERN_DIM}" --relation-dim "${RELATION_DIM}" --output-dir "${OUTPUT_DIR}" --mode "${MODE}" 2>&1 | tee "${STARTUP_LOG}"
 PREFLIGHT_PIPE_STATUS=("${PIPESTATUS[@]}")
 set -e
-if [[ "${PREFLIGHT_PIPE_STATUS[0]:-1}" -ne 0 || "${PREFLIGHT_PIPE_STATUS[1]:-1}" -ne 0 ]]; then
-  printf 'preflight pipeline failed: python=%s tee=%s; log=%s\n' "${PREFLIGHT_PIPE_STATUS[0]:-1}" "${PREFLIGHT_PIPE_STATUS[1]:-1}" "${STARTUP_LOG}" >&2
-  exit "${PREFLIGHT_PIPE_STATUS[0]:-1}"
+PREFLIGHT_STATUS=${PREFLIGHT_PIPE_STATUS[0]:-1}
+TEE_STATUS=${PREFLIGHT_PIPE_STATUS[1]:-1}
+if [[ "${PREFLIGHT_STATUS}" -ne 0 || "${TEE_STATUS}" -ne 0 ]]; then
+  printf 'preflight pipeline failed: python=%s tee=%s; log preserved at %s\n' "${PREFLIGHT_STATUS}" "${TEE_STATUS}" "${STARTUP_LOG}" >&2
+  if [[ "${PREFLIGHT_STATUS}" -ne 0 ]]; then exit "${PREFLIGHT_STATUS}"; else exit "${TEE_STATUS}"; fi
 fi
-python "${ROOT}/scripts/run_mnrf_view_probe.py" --task "${TASK}" --data-source "${DATA_SOURCE}" --mode "${MODE}" --views "${VIEWS}" --source-dir "${SOURCE_DIR}" --resume-from "${RESUME_FROM}" --output-dir "${OUTPUT_DIR}" --seed "${SEED}" --seq-len "${SEQ_LEN}" --pattern-len "${PATTERN_LEN}" --hidden-dim "${HIDDEN_DIM}" --batch-size "${BATCH_SIZE}" --stage1-epochs "${STAGE1_EPOCHS}" --stage2-epochs "${STAGE2_EPOCHS}" --patience "${PATIENCE}" --learning-rate "${LEARNING_RATE}" --weight-decay "${WEIGHT_DECAY}" --device "${DEVICE}" --cache-chunk-size "${CACHE_CHUNK_SIZE}" --encoding-batch-size "${ENCODING_BATCH_SIZE}" --view-dim "${VIEW_DIM}" --evolution-dim "${EVOLUTION_DIM}" --pattern-dim "${PATTERN_DIM}" --relation-dim "${RELATION_DIM}" --gmm-components "${GMM_COMPONENTS}" --gmm-covariance-type "${GMM_COVARIANCE_TYPE}" --gmm-reg-covar "${GMM_REG_COVAR}" --gmm-n-init "${GMM_N_INIT}" --gmm-max-iter "${GMM_MAX_ITER}" --gmm-fit-max-windows "${GMM_FIT_MAX_WINDOWS}" --train-noise-std "${TRAIN_NOISE_STD}" --noise-seed "${NOISE_SEED}" --feature-std-floor "${FEATURE_STD_FLOOR}" --score-mad-floor "${SCORE_MAD_FLOOR}" --calibration-quantile "${CALIBRATION_QUANTILE}" --cpu-threads "${CPU_THREADS}" --artifact-policy "${ARTIFACT_POLICY}" --log-every-steps "${LOG_EVERY_STEPS}" --log-every-seconds "${LOG_EVERY_SECONDS}" --gmm-log-every-iters "${GMM_LOG_EVERY_ITERS}" --startup-log "${STARTUP_LOG}"
-python "${ROOT}/scripts/validate_mnrf_view_probe.py" "${OUTPUT_DIR}"
-python "${ROOT}/scripts/export_mnrf_view_probe_analysis.py" --run-dir "${OUTPUT_DIR}" --output-dir "${ANALYSIS_DIR}" --source-already-validated
+python "${ROOT}/scripts/run_mnrf_view_probe.py" --task "${TASK}" --data-source "${DATA_SOURCE}" --mode "${MODE}" --views "${VIEWS}" --source-dir "${SOURCE_DIR}" --resume-from "${RESUME_FROM}" --output-dir "${OUTPUT_DIR}" --seed "${SEED}" --seq-len "${SEQ_LEN}" --pattern-len "${PATTERN_LEN}" --hidden-dim "${HIDDEN_DIM}" --batch-size "${BATCH_SIZE}" --stage1-epochs "${STAGE1_EPOCHS}" --stage2-epochs "${STAGE2_EPOCHS}" --patience "${PATIENCE}" --learning-rate "${LEARNING_RATE}" --weight-decay "${WEIGHT_DECAY}" --device "${DEVICE}" --cache-chunk-size "${CACHE_CHUNK_SIZE}" --encoding-batch-size "${ENCODING_BATCH_SIZE}" --view-dim "${VIEW_DIM}" --evolution-dim "${EVOLUTION_DIM}" --pattern-dim "${PATTERN_DIM}" --relation-dim "${RELATION_DIM}" --gmm-components "${GMM_COMPONENTS}" --gmm-covariance-type "${GMM_COVARIANCE_TYPE}" --gmm-reg-covar "${GMM_REG_COVAR}" --gmm-n-init "${GMM_N_INIT}" --gmm-max-iter "${GMM_MAX_ITER}" --gmm-fit-max-windows "${GMM_FIT_MAX_WINDOWS}" --train-noise-std "${TRAIN_NOISE_STD}" --noise-seed "${NOISE_SEED}" --feature-std-floor "${FEATURE_STD_FLOOR}" --score-mad-floor "${SCORE_MAD_FLOOR}" --calibration-quantile "${CALIBRATION_QUANTILE}" --cpu-threads "${CPU_THREADS}" --artifact-policy "${ARTIFACT_POLICY}" --log-every-steps "${LOG_EVERY_STEPS}" --log-every-seconds "${LOG_EVERY_SECONDS}" --gmm-log-every-iters "${GMM_LOG_EVERY_ITERS}" --startup-log "${STARTUP_LOG}" --startup-script "${BASH_SOURCE[0]}"
+set +e
+python "${ROOT}/scripts/export_mnrf_view_probe_analysis.py" --run-dir "${OUTPUT_DIR}" --output-dir "${ANALYSIS_DIR}"
+EXPORT_STATUS=$?
+set -e
+if [[ "${EXPORT_STATUS}" -ne 0 ]]; then
+  printf 'output_dir=%s\nanalysis_dir=%s\nfull_artifact_validation=not_confirmed\nanalysis_export=failed\n' "${OUTPUT_DIR}" "${ANALYSIS_DIR}" >&2
+  exit "${EXPORT_STATUS}"
+fi
 printf 'output_dir=%s\nanalysis_dir=%s\nfull_artifact_validation=passed\nanalysis_export=complete\n' "${OUTPUT_DIR}" "${ANALYSIS_DIR}"
 

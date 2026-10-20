@@ -6,8 +6,10 @@ MNRF-Lite V2 run; source directories are read-only inputs.
 """
 
 import argparse
+import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import shutil
 import signal
@@ -15,6 +17,7 @@ import sys
 import tempfile
 import traceback
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +27,214 @@ if str(ROOT) not in sys.path:
 from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
 from ts_benchmark.baselines.mnrf_view_probe import IndexedViewProbeStrategy, MNRFViewProbe
 from ts_benchmark.data.data_source import LocalAnomalyDetectDataSource, LocalExternalAnomalyDetectDataSource
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _capture_training_provenance(args, startup_script=None, data_path=None,
+                                 metadata_path=None, metadata_row=None,
+                                 frame=None, train_length=None):
+    """Capture run facts in memory before training; persisted after preparation."""
+    files = [Path(__file__).resolve(), ROOT / "ts_benchmark/baselines/mnrf_lite_v2/MNRFLiteV2.py",
+             ROOT / "ts_benchmark/baselines/mnrf_lite_v2/windows.py",
+             ROOT / "ts_benchmark/baselines/mnrf_lite_v2/training.py"]
+    files.extend(sorted((ROOT / "ts_benchmark/baselines/mnrf_view_probe").glob("*.py")))
+    if startup_script:
+        files.append(Path(startup_script).expanduser().resolve())
+    code_files = []
+    for path in files:
+        if path.is_file():
+            code_files.append({"path": str(path), "sha256": _sha256_file(path)})
+    try:
+        import subprocess
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
+                              capture_output=True, check=True).stdout.strip()
+        status_text = subprocess.run(["git", "status", "--short"], cwd=ROOT,
+                                     text=True, capture_output=True, check=True).stdout
+        dirty = bool(status_text.strip())
+        changed_paths = []
+        for line in status_text.splitlines():
+            relative = line[3:].strip()
+            candidate = ROOT / relative
+            if candidate.is_file() and candidate.suffix in {".py", ".sh", ".json"}:
+                changed_paths.append({"path": relative, "sha256": _sha256_file(candidate)})
+    except Exception as error:
+        head, dirty, status_text, changed_paths = None, None, None, []
+        git_error = str(error)
+    else:
+        git_error = None
+    import torch
+    import sklearn
+    startup_text = None
+    if startup_script and Path(startup_script).expanduser().is_file():
+        startup_text = Path(startup_script).expanduser().read_text(encoding="utf-8")
+    source_info = None
+    if frame is not None and train_length is not None:
+        time_index = MNRFLiteV2._time_index(frame)
+        boundary_columns = MNRFLiteV2._boundary_columns(frame)
+        boundary_ids = MNRFLiteV2._boundary_ids(frame)
+        feature_values, variable_names = MNRFLiteV2._features_from_frame(frame)
+        probe_module = __import__("ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash", "_hash_strings"])
+        source_info = {"task": args.task, "data_source": args.data_source,
+                       "rows": int(len(frame)), "train_length": int(train_length),
+                       "variable_names": list(map(str, variable_names)),
+                       "time_kind": time_index.kind, "time_source_timezone": time_index.source_timezone,
+                       "time_values_sha256": probe_module._chunked_array_hash(time_index.values_ns),
+                       "feature_data_sha256": probe_module._chunked_array_hash(feature_values),
+                       "boundary_columns": list(map(str, boundary_columns)),
+                       "boundary_values_sha256": None if boundary_ids is None else probe_module._hash_strings(boundary_ids),
+                       "selected_metadata_row": {str(k): str(v) for k, v in (metadata_row or {}).items()},
+                       "data_file": str(data_path), "data_file_sha256": _sha256_file(data_path),
+                       "metadata_file": str(metadata_path), "metadata_file_sha256": _sha256_file(metadata_path)}
+    device = str(args.device)
+    gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() and device != "cpu" else None
+    return {"captured_before_training": True, "git_head": head, "git_dirty": dirty,
+            "git_status_porcelain": status_text, "dirty_relevant_file_hashes": changed_paths,
+            "git_error": git_error, "code_files": code_files,
+            "startup_script": {"path": str(Path(startup_script).resolve()) if startup_script else None,
+                               "sha256": _sha256_file(startup_script) if startup_script and Path(startup_script).is_file() else None,
+                               "text": startup_text},
+            "source_data": source_info,
+            "command": [str(item) for item in __import__("sys").argv],
+            "effective_config": vars(args), "training_environment": {
+                "python": platform.python_version(), "platform": platform.platform(),
+                "torch": torch.__version__, "cuda_runtime": torch.version.cuda,
+                "cuda_available": bool(torch.cuda.is_available()), "requested_device": device,
+                "gpu": gpu,
+                "numpy": __import__("numpy").__version__,
+                "pandas": pd.__version__, "scikit_learn": sklearn.__version__,
+            }}
+
+
+def _write_run_supporting_evidence(output_path, frame, train_length, test_labels,
+                                   data_path, metadata_path, provenance):
+    """Persist complete test-axis labels/coordinates and training provenance."""
+    output_path = Path(output_path)
+    if not output_path.is_dir() or not (output_path / "probe_manifest.json").is_file():
+        raise ValueError("cannot write supporting evidence before a prepared completed run")
+    labels = np.asarray(test_labels)
+    if labels.ndim != 1 or labels.dtype.kind not in "iu" or not np.all(np.isin(labels, [0, 1])):
+        raise ValueError("test labels are not one-dimensional binary integers")
+    times = np.asarray(MNRFLiteV2._time_index(frame).values_ns[int(train_length):], dtype=np.int64)
+    indices = np.arange(int(train_length), int(train_length) + len(labels), dtype=np.int64)
+    label_column = next((column for column in frame.columns if str(column).lower() == "label"), None)
+    if label_column is None:
+        raise ValueError("parsed source frame lost its label column")
+    full_labels = frame[label_column].to_numpy()
+    if full_labels.ndim != 1 or full_labels.dtype.kind not in "iu" or not np.all(np.isin(full_labels, [0, 1])):
+        raise ValueError("full source labels are not one-dimensional binary integers")
+    if not np.array_equal(full_labels[int(train_length):], labels):
+        raise ValueError("test labels differ from the parsed full source frame")
+    all_times = np.asarray(MNRFLiteV2._time_index(frame).values_ns, dtype=np.int64)
+    all_indices = np.arange(len(frame), dtype=np.int64)
+    if len(times) != len(labels):
+        raise ValueError("complete test time axis does not match labels")
+    manifest_path = output_path / "probe_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    identity = manifest.get("source_identity", {})
+    segments = identity.get("test_segments", [])
+    segment_ids = np.full(len(labels), -1, dtype=np.int32)
+    for segment_id, (left, right) in enumerate(segments):
+        left_local = max(0, int(left) - int(train_length))
+        right_local = min(len(labels), int(right) - int(train_length))
+        if right_local > left_local:
+            segment_ids[left_local:right_local] = segment_id
+    if np.any(segment_ids < 0):
+        raise ValueError("frozen test segments do not cover the complete test axis")
+    all_segments = identity.get("segments", [])
+    all_segment_ids = np.full(len(frame), -1, dtype=np.int32)
+    for segment_id, (left, right) in enumerate(all_segments):
+        all_segment_ids[int(left):int(right)] = segment_id
+    if np.any(all_segment_ids < 0):
+        raise ValueError("frozen continuous segments do not cover the full source axis")
+    provenance = dict(provenance)
+    startup = provenance.get("startup_script", {})
+    if startup.get("text") is not None:
+        snapshot_dir = output_path / "provenance"
+        snapshot_dir.mkdir(exist_ok=True)
+        snapshot = snapshot_dir / "startup_script.sh"
+        snapshot.write_text(startup["text"], encoding="utf-8")
+        startup["snapshot"] = str(snapshot.relative_to(output_path))
+        startup["snapshot_sha256"] = _sha256_file(snapshot)
+        startup.pop("text", None)
+    # Preserve the training-time receipt before the ancillary axis write. If
+    # the latter is interrupted, the dedicated supplement command can verify
+    # the original inputs and finish without rerunning the model.
+    provenance_path = output_path / "training_provenance.json"
+    provenance_tmp = output_path / "training_provenance.json.tmp"
+    provenance_tmp.write_text(json.dumps(provenance, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    os.replace(provenance_tmp, provenance_path)
+
+    temporary = output_path / (".analysis_inputs.tmp-{}.npz".format(os.getpid()))
+    np.savez(temporary, test_labels=labels.astype(np.int8, copy=False),
+                               test_time_values_ns=times, test_global_indices=indices,
+                               test_segment_ids=segment_ids,
+                               all_labels=full_labels.astype(np.int8, copy=False),
+                               all_time_values_ns=all_times,
+                               all_global_indices=all_indices,
+                               all_segment_ids=all_segment_ids)
+    os.replace(temporary, output_path / "analysis_inputs.npz")
+    boundary_columns = manifest.get("source_identity", {}).get("boundary_columns", [])
+    boundary_values = MNRFLiteV2._boundary_ids(frame)
+    boundary_identity = {"columns": list(map(str, boundary_columns)), "values": []}
+    boundary_identity["test_segment_identity"] = []
+    if boundary_values is not None:
+        unique = list(dict.fromkeys(map(str, boundary_values[int(train_length):])))
+        boundary_identity["values"] = unique
+        boundary_identity["test_segment_identity"] = [
+            {"segment_id": index, "boundary_value": str(boundary_values[int(left)])}
+            for index, (left, _) in enumerate(segments)
+        ]
+    else:
+        boundary_identity["test_segment_identity"] = [
+            {"segment_id": index, "boundary_value": None}
+            for index, _ in enumerate(segments)
+        ]
+    input_sha = _sha256_file(output_path / "analysis_inputs.npz")
+    provenance["analysis_inputs"] = {"npz": str(output_path / "analysis_inputs.npz"),
+                                      "sha256": input_sha}
+    provenance_tmp.write_text(json.dumps(provenance, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    os.replace(provenance_tmp, provenance_path)
+    manifest.setdefault("analysis_artifacts", {})["analysis_inputs_sha256"] = input_sha
+    manifest["analysis_artifacts"]["test_time_values_sha256"] = __import__(
+        "ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash"])._chunked_array_hash(times)
+    manifest["analysis_artifacts"]["full_axis_sha256"] = {
+        "labels": __import__("ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash"])._chunked_array_hash(full_labels.astype(np.int8, copy=False)),
+        "time_values_ns": __import__("ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash"])._chunked_array_hash(all_times),
+        "global_indices": __import__("ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash"])._chunked_array_hash(all_indices),
+        "segment_ids": __import__("ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash"])._chunked_array_hash(all_segment_ids),
+    }
+    manifest["analysis_artifacts"]["training_provenance_sha256"] = _sha256_file(provenance_path)
+    manifest_tmp = manifest_path.with_suffix(".json.tmp")
+    manifest_tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    os.replace(manifest_tmp, manifest_path)
+    metadata = {
+        "schema": "mnrf-view-probe-analysis-inputs-v1", "source_manifest_sha256": _sha256_file(manifest_path),
+        "source_identity_sha256": manifest.get("source_identity_sha256"),
+        "train_length": int(train_length), "test_length": int(len(labels)),
+        "labels_sha256": input_sha,
+        "full_rows": int(len(frame)),
+        "data_file": str(data_path), "data_file_sha256": _sha256_file(data_path),
+        "metadata_file": str(metadata_path), "metadata_file_sha256": _sha256_file(metadata_path),
+        "variable_names": manifest.get("source_identity", {}).get("variable_names", []),
+        "time_kind": manifest.get("source_identity", {}).get("time_index", {}).get("kind"),
+        "test_segments": manifest.get("source_identity", {}).get("test_segments", []),
+        "full_segments": identity.get("segments", []),
+        "test_segment_identity": boundary_identity["test_segment_identity"],
+        "boundary_columns": list(map(str, boundary_columns)), "boundary_identity": boundary_identity,
+        "test_segment_identity": boundary_identity["test_segment_identity"],
+        "selected_metadata_row": {str(k): str(v) for k, v in (provenance.get("source_data", {}).get("selected_metadata_row", {}) or {}).items()},
+        "provenance_file": "training_provenance.json",
+        "provenance_sha256": _sha256_file(provenance_path),
+    }
+    (output_path / "analysis_inputs.json.tmp").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(output_path / "analysis_inputs.json.tmp", output_path / "analysis_inputs.json")
 
 
 def _read_task(task, source):
@@ -49,7 +260,7 @@ def _read_task(task, source):
     if label_column is None:
         raise ValueError("task data has no label column")
     test_labels = frame.iloc[train_length:][label_column].to_numpy()
-    return frame, train_length, test_labels
+    return frame, train_length, test_labels, folder / "data" / f"{task}.csv", folder / metadata_name, row.iloc[0].to_dict()
 
 
 def main():
@@ -96,6 +307,8 @@ def main():
     parser.add_argument("--gmm-log-every-iters", type=int, default=10)
     parser.add_argument("--startup-log", default="",
                         help="shell preflight log to include in the durable run log")
+    parser.add_argument("--startup-script", default="",
+                        help="invoking task script captured in training provenance")
     args = parser.parse_args()
 
     def _terminate(signum, _frame):
@@ -197,7 +410,9 @@ def main():
                   __import__("torch").cuda.get_device_name(0) if __import__("torch").cuda.is_available() else "cpu"),
               flush=True)
         print("MNRF event=preflight_start", flush=True)
-        frame, train_length, test_labels = _read_task(args.task, args.data_source)
+        frame, train_length, test_labels, data_path, metadata_path, metadata_row = _read_task(args.task, args.data_source)
+        training_provenance = _capture_training_provenance(
+            args, args.startup_script, data_path, metadata_path, metadata_row, frame, train_length)
         kwargs = dict(seed=args.seed, seq_len=args.seq_len, pattern_len=args.pattern_len,
                       hidden_dim=args.hidden_dim, batch_size=args.batch_size,
                       stage1_epochs=args.stage1_epochs, stage2_epochs=args.stage2_epochs,
@@ -228,6 +443,9 @@ def main():
             probe.fit(frame, train_length, None)
         else:
             strategy.run(frame.iloc[:train_length].copy(), frame.iloc[train_length:].copy(), test_labels)
+        if args.mode == "full_gmm" and args.artifact_policy == "full":
+            _write_run_supporting_evidence(output_path, frame, train_length, test_labels,
+                                           data_path, metadata_path, training_provenance)
         print("MNRF event=run_complete task={} output_dir={}".format(args.task, output_path), flush=True)
         print(json.dumps({"status": "complete", "task": args.task, "mode": args.mode,
                           "output_dir": str(probe.output_dir), "selected_views": list(probe.config.selected_views),

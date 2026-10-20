@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+
+from scripts.mnrf_lite_v2_preflight import _disk_estimate
+from ts_benchmark.baselines.mnrf_lite_v2.training import purged_ranges
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -27,7 +31,7 @@ REFERENCE = {
 }
 
 
-def _capture_script(tmp_path, script, preflight_fail=False):
+def _capture_script(tmp_path, script, preflight_fail=False, python_status=0, tee_status=0, export_status=0):
     bindir = tmp_path / "bin"
     bindir.mkdir(parents=True)
     capture = tmp_path / "calls.log"
@@ -38,13 +42,19 @@ def _capture_script(tmp_path, script, preflight_fail=False):
         "printf 'CUDA_VISIBLE_DEVICES=%s ' \"${CUDA_VISIBLE_DEVICES-<unset>}\" >> \"$CAPTURE\"\n"
         "printf '<%s> ' \"$@\" >> \"$CAPTURE\"\n"
         "printf '\\n' >> \"$CAPTURE\"\n"
-        "if [[ \"${1##*/}\" == 'mnrf_lite_v2_preflight.py' && \"${PREFLIGHT_FAIL:-0}\" == 1 ]]; then exit 23; fi\n"
+        "if [[ \"${1##*/}\" == 'mnrf_lite_v2_preflight.py' ]]; then exit \"${PYTHON_STATUS:-0}\"; fi\n"
+        "if [[ \"${1##*/}\" == 'export_mnrf_view_probe_analysis.py' ]]; then exit \"${EXPORT_STATUS:-0}\"; fi\n"
     )
     fake_python.chmod(0o755)
+    fake_tee = bindir / "tee"
+    fake_tee.write_text("#!/usr/bin/env bash\ncat >/dev/null\nexit \"${TEE_STATUS:-0}\"\n")
+    fake_tee.chmod(0o755)
     env = os.environ.copy()
     env["PATH"] = f"{bindir}:{env['PATH']}"
     env["CAPTURE"] = str(capture)
-    env["PREFLIGHT_FAIL"] = "1" if preflight_fail else "0"
+    env["PYTHON_STATUS"] = str(python_status if python_status else (23 if preflight_fail else 0))
+    env["TEE_STATUS"] = str(tee_status)
+    env["EXPORT_STATUS"] = str(export_status)
     env["CUDA_VISIBLE_DEVICES"] = "9"
     env.update({
         "MODE": "stage1", "SEED": "7", "SEQ_LEN": "32", "BATCH_SIZE": "999",
@@ -71,8 +81,8 @@ def test_scripts_capture_literal_configuration_without_environment_override(tmp_
     for task, script in SCRIPTS.items():
         result, lines = _capture_script(tmp_path / task, script)
         assert result.returncode == 0, result.stderr
-        assert len(lines) == 4
-        preflight, run, validate, export = lines
+        assert len(lines) == 3
+        preflight, run, export = lines
         seq_len, batch_size = REFERENCE[task]
         assert f"CUDA_VISIBLE_DEVICES=9 <{ROOT}/scripts/mnrf_lite_v2_preflight.py>" in preflight
         assert f"<--task> <{task}>" in preflight
@@ -89,6 +99,7 @@ def test_scripts_capture_literal_configuration_without_environment_override(tmp_
         assert "<--pattern-dim> <8>" in run
         assert "<--relation-dim> <8>" in run
         assert "<--artifact-policy> <full>" in run
+        assert "<--startup-script>" in run
         assert "<--log-every-steps> <100>" in run
         assert "<--log-every-seconds> <30>" in run
         assert "<--gmm-log-every-iters> <10>" in run
@@ -101,7 +112,6 @@ def test_scripts_capture_literal_configuration_without_environment_override(tmp_
         assert "<--gmm-fit-max-windows> <20000>" in run
         assert "/old/source" not in run and "/old/resume" not in run and "/old/output" not in run
         assert f"MNRF-ViewProbe/{task}/full_gmm-" in run
-        assert "validate_mnrf_view_probe.py" in validate
         assert "export_mnrf_view_probe_analysis.py" in export
 
 
@@ -110,6 +120,60 @@ def test_preflight_failure_stops_before_training(tmp_path):
     assert result.returncode == 23
     assert len(lines) == 1
     assert "mnrf_lite_v2_preflight.py" in lines[0]
+
+
+def test_preflight_python_and_tee_failures_return_nonzero_and_stop(tmp_path):
+    cases = ((23, 0, 23), (0, 17, 17), (23, 17, 23))
+    for index, (python_status, tee_status, expected) in enumerate(cases):
+        result, lines = _capture_script(tmp_path / str(index), SCRIPTS["NYC"],
+                                        python_status=python_status, tee_status=tee_status)
+        assert result.returncode == expected
+        assert len(lines) == 1
+        assert "mnrf_lite_v2_preflight.py" in lines[0]
+        assert "export_mnrf_view_probe_analysis.py" not in result.stderr
+
+
+def test_analysis_export_failure_is_nonzero_and_reports_both_paths(tmp_path):
+    result, lines = _capture_script(tmp_path, SCRIPTS["NYC"], export_status=19)
+    assert result.returncode == 19
+    assert len(lines) == 3
+    assert "analysis_export=failed" in result.stderr
+    assert "output_dir=" in result.stderr and "analysis_dir=" in result.stderr
+    assert "analysis_export=complete" not in result.stdout
+
+
+def test_two_invocations_get_distinct_run_and_analysis_paths(tmp_path):
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(_capture_script, tmp_path / "first", SCRIPTS["PSM"])
+        second_future = executor.submit(_capture_script, tmp_path / "second", SCRIPTS["PSM"])
+        first, first_lines = first_future.result()
+        second, second_lines = second_future.result()
+    assert first.returncode == second.returncode == 0
+    run_outputs = []
+    analysis_outputs = []
+    for lines in (first_lines, second_lines):
+        run_tokens = lines[1].split()
+        run_outputs.append(next(run_tokens[i + 1][1:-1] for i, token in enumerate(run_tokens) if token == "<--output-dir>"))
+        analysis_tokens = lines[2].split()
+        analysis_outputs.append(next(analysis_tokens[i + 1][1:-1] for i, token in enumerate(analysis_tokens) if token == "<--output-dir>"))
+    assert run_outputs[0] != run_outputs[1]
+    assert analysis_outputs[0] != analysis_outputs[1]
+
+
+def test_calit2_purged_counts_and_preflight_storage_formula(tmp_path):
+    split = purged_ranges(2520, 192)
+    counts = dict(split["window_counts"])
+    counts["test"] = 5040 - 2520 - 192 + 1
+    assert counts == {"train": 1519, "validation": 22, "calibration": 24, "test": 2329}
+    estimate = _disk_estimate(counts, 2, 25, 5040, str(tmp_path / "not-created" / "run"), tmp_path,
+                              hidden_dim=32, evolution_dim=8, pattern_dim=8, relation_dim=8)
+    expected_features = sum(counts.values()) * 2 * 25 * 4
+    assert estimate["feature_cache_bytes"] == expected_features
+    assert estimate["normalized_values_bytes"] == 5040 * 2 * 4
+    assert estimate["endpoint_index_bytes"] == sum(counts.values()) * 8
+    assert estimate["validation_calibration_test_nll_bytes"] == (22 + 24 + 2329) * 2 * 4
+    assert estimate["target_volume_path"] == str(tmp_path)
+    assert estimate["not_peak_ram_or_vram"] is True
 
 
 def test_independent_scripts_do_not_select_environment_or_device():

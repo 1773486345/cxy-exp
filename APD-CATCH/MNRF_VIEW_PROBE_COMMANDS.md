@@ -2,7 +2,7 @@
 
 These eight independent task entries are prepared only; they have not been
 run as formal experiments. Activate the existing global environment once,
-then run one command at a time from the repository root. The scripts do not
+then launch each task manually from the repository root. The scripts do not
 activate Conda, alter `CUDA_VISIBLE_DEVICES`, search for another Python, or
 retry after an error.
 
@@ -72,7 +72,9 @@ bash ./scripts/multivariate_detection/detect_score/CICIDS_script/MNRFViewProbe.s
 ```
 
 Run these manually as independent commands. They are not a loop, runner,
-scheduler, or background launcher. Do not paste all eight into a background job.
+scheduler, or background launcher. Tasks may run concurrently when shared
+resources allow; the scripts impose no global serialization or GPU-availability
+gate. SMD remains paused and is not included.
 The task scripts keep the following CATCH reference window and batch values,
 but the MNRF training/head settings are independent:
 
@@ -111,9 +113,12 @@ python scripts/export_mnrf_view_probe_analysis.py --run-dir /absolute/path/to/ru
 python scripts/summarize_mnrf_view_probe.py --root result/score/MNRF-ViewProbe
 ```
 
-The exporter refuses an existing analysis directory unless `--overwrite` is
-explicit. It consumes only a completed full source; it never retrains,
-refits a GMM, recalibrates, or removes source files. The local metadata has
+The exporter runs the full read-only validator exactly once as part of export;
+there is no validation-bypass flag. It consumes only a completed, self-contained
+full source; it never retrains, refits a GMM, recalibrates, or removes source
+files. `--overwrite` only replaces a recognized completed analysis package
+bound to the same source, and stages the replacement before commit. It rejects
+source/analysis path overlap, symlink targets, and unknown directories. The local metadata has
 one row and a CSV for each of the eight tasks; the read-only preflight remains
 the authority for actual window counts and disk estimates. CalIt2's validation
 and calibration counts are reported there and may be too small for stable MAD
@@ -123,3 +128,31 @@ planning values, not measured RAM or VRAM usage.
 The first two commands above are read-only checks. Formal task runs are not
 part of this repository change and no benchmark result is implied by preparing
 these entries.
+
+Preflight reports retained-disk estimates for the float32 feature caches,
+normalized values, endpoint indices, NLL, checkpoints/head/logs and bounded
+analysis payload, together with free space on the target volume. Those values
+are not peak RAM/VRAM. For the protocol-only synthetic layout of 5,040 rows,
+train boundary 2,520 and window 192, the purged counts are 1,519/22/24/2,329
+for train/validation/calibration/test. This is a formula check, not live-data
+statistics; the small validation/calibration counts limit robust MAD and
+0.995-quantile estimation.
+
+If auxiliary full-axis/provenance writing fails after training, the completed
+model source is retained. Supplement the verified source and export without
+rerunning Stage 1 or GMM:
+
+```bash
+python scripts/supplement_mnrf_view_probe_analysis_inputs.py --run-dir /absolute/path/to/full-run --output-dir /absolute/path/to/analysis
+```
+
+For a source whose auxiliary inputs already exist, export alone:
+
+```bash
+python scripts/export_mnrf_view_probe_analysis.py --run-dir /absolute/path/to/full-run --output-dir /absolute/path/to/new-analysis
+```
+
+Use `--overwrite` only for a recognized analysis package from the same source.
+Old `results`-policy runs cannot regain discarded encoders or caches, and old
+sources without training-time provenance are not backfilled from the current
+environment.

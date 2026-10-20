@@ -85,11 +85,30 @@ bounded analysis directory can be generated without training with:
 python scripts/export_mnrf_view_probe_analysis.py --run-dir /absolute/path/to/run --output-dir /absolute/path/to/analysis
 ```
 
-The exporter validates the full source once and refuses to overwrite an
-existing analysis directory unless `--overwrite` is explicit. The old SMD
-entry remains a results-only historical artifact because its prior budget was
-terminated; it is not restarted by this round. `load_probe`, source reuse and
-resume require full artifacts for new runs.
+The exporter performs the full source validation once internally; no boolean
+or command-line flag can bypass it. It refuses source/target overlap and only
+allows `--overwrite` for a recognized analysis package bound to that same
+source. Replacement is staged so an export failure preserves the old package.
+The source includes the complete raw test label/time/global-coordinate axis
+and training-time code, script, data and environment provenance. If writing
+those auxiliary inputs fails after training, the model stays complete; run
+`scripts/supplement_mnrf_view_probe_analysis_inputs.py` with the completed run
+and a separate analysis destination to verify the frozen raw input, supplement
+the axis, validate, and export without training again. Old runs lacking
+training-time provenance are reported as unknown and are not reconstructed
+from the current checkout. The old SMD entry remains a results-only historical
+artifact because its prior budget was terminated; it is not restarted by this
+round. `load_probe`, source reuse and resume require full artifacts for new
+runs.
+
+Feature overview variance is measured over windows for each variable-feature
+pair before aggregation by S/E/P/R. Cross-variable mean differences do not
+count as temporal variation. Diagnostic sampling is bounded and deterministic;
+test samples stratify available TP/FP/TN/FN and rare anomaly points. These
+summaries do not establish causal branch contribution. The exporter reports
+logical disk bytes for source and analysis; this is not peak memory or a
+compressed transfer-size estimate. Preflight reports retained-disk components
+and target-volume free space without imposing an arbitrary free-space gate.
 
 The live log is attached before the first post-preflight output chunk; that
 chunk is copied once and every later stdout/stderr write is flushed to the

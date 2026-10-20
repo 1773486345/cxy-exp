@@ -2,6 +2,8 @@
 """Read-only metadata and path check; does not construct caches or train."""
 
 import argparse
+import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -31,10 +33,59 @@ def _load_task_read_only(source, folder, task):
     return frame
 
 
+def _disk_estimate(counts, variables, total_dim, rows, output_dir, root,
+                   hidden_dim=32, evolution_dim=8, pattern_dim=8, relation_dim=8):
+    feature_bytes = int(sum(counts.values()) * variables * total_dim * 4)
+    normalized_bytes = int(rows * variables * 4)
+    endpoint_bytes = int(sum(counts.values()) * 8)
+    nll_bytes = int((counts["validation"] + counts["calibration"] + counts["test"]) * variables * 4)
+    width = int(hidden_dim)
+    encoder_parameters = (
+        4 * width + width + variables * width
+        + 6 * 2 * (width * 3 + width * width + width + 2 * width)
+        + width * evolution_dim + evolution_dim
+        + 3 * width * pattern_dim + pattern_dim
+        + 3 * width * width + width
+        + width * width + width
+        + 4 * width * width + 8 * width
+        + width * relation_dim + relation_dim
+    )
+    auxiliary_parameters = 3 * 8 + 8 * (8 + width + 1) + 64 + 64 * 2
+    checkpoint_bytes = int((5 * encoder_parameters + 4 * auxiliary_parameters) * 4)
+    gmm_bytes = int(variables * 4 * (total_dim + total_dim * total_dim + 4) * 8)
+    log_bytes = 2 * 1024 * 1024
+    analysis_sample_bytes = int((256 + 128 + 128 + 512) * variables * total_dim * 4)
+    analysis_evidence_bytes = int(2 * nll_bytes + analysis_sample_bytes + 4 * 1024 * 1024)
+    extra_bytes = checkpoint_bytes + gmm_bytes + log_bytes + analysis_evidence_bytes
+    target = Path(output_dir).expanduser() if output_dir else root / "result" / "score" / "MNRF-ViewProbe"
+    target_probe = target if target.exists() else target.parent
+    while not target_probe.exists() and target_probe != target_probe.parent:
+        target_probe = target_probe.parent
+    usage = shutil.disk_usage(target_probe)
+    return {
+        "feature_cache_bytes": feature_bytes,
+        "normalized_values_bytes": normalized_bytes,
+        "endpoint_index_bytes": endpoint_bytes,
+        "validation_calibration_test_nll_bytes": nll_bytes,
+        "model_and_fixed_checkpoint_estimate_bytes": checkpoint_bytes,
+        "gmm_head_estimate_bytes": gmm_bytes,
+        "logs_estimate_bytes": log_bytes,
+        "analysis_evidence_and_samples_estimate_bytes": analysis_evidence_bytes,
+        "additional_estimate_bytes": extra_bytes,
+        "core_bytes": feature_bytes + normalized_bytes + endpoint_bytes + nll_bytes,
+        "estimated_total_retained_bytes": feature_bytes + normalized_bytes + endpoint_bytes + nll_bytes + extra_bytes,
+        "estimate_assumptions": "float32 caches/NLL, int64 endpoints, fixed 3 checkpoint files incl. optimizer-state allowance, GMM full covariance formula, 2 MiB logs and bounded analysis samples; compressed sizes may differ",
+        "target_path": str(target), "target_volume_path": str(target_probe),
+        "target_volume_free_bytes": int(usage.free), "target_volume_total_bytes": int(usage.total),
+        "dtype_assumption": "float32 arrays and int64 endpoint indices",
+        "not_peak_ram_or_vram": True,
+    }
+
+
 def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
               encoding_batch_size: int = 0, evolution_dim: int = None,
               pattern_dim: int = None, relation_dim: int = None, view_dim: int = 8,
-              root: Path = ROOT):
+              root: Path = ROOT, output_dir: str = "", mode: str = "full_gmm"):
     if source == "large_detect":
         folder = root / "dataset/anomaly_detect"
         meta_path = folder / "DETECT_META.csv"
@@ -125,14 +176,24 @@ def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
     print(f"internal_purged_ranges={split} usable_windows={split_counts} test_usable_windows={test_windows}")
     if split_counts["validation"] <= 1 or split_counts["calibration"] <= 1:
         print("WARNING: validation/calibration windows are too few for robust scale or high-quantile threshold estimation")
-    print("plan=stage1 -> frozen feature cache -> stage2 -> validation/calibration -> valid-window test")
+    counts = dict(split_counts)
+    counts["test"] = int(test_windows)
+    disk_estimate = _disk_estimate(counts, len(actual_variables), config.layout.total_dim,
+                                   len(values), output_dir, root, config.hidden_dim,
+                                   config.layout.evolution_dim, config.layout.pattern_dim,
+                                   config.layout.relation_dim)
+    print("disk_estimate=" + json.dumps(disk_estimate, sort_keys=True))
+    if mode == "full_gmm":
+        print("plan=stage1 -> frozen feature cache -> GMM -> validation/calibration -> valid-window test (stage2/Flow not executed)")
+    else:
+        print("plan=" + str(mode) + " (stage2/Flow only when explicitly selected)")
     print("training/cache not started")
     return {
         "task": task, "source": source, "train_length": train_length,
         "total_rows": len(frame), "feature_names": tuple(map(str, actual_variables)),
         "expected_interval_ns": expected_interval, "train_segments": train_segments,
         "test_segments": test_segments, "split_window_counts": split_counts,
-        "test_window_count": test_windows,
+        "test_window_count": test_windows, "disk_estimate": disk_estimate,
     }
 
 
@@ -147,9 +208,12 @@ def main():
     parser.add_argument("--evolution-dim", type=int)
     parser.add_argument("--pattern-dim", type=int)
     parser.add_argument("--relation-dim", type=int)
+    parser.add_argument("--output-dir", default="", help="target run path used only for volume estimation")
+    parser.add_argument("--mode", default="full_gmm", choices=("stage1", "full_gmm", "random_gmm", "select_gmm", "s_only", "flow"))
     args = parser.parse_args()
     preflight(args.task, args.data_source, args.batch_size, args.seq_len, args.encoding_batch_size,
-              args.evolution_dim, args.pattern_dim, args.relation_dim, args.view_dim)
+              args.evolution_dim, args.pattern_dim, args.relation_dim, args.view_dim,
+              output_dir=args.output_dir, mode=args.mode)
 
 
 if __name__ == "__main__":
