@@ -8,17 +8,18 @@ stage-one `MNRFTrainer` implementation, then writes a separate
 
 ## Prepared task entries
 
-The five manually runnable entries are
+The eight manually runnable entries are
 `PSM_script/MNRFViewProbe.sh`, `MSL_script/MNRFViewProbe.sh`,
-`GECCO_script/MNRFViewProbe.sh`, `SMD_script/MNRFViewProbe.sh`, and
-`Genesis_script/MNRFViewProbe.sh` under
+`GECCO_script/MNRFViewProbe.sh`, `Genesis_script/MNRFViewProbe.sh`,
+`NYC_script/MNRFViewProbe.sh`, `CalIt2_script/MNRFViewProbe.sh`,
+`Creditcard_script/MNRFViewProbe.sh`, and `CICIDS_script/MNRFViewProbe.sh` under
 `scripts/multivariate_detection/detect_score/`. They are self-contained,
 resolve the repository root from their own location, run the read-only
 preflight first, and then invoke the MNRF CLI with explicit parameters. They
 expect the caller to run `conda activate catch_env` once; they do not activate
 an environment or alter `CUDA_VISIBLE_DEVICES`. Their default device is the
 inherited logical `cuda:0`, and each run gets a new timestamp/PID output
-directory. See `MNRF_VIEW_PROBE_COMMANDS.md` for the five independent
+directory. See `MNRF_VIEW_PROBE_COMMANDS.md` for the eight independent
 commands. These entries are prepared, not executed, and do not claim a
 benchmark result.
 
@@ -75,23 +76,20 @@ and source identity are checked before reuse. A missing or incompatible source
 artifact fails rather than defaulting to 1/8/8. The current model's strict
 FeatureLayout and time window protocols remain in force.
 
-The five prepared task scripts intentionally use `artifact_policy=results`.
-After scores and metrics have been validated, the run performs an atomic
-retention transaction and keeps only `run.log`, optional `training.jsonl`,
-`probe_manifest.json`, `run_status.json`, `results/metrics.json`, and
-`results/aligned_scores.npz`. Its manifest declares that model loading,
-training resume, source reuse and strict common recomputation are unavailable;
-`validate_mnrf_view_probe.py` and `summarize_mnrf_view_probe.py` can still
-validate/recompute the saved result metrics. Use the generic CLI or set
-`ARTIFACT_POLICY=full` for a reusable full run. An interrupted cleanup can be
-finished without training with:
+The eight prepared task scripts intentionally use `artifact_policy=full`.
+After validation, the source keeps checkpoints, complete split caches, GMM
+heads, calibration and score evidence for later read-only reuse. A separate
+bounded analysis directory can be generated without training with:
 
 ```bash
-python scripts/organize_mnrf_view_probe.py /absolute/path/to/run
+python scripts/export_mnrf_view_probe_analysis.py --run-dir /absolute/path/to/run --output-dir /absolute/path/to/analysis
 ```
 
-The organizer validates the result hashes before removing recovery material.
-`load_probe`, source reuse and resume reject a results-only bundle explicitly.
+The exporter validates the full source once and refuses to overwrite an
+existing analysis directory unless `--overwrite` is explicit. The old SMD
+entry remains a results-only historical artifact because its prior budget was
+terminated; it is not restarted by this round. `load_probe`, source reuse and
+resume require full artifacts for new runs.
 
 The live log is attached before the first post-preflight output chunk; that
 chunk is copied once and every later stdout/stderr write is flushed to the
@@ -246,7 +244,7 @@ reference or an index-intersection-only comparison.
 
 ### Runtime logging and result retention
 
-The five task scripts capture their read-only preflight into the same live
+The eight task scripts capture their read-only preflight into the same live
 `run.log` as the Python run. Once the run directory has been created, the log
 is flushed incrementally and includes stage/cache/GMM/calibration/scoring
 progress, stderr, warnings, and tracebacks; a rejected resume keeps its
