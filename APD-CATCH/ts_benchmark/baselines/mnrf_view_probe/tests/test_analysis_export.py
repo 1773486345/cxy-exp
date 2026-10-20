@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -17,8 +18,16 @@ from ts_benchmark.baselines.mnrf_view_probe.probe import _chunked_array_hash
 
 
 def _snapshot(root):
-    return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in root.rglob("*") if path.is_file()}
+    snapshot = {}
+    for path in [root] + list(root.rglob("*")):
+        relative = "." if path == root else str(path.relative_to(root))
+        if path.is_symlink():
+            snapshot[relative] = ("symlink", os.readlink(path))
+        elif path.is_dir():
+            snapshot[relative] = ("directory",)
+        elif path.is_file():
+            snapshot[relative] = ("file", hashlib.sha256(path.read_bytes()).hexdigest())
+    return snapshot
 
 
 def _complete_source(tmp_path):
@@ -251,12 +260,28 @@ def test_supporting_evidence_failure_rolls_back_auxiliary_files(tmp_path, monkey
     # injected failure but must remain structurally valid for the writer.
     provenance["source_data"]["data_file"] = str(data_path)
     provenance["source_data"]["metadata_file"] = str(metadata_path)
+    provenance["source_data"]["data_file_sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    provenance["source_data"]["metadata_file_sha256"] = hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+    (run / "existing-recovery.tmp").write_bytes(b"keep recovery evidence")
+    (run / ".analysis_inputs.tmp-98765.npz").write_bytes(b"keep old npz temporary")
+    (run / "preexisting.json.tmp").write_bytes(b"keep old json temporary")
+    (run / "training_provenance.json.rollback.tmp").write_bytes(b"keep rollback evidence")
+    old_temp_dir = run / ".analysis_inputs.tmp-old-dir"
+    old_temp_dir.mkdir()
+    (old_temp_dir / "payload").write_bytes(b"keep directory")
+    external = tmp_path / "external-target"
+    external.mkdir()
+    (external / "payload").write_bytes(b"outside remains unchanged")
+    link = run / "analysis_inputs.tmp-link"
+    link.symlink_to(external, target_is_directory=True)
     before = _snapshot(run)
 
     def partial_then_fail(*args, **kwargs):
-        path = run / "probe_manifest.json"
+        staging = Path(args[0])
+        path = staging / "probe_manifest.json"
         path.write_text("partial mutation")
-        (run / "training_provenance.json").write_text("partial mutation")
+        (staging / "training_provenance.json").write_text("partial mutation")
+        (staging / "unpublished.partial.tmp").write_text("owned by transaction")
         raise RuntimeError("injected support-write interruption")
 
     monkeypatch.setattr("scripts.run_mnrf_view_probe._write_run_supporting_evidence_unchecked", partial_then_fail)
@@ -264,6 +289,111 @@ def test_supporting_evidence_failure_rolls_back_auxiliary_files(tmp_path, monkey
         _write_run_supporting_evidence(run, frame, train, labels[train:], data_path,
                                        metadata_path, provenance)
     assert _snapshot(run) == before
+    assert (external / "payload").read_bytes() == b"outside remains unchanged"
+    assert json.loads((run / "run_status.json").read_text())["status"] == "complete"
+
+
+def test_invalid_label_preflight_preserves_all_preexisting_temp_evidence(tmp_path, complete_source):
+    run, frame, labels, train = complete_source
+    data_path = tmp_path / "data.csv"
+    metadata_path = tmp_path / "meta.csv"
+    data_path.write_text("data\n")
+    metadata_path.write_text("file_name,train_lens\nSYN.csv,430\n")
+    sentinels = {
+        "existing-recovery.tmp": b"recovery",
+        ".analysis_inputs.tmp-98765.npz": b"npz temp",
+        "preexisting.json.tmp": b"json temp",
+        "training_provenance.json.rollback.tmp": b"rollback temp",
+    }
+    for name, payload in sentinels.items():
+        (run / name).write_bytes(payload)
+    before = _snapshot(run)
+    invalid = labels[train:].astype(np.float64)
+    invalid[0] = 0.5
+    with pytest.raises(ValueError, match="exact binary"):
+        _write_run_supporting_evidence(run, frame, train, invalid, data_path,
+                                       metadata_path, json.loads((run / "training_provenance.json").read_text()))
+    assert _snapshot(run) == before
+
+
+def test_commit_failure_rolls_back_and_retry_preserves_old_temp_files(tmp_path, monkeypatch, complete_source):
+    run, frame, labels, train = complete_source
+    data_path = tmp_path / "data.csv"
+    metadata_path = tmp_path / "meta.csv"
+    data_path.write_text("data\n")
+    metadata_path.write_text("file_name,train_lens\nSYN.csv,430\n")
+    (run / "existing-recovery.tmp").write_bytes(b"preserve")
+    (run / ".analysis_inputs.tmp-98765.npz").write_bytes(b"preserve")
+    provenance = json.loads((run / "training_provenance.json").read_text())
+    provenance["source_data"]["data_file"] = str(data_path)
+    provenance["source_data"]["metadata_file"] = str(metadata_path)
+    provenance["source_data"]["data_file_sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    provenance["source_data"]["metadata_file_sha256"] = hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+    before = _snapshot(run)
+    module = __import__("scripts.run_mnrf_view_probe", fromlist=["os"])
+    real_replace = os.replace
+    failed = {"once": False}
+    target = run / "analysis_inputs.json"
+
+    def fail_once_on_final_metadata(source, destination):
+        if Path(destination) == target and not failed["once"]:
+            failed["once"] = True
+            raise OSError("injected final metadata publish failure")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(module.os, "replace", fail_once_on_final_metadata)
+    with pytest.raises(OSError, match="injected final metadata"):
+        _write_run_supporting_evidence(run, frame, train, labels[train:], data_path,
+                                       metadata_path, provenance)
+    assert _snapshot(run) == before
+    assert not list(run.glob(".viewprobe-aux-txn-*"))
+    monkeypatch.setattr(module.os, "replace", real_replace)
+    _write_run_supporting_evidence(run, frame, train, labels[train:], data_path,
+                                   metadata_path, provenance)
+    assert (run / "analysis_inputs.npz").is_file()
+    assert (run / "analysis_inputs.json").is_file()
+    assert (run / "existing-recovery.tmp").read_bytes() == b"preserve"
+    assert (run / ".analysis_inputs.tmp-98765.npz").read_bytes() == b"preserve"
+    assert not list(run.glob(".viewprobe-aux-txn-*"))
+
+
+def test_rollback_failure_reports_and_retains_private_recovery_backup(tmp_path, monkeypatch, complete_source):
+    run, frame, labels, train = complete_source
+    data_path = tmp_path / "data.csv"
+    metadata_path = tmp_path / "meta.csv"
+    data_path.write_text("data\n")
+    metadata_path.write_text("file_name,train_lens\nSYN.csv,430\n")
+    provenance = json.loads((run / "training_provenance.json").read_text())
+    provenance["source_data"]["data_file"] = str(data_path)
+    provenance["source_data"]["metadata_file"] = str(metadata_path)
+    provenance["source_data"]["data_file_sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    provenance["source_data"]["metadata_file_sha256"] = hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+    provenance["rollback_test_marker"] = "force-provenance-replacement"
+    before = _snapshot(run)
+    module = __import__("scripts.run_mnrf_view_probe", fromlist=["os"])
+    real_replace = os.replace
+    failures = {"analysis": False, "provenance_rollback": False}
+
+    def fail_publish_and_one_rollback(source, destination):
+        destination = Path(destination)
+        if destination == run / "analysis_inputs.json" and not failures["analysis"]:
+            failures["analysis"] = True
+            (run / "training_provenance.json").write_bytes(b"concurrent external update")
+            failures["provenance_rollback"] = True
+            raise OSError("injected publish failure")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(module.os, "replace", fail_publish_and_one_rollback)
+    with pytest.raises(RuntimeError, match="rollback failed.*recovery snapshots retained"):
+        _write_run_supporting_evidence(run, frame, train, labels[train:], data_path,
+                                       metadata_path, provenance)
+    assert failures == {"analysis": True, "provenance_rollback": True}
+    transaction_dirs = list(run.glob(".viewprobe-aux-txn-*"))
+    assert len(transaction_dirs) == 1
+    backup = transaction_dirs[0] / "backup"
+    assert hashlib.sha256((backup / "probe_manifest.json").read_bytes()).hexdigest() == before["probe_manifest.json"][1]
+    assert hashlib.sha256((backup / "training_provenance.json").read_bytes()).hexdigest() == before["training_provenance.json"][1]
+    assert (run / "training_provenance.json").read_bytes() == b"concurrent external update"
     assert json.loads((run / "run_status.json").read_text())["status"] == "complete"
 
 

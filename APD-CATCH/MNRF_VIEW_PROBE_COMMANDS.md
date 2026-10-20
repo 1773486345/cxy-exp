@@ -181,3 +181,13 @@ and scored endpoint labels; neither trains, refits, re-encodes or recalibrates.
 Normal export remains read-only. A changed `normalized_values.npy` is rejected
 using its actual `.npy` byte digest and cannot be re-bound by these commands.
 Old `results`-policy runs cannot regain discarded encoders or caches.
+The `select_gmm`, source-backed `s_only`, and `flow` Python entry points apply
+the same raw-cache, statistics, variable-order and digest checks before
+creating their derived run. Resume performs this source check during its
+read-only preflight. A rejected source or resume target remains unchanged.
+
+Auxiliary writes stage under an exclusive per-operation directory and only
+publish the known manifest/provenance/analysis files. Rollback never globs
+`.tmp` names in the run tree, so pre-existing temporary evidence, ordinary
+directories and symlinks are preserved. If restoration itself fails, the
+error reports the recovery directory instead of claiming success.

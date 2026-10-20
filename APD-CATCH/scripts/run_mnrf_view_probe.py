@@ -114,9 +114,11 @@ def _capture_training_provenance(args, startup_script=None, data_path=None,
 
 
 def _write_run_supporting_evidence_unchecked(output_path, frame, train_length, test_labels,
-                                            data_path, metadata_path, provenance):
+                                            data_path, metadata_path, provenance,
+                                            logical_output_path=None):
     """Persist complete test-axis labels/coordinates and training provenance."""
     output_path = Path(output_path)
+    logical_output_path = Path(logical_output_path or output_path)
     if not output_path.is_dir() or not (output_path / "probe_manifest.json").is_file():
         raise ValueError("cannot write supporting evidence before a prepared completed run")
     labels = normalize_binary_labels(test_labels, len(frame) - int(train_length), "test labels")
@@ -150,10 +152,7 @@ def _write_run_supporting_evidence_unchecked(output_path, frame, train_length, t
     snapshot = output_path / "provenance" / "startup_script.sh"
     if startup.get("text") is not None:
         if not snapshot.is_file():
-            snapshot.parent.mkdir(exist_ok=True)
-            temporary_snapshot = snapshot.with_name(snapshot.name + ".tmp")
-            temporary_snapshot.write_text(startup["text"], encoding="utf-8")
-            os.replace(temporary_snapshot, snapshot)
+            _atomic_bytes(snapshot, startup["text"].encode("utf-8"))
         startup["snapshot"] = str(snapshot.relative_to(output_path))
         startup["snapshot_sha256"] = _sha256_file(snapshot)
         startup.pop("text", None)
@@ -163,14 +162,18 @@ def _write_run_supporting_evidence_unchecked(output_path, frame, train_length, t
     provenance_path = output_path / "training_provenance.json"
     _atomic_json(provenance_path, provenance)
 
-    temporary = output_path / (".analysis_inputs.tmp-{}.npz".format(os.getpid()))
-    np.savez(temporary, test_labels=labels.astype(np.int8, copy=False),
-                               test_time_values_ns=times, test_global_indices=indices,
-                               test_segment_ids=segment_ids,
-                               all_labels=full_labels.astype(np.int8, copy=False),
-                               all_time_values_ns=all_times,
-                               all_global_indices=all_indices,
-                               all_segment_ids=all_segment_ids)
+    fd, temporary_name = tempfile.mkstemp(prefix=".analysis_inputs.tmp-", suffix=".npz",
+                                          dir=str(output_path))
+    temporary = Path(temporary_name)
+    with os.fdopen(fd, "wb") as temporary_file:
+        np.savez(temporary_file, test_labels=labels.astype(np.int8, copy=False),
+                 test_time_values_ns=times, test_global_indices=indices,
+                 test_segment_ids=segment_ids,
+                 all_labels=full_labels.astype(np.int8, copy=False),
+                 all_time_values_ns=all_times,
+                 all_global_indices=all_indices,
+                 all_segment_ids=all_segment_ids)
+        temporary_file.flush()
     os.replace(temporary, output_path / "analysis_inputs.npz")
     boundary_columns = manifest.get("source_identity", {}).get("boundary_columns", [])
     boundary_values = MNRFLiteV2._boundary_ids(frame)
@@ -189,7 +192,7 @@ def _write_run_supporting_evidence_unchecked(output_path, frame, train_length, t
             for left, _ in segments
         ]
     input_sha = _sha256_file(output_path / "analysis_inputs.npz")
-    provenance["analysis_inputs"] = {"npz": str(output_path / "analysis_inputs.npz"),
+    provenance["analysis_inputs"] = {"npz": str(logical_output_path / "analysis_inputs.npz"),
                                       "sha256": input_sha}
     _atomic_json(provenance_path, provenance)
     manifest.setdefault("analysis_artifacts", {})["analysis_inputs_sha256"] = input_sha
@@ -202,7 +205,6 @@ def _write_run_supporting_evidence_unchecked(output_path, frame, train_length, t
         "segment_ids": __import__("ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash"])._chunked_array_hash(all_segment_ids),
     }
     manifest["analysis_artifacts"]["training_provenance_sha256"] = _sha256_file(provenance_path)
-    manifest_tmp = manifest_path.with_suffix(".json.tmp")
     _atomic_json(manifest_path, manifest)
     metadata = {
         "schema": "mnrf-view-probe-analysis-inputs-v1", "source_manifest_sha256": _sha256_file(manifest_path),
@@ -228,47 +230,152 @@ def _write_run_supporting_evidence_unchecked(output_path, frame, train_length, t
 
 def _write_run_supporting_evidence(output_path, frame, train_length, test_labels,
                                    data_path, metadata_path, provenance):
-    """Write auxiliary evidence transactionally, restoring old bytes on errors."""
+    """Atomically publish auxiliary evidence without touching unrelated files."""
     output_path = Path(output_path)
-    tracked = [output_path / name for name in (
-        "probe_manifest.json", "training_provenance.json", "analysis_inputs.npz",
-        "analysis_inputs.json", "provenance/startup_script.sh")]
-    before = {path: path.read_bytes() if path.is_file() else None for path in tracked}
-    provenance_dir = output_path / "provenance"
-    before_provenance = ({path for path in provenance_dir.rglob("*") if path.is_file()}
-                         if provenance_dir.is_dir() else set())
+    _preflight_supporting_evidence(output_path, frame, train_length, test_labels,
+                                   data_path, metadata_path, provenance)
+    relative_paths = (
+        Path("probe_manifest.json"), Path("training_provenance.json"),
+        Path("analysis_inputs.npz"), Path("analysis_inputs.json"),
+        Path("provenance/startup_script.sh"),
+    )
+    before = {}
+    for relative in relative_paths:
+        path = output_path / relative
+        parent = path.parent
+        if parent.exists() and (parent.is_symlink() or not parent.is_dir()):
+            raise ValueError("refusing auxiliary write through non-directory/symlink parent: {}".format(parent))
+        if path.is_symlink():
+            raise ValueError("refusing to replace symlink auxiliary artifact: {}".format(path))
+        if path.exists() and not path.is_file():
+            raise ValueError("refusing to replace non-file auxiliary artifact: {}".format(path))
+        before[relative] = path.read_bytes() if path.is_file() else None
+
+    transaction_dir = Path(tempfile.mkdtemp(prefix=".viewprobe-aux-txn-", dir=str(output_path)))
+    attempted = []
     try:
+        for relative in (Path("probe_manifest.json"), Path("training_provenance.json"),
+                         Path("provenance/startup_script.sh")):
+            data = before[relative]
+            if data is not None:
+                staged = transaction_dir / relative
+                staged.parent.mkdir(parents=True, exist_ok=True)
+                staged.write_bytes(data)
+        for relative, data in before.items():
+            if data is not None:
+                backup = transaction_dir / "backup" / relative
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                backup.write_bytes(data)
         _write_run_supporting_evidence_unchecked(
-            output_path, frame, train_length, test_labels,
-            data_path, metadata_path, provenance)
-    except BaseException:
-        for path, data in before.items():
-            if data is None:
-                path.unlink(missing_ok=True)
-            else:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                temporary = path.with_name(path.name + ".rollback.tmp")
-                temporary.write_bytes(data)
-                os.replace(temporary, path)
-        if provenance_dir.is_dir():
-            for path in list(provenance_dir.rglob("*")):
-                if path.is_file() and path not in before_provenance:
-                    path.unlink(missing_ok=True)
+            transaction_dir, frame, train_length, test_labels,
+            data_path, metadata_path, provenance, logical_output_path=output_path)
+        for relative in relative_paths:
+            staged = transaction_dir / relative
+            if not staged.is_file():
+                continue
+            target = output_path / relative
+            if target.parent.is_symlink():
+                raise ValueError("refusing auxiliary publish through a symlink parent: {}".format(target.parent))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise ValueError("auxiliary target changed type during transaction: {}".format(target))
+            current = target.read_bytes() if target.is_file() else None
+            if current != before[relative]:
+                raise RuntimeError("auxiliary target changed during transaction; refusing to overwrite: {}".format(target))
+            new_bytes = staged.read_bytes()
+            attempted.append((relative, new_bytes))
+            os.replace(staged, target)
+    except BaseException as original_error:
+        rollback_errors = []
+        for relative, new_bytes in reversed(attempted):
+            target = output_path / relative
+            old_bytes = before[relative]
             try:
-                provenance_dir.rmdir()
-            except OSError:
-                pass
-        for pattern in (".analysis_inputs.tmp-*.npz", "*.json.tmp", "*.tmp"):
-            for path in output_path.glob(pattern):
-                path.unlink(missing_ok=True)
+                if target.is_symlink():
+                    raise OSError("target became a symlink during rollback")
+                current = target.read_bytes() if target.is_file() else None
+                if current == old_bytes:
+                    continue
+                if current != new_bytes:
+                    raise OSError("target changed outside this transaction; refusing to overwrite it")
+                if old_bytes is None:
+                    target.unlink()
+                else:
+                    _atomic_bytes(target, old_bytes)
+            except BaseException as rollback_error:
+                rollback_errors.append("{}: {}".format(target, rollback_error))
+        if rollback_errors:
+            raise RuntimeError(
+                "auxiliary write failed ({}); rollback failed ({}); recovery snapshots retained at {}"
+                .format(original_error, "; ".join(rollback_errors), transaction_dir)
+            ) from original_error
+        shutil.rmtree(transaction_dir)
         raise
+    shutil.rmtree(transaction_dir)
+
+
+def _preflight_supporting_evidence(output_path, frame, train_length, test_labels,
+                                   data_path, metadata_path, provenance):
+    """Perform semantic checks before creating transaction files."""
+    output_path = Path(output_path)
+    manifest_path = output_path / "probe_manifest.json"
+    if not output_path.is_dir() or not manifest_path.is_file() or manifest_path.is_symlink():
+        raise ValueError("cannot write supporting evidence before a prepared completed run")
+    train_length = int(train_length)
+    if train_length < 0 or train_length > len(frame):
+        raise ValueError("supporting evidence train boundary is outside the source axis")
+    labels = normalize_binary_labels(test_labels, len(frame) - train_length, "test labels")
+    label_column = next((column for column in frame.columns if str(column).lower() == "label"), None)
+    if label_column is None:
+        raise ValueError("parsed source frame lost its label column")
+    full_labels = normalize_binary_labels(frame[label_column].to_numpy(), len(frame), "full source labels")
+    if not np.array_equal(full_labels[train_length:], labels):
+        raise ValueError("test labels differ from the parsed full source frame")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    identity = manifest.get("source_identity") or {}
+    if identity.get("input_length") != len(frame) or identity.get("train_length") != train_length:
+        raise ValueError("supporting evidence source length/train boundary differs from frozen identity")
+    canonical_segment_ids(identity)
+    times = np.asarray(MNRFLiteV2._time_index(frame).values_ns, dtype=np.int64)
+    if len(times) != len(full_labels):
+        raise ValueError("complete source time axis does not match labels")
+    source_data = (provenance or {}).get("source_data") or {}
+    for path, digest_key, description in (
+            (Path(data_path), "data_file_sha256", "task CSV"),
+            (Path(metadata_path), "metadata_file_sha256", "metadata CSV")):
+        if not path.is_file():
+            raise ValueError("supporting evidence {} is missing: {}".format(description, path))
+        declared = source_data.get(digest_key)
+        if not declared or _sha256_file(path) != declared:
+            raise ValueError("supporting evidence {} identity is missing or changed: {}".format(description, path))
+    if source_data.get("rows") != len(frame) or source_data.get("train_length") != train_length:
+        raise ValueError("supporting evidence parsed row/train identity differs")
+    if source_data.get("variable_names") != identity.get("variable_names"):
+        raise ValueError("supporting evidence variable order differs from frozen identity")
+    if source_data.get("feature_data_sha256") != identity.get("feature_data_sha256"):
+        raise ValueError("supporting evidence feature values differ from frozen identity")
+    return manifest
 
 
 def _atomic_json(path, value):
+    payload = json.dumps(value, indent=2, sort_keys=True, default=str) + "\n"
+    _atomic_bytes(path, payload.encode("utf-8"))
+
+
+def _atomic_bytes(path, payload):
     path = Path(path)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix="." + path.name + ".tmp-", dir=str(path.parent))
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def _persist_training_receipt(output_path, provenance, resume=False):
@@ -290,9 +397,7 @@ def _persist_training_receipt(output_path, provenance, resume=False):
         snapshot_dir = output_path / "provenance"
         snapshot_dir.mkdir(exist_ok=True)
         snapshot = snapshot_dir / "startup_script.sh"
-        temporary = snapshot.with_name(snapshot.name + ".tmp")
-        temporary.write_text(startup["text"], encoding="utf-8")
-        os.replace(temporary, snapshot)
+        _atomic_bytes(snapshot, startup["text"].encode("utf-8"))
         startup["snapshot"] = str(snapshot.relative_to(output_path))
         startup["snapshot_sha256"] = _sha256_file(snapshot)
         startup.pop("text", None)

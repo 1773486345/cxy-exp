@@ -15,7 +15,7 @@ from scripts.run_mnrf_view_probe import _read_task, _write_run_supporting_eviden
 from ts_benchmark.baselines.mnrf_view_probe.integrity import (
     canonical_segment_ids, normalize_binary_labels, validate_normalized_values_cache,
 )
-from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe
+from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, load_probe
 from scripts.validate_mnrf_view_probe import validate
 
 
@@ -24,6 +24,21 @@ def _core_snapshot(root):
     return {str(path.relative_to(root)): exporter._sha256(path)
             for path in root.rglob("*") if path.is_file()
             and path.name not in excluded and "legacy-analysis-inputs-" not in str(path)}
+
+
+def _tree_snapshot(root):
+    import hashlib
+    root = Path(root)
+    result = {}
+    for path in [root] + list(root.rglob("*")):
+        relative = "." if path == root else path.relative_to(root).as_posix()
+        if path.is_symlink():
+            result[relative] = ("symlink", os.readlink(path))
+        elif path.is_dir():
+            result[relative] = ("directory",)
+        elif path.is_file():
+            result[relative] = ("file", hashlib.sha256(path.read_bytes()).hexdigest())
+    return result
 
 
 @pytest.mark.parametrize("dtype", [np.int8, np.uint8, np.float32, np.float64, np.bool_])
@@ -280,3 +295,122 @@ def test_validator_rejects_finite_normalized_cache_tampering(tmp_path):
     with pytest.raises(ValueError, match="normalized_values.npy sha256 mismatch"):
         exporter.export(run, tmp_path / "analysis")
     assert not (tmp_path / "analysis").exists()
+
+
+def test_source_reuse_preflights_normalized_cache_for_all_source_modes(tmp_path, monkeypatch):
+    total, train = 520, 430
+    data_root = tmp_path / "data-root"
+    (data_root / "data").mkdir(parents=True)
+    times = pd.date_range("2026-07-01", periods=total, freq="min")
+    labels = np.zeros(total, dtype=np.float64)
+    labels[train:train + 5] = 1.0
+    labels[train + 48:train + 52] = 1.0
+    variables = {
+        "x": np.sin(np.arange(total, dtype=np.float64) / 13.0),
+        "y": np.cos(np.arange(total, dtype=np.float64) / 17.0),
+    }
+    rows = []
+    for name, values in list(variables.items()) + [("label", labels)]:
+        rows.extend({"date": stamp, "data": value, "cols": name}
+                    for stamp, value in zip(times, values))
+    pd.DataFrame(rows).to_csv(data_root / "data" / "SOURCE.csv", index=False)
+    pd.DataFrame([{"file_name": "SOURCE.csv", "train_lens": train}]).to_csv(
+        data_root / "DETECT_META.csv", index=False)
+    frame, loaded_train, test_labels, *_ = _read_task("SOURCE", "large_detect", data_root)
+    assert loaded_train == train and frame["label"].dtype.kind == "f"
+    source = tmp_path / "stage1-source"
+    common = dict(seq_len=32, pattern_len=32, batch_size=32, stage1_epochs=1,
+                  stage2_epochs=1, patience=1, device="cpu", task_name="SOURCE.csv",
+                  gmm_components=1, gmm_fit_max_windows=8)
+    MNRFViewProbe(**dict(common, output_dir=str(source), mode="stage1")).fit(frame, train)
+    source_before = _tree_snapshot(source)
+
+    selected_dir = tmp_path / "healthy-select"
+    selected = MNRFViewProbe(**dict(common, output_dir=str(selected_dir), mode="select_gmm",
+                                    selected_views=("S", "P", "R"), source_dir=str(source)))
+    selected.fit(frame, train, test_labels)
+    restored = load_probe(selected_dir, device="cpu")
+    cached = restored.score_cached_test()
+    with np.load(selected_dir / "results" / "aligned_scores.npz", allow_pickle=False) as saved:
+        assert np.allclose(cached["scores"], saved["scores"], rtol=1e-6, atol=1e-7)
+        assert np.array_equal(cached["predictions"], saved["predictions"])
+    assert validate(selected_dir)["status"] == "complete"
+    assert _tree_snapshot(source) == source_before
+
+    bad_sources = {}
+    bad_source_snapshots = {}
+    for mode, damage in (("select_gmm", "finite_value"),
+                         ("s_only", "missing_hash"), ("flow", "statistics")):
+        damaged = tmp_path / ("damaged-" + mode)
+        shutil.copytree(source, damaged)
+        if damage == "finite_value":
+            cache = np.load(damaged / "cache" / "normalized_values.npy", mmap_mode="r+")
+            cache[0, 0] += np.float32(100)
+            cache.flush()
+        elif damage == "missing_hash":
+            manifest_path = damaged / "probe_manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest.pop("normalized_cache_sha256")
+            manifest_path.write_text(json.dumps(manifest, sort_keys=True))
+        else:
+            with np.load(damaged / "input_statistics.npz", allow_pickle=False) as stats:
+                mean, scale = np.asarray(stats["mean"]), np.asarray(stats["scale"])
+            np.savez(damaged / "input_statistics.npz", mean=mean + 3.0, scale=scale)
+        bad_sources[mode] = damaged
+        bad_source_snapshots[mode] = _tree_snapshot(damaged)
+
+    for mode, damaged in bad_sources.items():
+        output = tmp_path / ("must-not-exist-" + mode)
+        kwargs = dict(common, output_dir=str(output), mode=mode, source_dir=str(damaged))
+        if mode == "select_gmm":
+            kwargs["selected_views"] = ("S", "P", "R")
+        probe = MNRFViewProbe(**kwargs)
+        monkeypatch.setattr(probe, "_fit_gmm", lambda *args, **kw: pytest.fail("GMM started before source validation"))
+        monkeypatch.setattr(probe, "_fit_flow", lambda *args, **kw: pytest.fail("Flow started before source validation"))
+        with pytest.raises(ValueError, match="normalized_values.npy"):
+            probe.fit(frame, train, test_labels)
+        assert not output.exists()
+        assert _tree_snapshot(damaged) == bad_source_snapshots[mode]
+
+    # Produce a genuine source-backed interruption after real per-variable
+    # GMM fits, then prove resume rejection leaves both trees byte-identical.
+    interrupted_output = tmp_path / "interrupted-select"
+    select_kwargs = dict(common, output_dir=str(interrupted_output), mode="select_gmm",
+                         selected_views=("S", "P", "R"), source_dir=str(source))
+    original_score = MNRFViewProbe._write_scores
+
+    def interrupt_after_calibration(self, *args, **kwargs):
+        raise RuntimeError("controlled interruption after head fitting and calibration")
+
+    monkeypatch.setattr(MNRFViewProbe, "_write_scores", interrupt_after_calibration)
+    with pytest.raises(RuntimeError, match="controlled interruption"):
+        MNRFViewProbe(**select_kwargs).fit(frame, train, test_labels)
+    monkeypatch.setattr(MNRFViewProbe, "_write_scores", original_score)
+    status = json.loads((interrupted_output / "run_status.json").read_text())
+    assert status["status"] != "complete"
+    assert (interrupted_output / "heads" / "gmm_progress.json").is_file()
+    target_before = _tree_snapshot(interrupted_output)
+    source_cache = np.load(source / "cache" / "normalized_values.npy", mmap_mode="r+")
+    source_cache[0, 0] += np.float32(200)
+    source_cache.flush()
+    source_before_reject = _tree_snapshot(source)
+    resume = MNRFViewProbe(**dict(select_kwargs, resume_from=str(interrupted_output)))
+    with pytest.raises(ValueError, match="normalized_values.npy sha256 mismatch"):
+        resume.fit(frame, train, test_labels)
+    assert _tree_snapshot(interrupted_output) == target_before
+    assert _tree_snapshot(source) == source_before_reject
+
+    # The public CLI rejects the same finite source corruption before it
+    # creates a derived output directory or reaches any success marker.
+    cli_output = tmp_path / "cli-rejected"
+    command = [sys.executable, str(Path(exporter.ROOT) / "scripts/run_mnrf_view_probe.py"),
+               "--task", "SOURCE", "--data-root", str(data_root), "--mode", "select_gmm",
+               "--source-dir", str(bad_sources["select_gmm"]), "--output-dir", str(cli_output),
+               "--views", "S,P,R", "--seq-len", "32", "--pattern-len", "32",
+               "--batch-size", "32", "--device", "cpu", "--gmm-components", "1",
+               "--gmm-fit-max-windows", "8"]
+    cli_result = subprocess.run(command, cwd=exporter.ROOT, capture_output=True, text=True, timeout=60)
+    assert cli_result.returncode != 0
+    assert "normalized_values.npy" in cli_result.stdout + cli_result.stderr
+    assert "status\": \"complete\"" not in cli_result.stdout
+    assert not cli_output.exists()

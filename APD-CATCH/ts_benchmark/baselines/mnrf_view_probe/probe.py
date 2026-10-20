@@ -925,6 +925,12 @@ class MNRFViewProbe:
         manifest = json.loads(manifest_path.read_text())
         if manifest.get("schema") != PROBE_SCHEMA:
             raise ValueError("view probe source schema is unsupported; re-export stage one")
+        # Every source-backed consumer depends on the same frozen raw input
+        # contract as validation and deployment loading. Do this before any
+        # target run is prepared, and never repair or rebind the source here.
+        from .integrity import validate_normalized_values_cache
+        validate_normalized_values_cache(
+            source, manifest, expected_variables=list(self.variable_names))
         current_identity = self.source_identity
         source_identity = manifest.get("source_identity")
         if source_identity is None:
@@ -1499,10 +1505,12 @@ class MNRFViewProbe:
                     raise ValueError(f"resume rejected: Flow feature statistics shape/value differs; expected {expected_shape}")
         # Validate an explicitly referenced source without creating any target
         # directories or rewriting any target artifact.
+        validated_source = None
         if self.config.source_dir:
             if not Path(self.config.source_dir).is_dir():
                 raise ValueError("resume rejected: source_dir is not a directory")
-            source, source_manifest, _ = self._load_source(self.config.source_dir)
+            validated_source = self._load_source(self.config.source_dir)
+            source, source_manifest, _ = validated_source
             for field in ("source_cache_sha256", "source_endpoint_sha256", "source_feature_fingerprint"):
                 expected = (manifest or {}).get(field)
                 actual = (source_manifest.get("cache_sha256") if field == "source_cache_sha256"
@@ -1527,7 +1535,18 @@ class MNRFViewProbe:
                     raise ValueError(f"resume rejected: endpoint hash differs for {name}")
             normalized_path = self.output_dir / "cache" / "normalized_values.npy"
             declared_normalized = manifest.get("normalized_cache_sha256")
-            if declared_normalized is not None and (not normalized_path.is_file() or _sha256_file(normalized_path) != declared_normalized):
+            local_frozen_cache = all(
+                (self.output_dir / "cache" / f"{name}_features.npy").is_file()
+                and (self.output_dir / "cache" / f"{name}_window_end_indices.npy").is_file()
+                for name in ("train", "validation", "calibration", "test"))
+            if not self.config.source_dir and (local_frozen_cache or normalized_path.exists()):
+                if declared_normalized is None:
+                    raise ValueError("resume rejected: normalized cache authoritative hash is missing")
+                from .integrity import validate_normalized_values_cache
+                validate_normalized_values_cache(
+                    self.output_dir, manifest, expected_variables=list(self.variable_names))
+            elif declared_normalized is not None and (
+                    not normalized_path.is_file() or _sha256_file(normalized_path) != declared_normalized):
                 raise ValueError("resume rejected: normalized cache hash differs")
             input_stats_path = self.output_dir / "input_statistics.npz"
             declared_input_stats = manifest.get("input_statistics_sha256")
@@ -1642,11 +1661,6 @@ class MNRFViewProbe:
             declared_stats = manifest.get("input_statistics_sha256")
             if not input_stats_path.is_file() or not declared_stats or _sha256_file(input_stats_path) != declared_stats:
                 raise ValueError("resume rejected: completed source input statistics are missing or changed")
-            normalized_path = self.output_dir / "cache" / "normalized_values.npy"
-            declared_normalized = manifest.get("normalized_cache_sha256")
-            if (not normalized_path.is_file() or not declared_normalized
-                    or _sha256_file(normalized_path) != declared_normalized):
-                raise ValueError("resume rejected: completed source normalized cache is missing or changed")
             # Stage-one exports intentionally have no score/head artifacts;
             # use the source contract above instead of the deployment loader,
             # which also validates final results.
@@ -1771,12 +1785,14 @@ class MNRFViewProbe:
                     if legacy_payload is None or progress.get("identity") != _json_hash(legacy_payload):
                         raise ValueError("resume rejected: GMM numerical progress identity differs")
                     self._legacy_gmm_config = persisted_config
+        return validated_source
 
     def fit(self, frame, train_length, labels=None):
         self._fit_started = time.perf_counter()
         if self.config.mode == "full_gmm" and self.config.source_dir:
             raise ValueError("full_gmm with source_dir is unsupported; use select_gmm or s_only")
         resume_preflight = bool(self.config.resume_from)
+        validated_source = None
         if resume_preflight:
             # Resume validation is deliberately read-only.  It may construct
             # temporary encoders/optimizers while checking source and
@@ -1786,7 +1802,7 @@ class MNRFViewProbe:
             preflight_rng = _capture_rng()
             try:
                 self._set_protocol_identity(frame, int(train_length))
-                self._validate_resume_preflight(frame, int(train_length))
+                validated_source = self._validate_resume_preflight(frame, int(train_length))
             finally:
                 _restore_rng(preflight_rng)
             if getattr(self, "_resume_stage1_complete", False) and self.config.mode == "stage1":
@@ -1800,6 +1816,16 @@ class MNRFViewProbe:
                             validation_windows=self.ranges["window_counts"]["validation"],
                             calibration_windows=self.ranges["window_counts"]["calibration"],
                             test_windows=len(self._current_test_endpoints))
+        elif self.config.source_dir:
+            # Source integrity failures are rejected before _prepare_dirs can
+            # create or mutate a derived run. Preserve caller RNG state: this
+            # preflight only parses files and loads the frozen encoder.
+            preflight_rng = _capture_rng()
+            try:
+                self._set_protocol_identity(frame, int(train_length))
+                validated_source = self._load_source(self.config.source_dir)
+            finally:
+                _restore_rng(preflight_rng)
         self._prepare_dirs()
         self._writes_started = True
         if self._on_writes_started is not None:
@@ -1879,7 +1905,7 @@ class MNRFViewProbe:
             elif mode in {"select_gmm", "flow"} or (mode == "s_only" and self.config.source_dir):
                 if not self.config.source_dir:
                     raise ValueError(f"mode={mode} requires source_dir pointing to a validated stage-1 probe")
-                source, source_manifest, source_cache = self._load_source(self.config.source_dir)
+                source, source_manifest, source_cache = validated_source
                 with np.load(source / "input_statistics.npz", allow_pickle=False) as stats:
                     self.trainer.fixed_input.mean_ = stats["mean"].astype(np.float32)
                     self.trainer.fixed_input.scale_ = stats["scale"].astype(np.float32)

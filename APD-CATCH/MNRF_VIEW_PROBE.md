@@ -105,6 +105,11 @@ renumber a later segment. The complete source validator also opens
 `float32` dtype and finite values by chunks, and hashes the actual `.npy` file
 bytes against the authoritative manifest binding. A missing or stale digest is
 not repaired automatically; restore a trusted source copy before reuse.
+The same check runs inside the Python source-loader used by `select_gmm`,
+source-backed `s_only`, and `flow`, as well as their resume preflight. It runs
+before a derived output directory or status is written; a damaged source
+cannot produce a derived run marked complete. This check does not require the
+source's optional analysis-input package.
 
 If writing auxiliary inputs fails after training, the model remains complete.
 With the original receipt present, supplement against the same parsed local
@@ -118,6 +123,12 @@ claim those current facts were captured during training. The explicit
 renumbering signature, preserves old auxiliary evidence, and records a
 migration. Core hashes must validate before either operation. A normal export
 remains read-only and never supplements or migrates its source.
+
+Auxiliary evidence writes use a private uniquely-created transaction directory.
+Only files published by that transaction are rolled back. Existing similarly
+named `.tmp` files, directories, and symlinks are never globbed, traversed, or
+removed. If rollback itself fails, the error names both failures and retains
+the transaction backup for manual recovery.
 
 The old SMD entry remains a results-only historical artifact because its
 prior budget was terminated; it is not restarted by this round. `load_probe`,
