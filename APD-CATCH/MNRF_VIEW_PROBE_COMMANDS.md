@@ -185,6 +185,10 @@ The `select_gmm`, source-backed `s_only`, and `flow` Python entry points apply
 the same raw-cache, statistics, variable-order and digest checks before
 creating their derived run. Resume performs this source check during its
 read-only preflight. A rejected source or resume target remains unchanged.
+For Flow, the preflight also binds the saved stage-2 checkpoint and manifest
+to the validated source encoder fingerprint. The fit restores that exact
+encoder/statistics state after constructing its normal trainer, so head
+initialization remains the only newly initialized state.
 
 Auxiliary writes stage under an exclusive per-operation directory and only
 publish the known manifest/provenance/analysis files. Rollback never globs

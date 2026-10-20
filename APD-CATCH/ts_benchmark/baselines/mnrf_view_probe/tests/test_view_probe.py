@@ -11,7 +11,7 @@ import torch
 
 from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, ViewProbeConfig, load_probe
 from ts_benchmark.baselines.mnrf_view_probe.strategy import IndexedViewProbeStrategy
-from ts_benchmark.baselines.mnrf_view_probe.probe import _select_stratified
+from ts_benchmark.baselines.mnrf_view_probe.probe import _json_hash, _select_stratified
 from ts_benchmark.models.model_loader import get_models
 from ts_benchmark.baselines.mnrf_lite_v2.training import MNRFTrainer
 
@@ -124,6 +124,12 @@ def test_flow_feature_statistics_shape_and_completed_stage2_resume_only_finishes
     MNRFViewProbe(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
                   stage2_epochs=1, patience=1, device="cpu", output_dir=str(source_dir),
                   mode="stage1").fit(frame, train_length)
+    initial = torch.load(source_dir / "checkpoints" / "initial_encoder.pt",
+                         map_location="cpu", weights_only=False)["encoder"]
+    best = torch.load(source_dir / "checkpoints" / "best_encoder.pt",
+                      map_location="cpu", weights_only=False)["encoder"]
+    assert any(not torch.equal(initial[name], best[name]) for name in initial)
+    source_manifest = json.loads((source_dir / "probe_manifest.json").read_text())
     flow_dir = tmp_path / "flow"
     kwargs = dict(seq_len=32, pattern_len=32, batch_size=64, stage1_epochs=1,
                   stage2_epochs=1, patience=1, device="cpu", output_dir=str(flow_dir),
@@ -135,7 +141,16 @@ def test_flow_feature_statistics_shape_and_completed_stage2_resume_only_finishes
 
     monkeypatch.setattr(MNRFTrainer, "calibrate", fail_after_stage2)
     with pytest.raises(RuntimeError, match="controlled post-stage2"):
-        MNRFViewProbe(**kwargs).fit(frame, train_length)
+        flow_probe = MNRFViewProbe(**kwargs)
+        flow_probe.fit(frame, train_length)
+    assert flow_probe.trainer.fingerprint() == source_manifest["feature_fingerprint"]
+    flow_manifest = json.loads((flow_dir / "probe_manifest.json").read_text())
+    assert flow_manifest["stage2_identity"]
+    assert flow_manifest["stage2_identity"] == _json_hash({
+        "source_identity": flow_probe.source_identity,
+        "feature_fingerprint": source_manifest["feature_fingerprint"],
+        "layout": flow_probe.config.layout.to_dict(),
+    })
     checkpoint_path = flow_dir / "checkpoints" / "stage2_latest.pt"
     checkpoint_before = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert checkpoint_before["stage_status"] == "completed"
@@ -607,6 +622,33 @@ def test_flow_corrupt_checkpoint_payload_is_rejected_before_any_write(interrupte
     assert np.array_equal(after_numpy[1], process_numpy[1])
     assert after_numpy[2:] == process_numpy[2:]
     assert torch.equal(torch.get_rng_state(), process_torch)
+
+
+def test_flow_resume_rejects_shared_wrong_source_identity_before_writes(interrupted_flow_fixture):
+    fixture = interrupted_flow_fixture
+    root = fixture["root"]
+    damaged = root / "wrong-source-identity"
+    shutil.copytree(fixture["flow_dir"], damaged)
+    checkpoint_path = damaged / "checkpoints" / "stage2_latest.pt"
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    checkpoint["stage2_identity"] = "legacy-random-encoder-identity"
+    torch.save(checkpoint, checkpoint_path)
+    manifest_path = damaged / "probe_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["stage2_identity"] = "legacy-random-encoder-identity"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True))
+
+    def snapshot(path):
+        return {item.relative_to(path).as_posix(): hashlib.sha256(item.read_bytes()).hexdigest()
+                for item in path.rglob("*") if item.is_file()}
+
+    before = snapshot(damaged)
+    source_before = snapshot(fixture["source_dir"])
+    with pytest.raises(ValueError, match="not bound to the validated source encoder"):
+        MNRFViewProbe(**dict(fixture["kwargs"], output_dir=str(damaged),
+                             resume_from=str(damaged))).fit(fixture["frame"], fixture["train_length"])
+    assert snapshot(damaged) == before
+    assert snapshot(fixture["source_dir"]) == source_before
 
 
 def test_benchmark_fit_and_score_use_separate_train_test_frames(tmp_path):

@@ -329,12 +329,22 @@ def test_source_reuse_preflights_normalized_cache_for_all_source_modes(tmp_path,
     selected = MNRFViewProbe(**dict(common, output_dir=str(selected_dir), mode="select_gmm",
                                     selected_views=("S", "P", "R"), source_dir=str(source)))
     selected.fit(frame, train, test_labels)
+    source_manifest = json.loads((source / "probe_manifest.json").read_text())
+    assert selected.trainer.fingerprint() == source_manifest["feature_fingerprint"]
     restored = load_probe(selected_dir, device="cpu")
     cached = restored.score_cached_test()
     with np.load(selected_dir / "results" / "aligned_scores.npz", allow_pickle=False) as saved:
         assert np.allclose(cached["scores"], saved["scores"], rtol=1e-6, atol=1e-7)
         assert np.array_equal(cached["predictions"], saved["predictions"])
     assert validate(selected_dir)["status"] == "complete"
+    assert _tree_snapshot(source) == source_before
+
+    s_only_dir = tmp_path / "healthy-s-only"
+    s_only = MNRFViewProbe(**dict(common, output_dir=str(s_only_dir), mode="s_only",
+                                  source_dir=str(source)))
+    s_only.fit(frame, train, test_labels)
+    assert s_only.trainer.fingerprint() == source_manifest["feature_fingerprint"]
+    assert validate(s_only_dir)["status"] == "complete"
     assert _tree_snapshot(source) == source_before
 
     bad_sources = {}

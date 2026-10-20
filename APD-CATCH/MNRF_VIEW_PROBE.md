@@ -110,6 +110,11 @@ source-backed `s_only`, and `flow`, as well as their resume preflight. It runs
 before a derived output directory or status is written; a damaged source
 cannot produce a derived run marked complete. This check does not require the
 source's optional analysis-input package.
+After this read-only load, the validated encoder state and input statistics
+are explicitly restored into the trainer used for the derived fit. Flow
+`stage2_identity` is computed from that frozen source fingerprint; a checkpoint
+whose manifest and payload agree with each other but bind a different/random
+encoder is rejected before any target write.
 
 If writing auxiliary inputs fails after training, the model remains complete.
 With the original receipt present, supplement against the same parsed local

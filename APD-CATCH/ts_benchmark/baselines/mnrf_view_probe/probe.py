@@ -985,6 +985,16 @@ class MNRFViewProbe:
             raise ValueError("view probe source input statistics contain non-positive scales")
         if self.trainer.fingerprint() != manifest.get("feature_fingerprint"):
             raise ValueError("view probe source encoder/input-statistics fingerprint mismatch")
+        # Keep the validated frozen state for the real fit lifecycle.  Source
+        # loading is also used as a read-only preflight, after which fit()
+        # constructs its normal trainer (and must not lose this state).
+        self._validated_source_encoder_state = {
+            key: value.detach().cpu().clone()
+            for key, value in self.trainer.encoder.state_dict().items()
+        }
+        self._validated_source_input_mean = self.trainer.fixed_input.mean_.copy()
+        self._validated_source_input_scale = self.trainer.fixed_input.scale_.copy()
+        self._validated_source_fingerprint = manifest.get("feature_fingerprint")
         cache = {}
         for name in ("train", "validation", "calibration", "test"):
             path = source / "cache" / f"{name}_features.npy"
@@ -1008,6 +1018,21 @@ class MNRFViewProbe:
                 raise ValueError("view probe source GMM fitting sample exceeds the requested head limit")
         self._source_config = source_cfg
         return source, manifest, cache
+
+    def _restore_validated_source_state(self):
+        """Restore the source state validated before the target was prepared."""
+        state = getattr(self, "_validated_source_encoder_state", None)
+        if state is None:
+            return
+        self.trainer.encoder.load_state_dict(state)
+        self.trainer.encoder.eval()
+        self.trainer.fixed_input.mean_ = np.asarray(
+            self._validated_source_input_mean, dtype=np.float32).copy()
+        self.trainer.fixed_input.scale_ = np.asarray(
+            self._validated_source_input_scale, dtype=np.float32).copy()
+        expected = getattr(self, "_validated_source_fingerprint", None)
+        if expected is not None and self.trainer.fingerprint() != expected:
+            raise ValueError("validated source encoder state could not be restored")
 
     def _fit_gmm(self, cache, source_manifest=None):
         train = cache["train"]
@@ -1518,6 +1543,24 @@ class MNRFViewProbe:
                           else source_manifest.get("feature_fingerprint"))
                 if expected != actual:
                     raise ValueError(f"resume rejected: source {field} differs")
+            # A checkpoint and manifest can agree with each other while both
+            # still carrying the random encoder fingerprint produced by the
+            # preflight/fit trainer replacement regression.  Bind resumed
+            # Flow to the already validated frozen source before any target
+            # status, manifest, or checkpoint write.
+            if self.config.mode == "flow":
+                stage2_path = self.output_dir / "checkpoints" / "stage2_latest.pt"
+                if stage2_path.is_file():
+                    expected_stage2_identity = _json_hash({
+                        "source_identity": self.source_identity,
+                        "feature_fingerprint": source_manifest.get("feature_fingerprint"),
+                        "layout": self.config.layout.to_dict(),
+                    })
+                    stage2_payload = torch.load(stage2_path, map_location="cpu", weights_only=False)
+                    if stage2_payload.get("stage2_identity") != expected_stage2_identity:
+                        raise ValueError("resume rejected: Flow stage2 identity is not bound to the validated source encoder")
+                    if manifest is not None and manifest.get("stage2_identity") != expected_stage2_identity:
+                        raise ValueError("resume rejected: Flow manifest identity is not bound to the validated source encoder")
         # Verify immutable local artifacts against hashes recorded before the
         # interruption. Shape and finite-value checks alone are insufficient.
         if manifest is not None:
@@ -1789,6 +1832,10 @@ class MNRFViewProbe:
 
     def fit(self, frame, train_length, labels=None):
         self._fit_started = time.perf_counter()
+        self._validated_source_encoder_state = None
+        self._validated_source_input_mean = None
+        self._validated_source_input_scale = None
+        self._validated_source_fingerprint = None
         if self.config.mode == "full_gmm" and self.config.source_dir:
             raise ValueError("full_gmm with source_dir is unsupported; use select_gmm or s_only")
         resume_preflight = bool(self.config.resume_from)
@@ -1845,10 +1892,13 @@ class MNRFViewProbe:
             self._save_run_request(stage="running")
             self._set_run_status("running")
             self.trainer = self._make_trainer(len(self.variable_names))
+            if validated_source is not None:
+                self._restore_validated_source_state()
             mode = self.config.mode
             reuse_local_cache = False
             reused_cache = None
             source_cache_mode = mode in {"select_gmm", "flow"} and bool(self.config.source_dir)
+            source_cache_mode = source_cache_mode or (mode == "s_only" and bool(self.config.source_dir))
             if resume_preflight and mode in {"full_gmm", "random_gmm"}:
                 manifest_path = self.output_dir / "probe_manifest.json"
                 normalized_path = self.output_dir / "cache" / "normalized_values.npy"
@@ -1878,7 +1928,13 @@ class MNRFViewProbe:
             elif not reuse_local_cache:
                 normalized = self._normalized_memmap(values)
             initial_state = None
-            if self.config.mode != "s_only":
+            # A source-backed derived run does not own an encoder
+            # initialization.  Older runs may contain a random
+            # ``initial_encoder.pt`` written before source loading was fixed;
+            # it is metadata from the discarded derived trainer, not the
+            # frozen encoder used by the head.  Do not validate or overwrite
+            # it as though it were the source initialization.
+            if self.config.mode != "s_only" and not source_cache_mode:
                 initial_state = {k: v.detach().cpu().clone() for k, v in self.trainer.encoder.state_dict().items()}
                 initial_path = self.output_dir / "checkpoints" / "initial_encoder.pt"
                 if self.config.resume_from and initial_path.is_file():
