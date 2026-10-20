@@ -30,6 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.validate_mnrf_view_probe import validate
+from ts_benchmark.baselines.mnrf_view_probe.integrity import canonical_segment_ids
 
 
 EVIDENCE_FILES = (
@@ -94,7 +95,7 @@ def _copy_evidence(source: Path, output: Path):
     return records
 
 
-def _cache_inventory(source: Path, manifest):
+def _cache_inventory(source: Path, manifest, validation):
     declared = manifest.get("cache_sha256", {})
     endpoint_hashes = manifest.get("endpoint_sha256", {})
     records = []
@@ -116,6 +117,11 @@ def _cache_inventory(source: Path, manifest):
             expected = manifest.get("normalized_cache_sha256")
         if not expected:
             raise ValueError(f"source manifest has no validated cache hash for {relative}")
+        if relative == "cache/normalized_values.npy":
+            normalized_check = validation.get("normalized_cache_validation")
+            if not normalized_check or normalized_check.get("sha256") != expected:
+                raise ValueError("normalized cache inventory has no matching completed integrity check")
+            expected = normalized_check["sha256"]
         records.append({"path": relative, "shape": list(array.shape), "dtype": str(array.dtype),
                         "bytes": int(path.stat().st_size), "nbytes": int(array.nbytes),
                         "sha256": expected, "hash_source": "validated source manifest"})
@@ -312,11 +318,14 @@ def _segment_diagnostics(source: Path, output: Path, manifest, analysis_inputs):
                     raise ValueError("aligned valid mask has no recognized test-axis alignment")
         runs = []
         segment_identity = (input_metadata.get("boundary_identity") or {}).get("test_segment_identity", [])
-        for segment_index, (left, right) in enumerate(boundaries or [(train_length, train_length + len(anomaly_axis))]):
+        identity_by_id = {int(item["segment_id"]): item for item in segment_identity}
+        _, _, _, _, _, _, _, _, full_segment_ids = analysis_inputs
+        for left, right in (boundaries or [(train_length, train_length + len(anomaly_axis))]):
             left = max(train_length, int(left))
             right = min(train_length + len(anomaly_axis), int(right))
             if right <= left:
                 continue
+            segment_index = int(full_segment_ids[left])
             local_left, local_right = left - train_length, right - train_length
             anomaly = anomaly_axis[local_left:local_right]
             start = None
@@ -337,7 +346,7 @@ def _segment_diagnostics(source: Path, output: Path, manifest, analysis_inputs):
                     peak = int(observed_endpoints[int(np.argmax(observed_scores))]) if observed_scores.size else None
                     runs.append({"start_original": int(global_left), "end_original": int(global_right - 1),
                                  "segment_id": segment_index, "point_count": int(stop - start),
-                                 "segment_identity": segment_identity[segment_index] if segment_index < len(segment_identity) else None,
+                                 "segment_identity": identity_by_id.get(segment_index),
                                  "valid_points": int(np.sum(valid_slice)), "hit_points": int(np.sum(hits)),
                                  "hit": bool(np.any(hits)),
                                  "max_score": _finite_float(np.max(observed_scores)) if observed_scores.size else None,
@@ -472,7 +481,10 @@ def _load_analysis_inputs(source: Path, manifest):
         raise ValueError("analysis input metadata source differs from training provenance")
     startup = provenance.get("startup_script") or {}
     snapshot = source / str(startup.get("snapshot", ""))
-    if not startup.get("sha256") or not snapshot.is_file() or _sha256(snapshot) != startup.get("snapshot_sha256") or startup.get("snapshot_sha256") != startup.get("sha256"):
+    partial_history = provenance.get("provenance_type") == "recovered_partial"
+    if not partial_history and (not startup.get("sha256") or not snapshot.is_file()
+            or _sha256(snapshot) != startup.get("snapshot_sha256")
+            or startup.get("snapshot_sha256") != startup.get("sha256")):
         raise ValueError("training startup script snapshot is missing or failed its hash binding")
     for path_key, hash_key in (("data_file", "data_file_sha256"), ("metadata_file", "metadata_file_sha256")):
         value, expected_hash = metadata.get(path_key), metadata.get(hash_key)
@@ -530,6 +542,16 @@ def _load_analysis_inputs(source: Path, manifest):
         raise ValueError("test analysis axis does not match its full source axis")
     if not np.array_equal(indices, all_indices[train_length:]) or not np.array_equal(segment_ids, all_segment_ids[train_length:]):
         raise ValueError("test coordinates/segments do not match the full source axis")
+    expected_full_segment_ids = canonical_segment_ids(identity)
+    if not np.array_equal(all_segment_ids, expected_full_segment_ids):
+        raise ValueError("analysis segment IDs are not the canonical full-axis IDs")
+    expected_test_ids = expected_full_segment_ids[train_length:]
+    if not np.array_equal(segment_ids, expected_test_ids):
+        raise ValueError("test segment IDs do not preserve canonical full-axis identities")
+    segment_identity = (metadata.get("boundary_identity") or {}).get("test_segment_identity", [])
+    expected_identity_ids = [int(expected_full_segment_ids[int(left)]) for left, _ in identity.get("test_segments", [])]
+    if [int(item.get("segment_id", -1)) for item in segment_identity] != expected_identity_ids:
+        raise ValueError("test segment identity metadata does not use canonical full-axis IDs")
     full_hashes = bound.get("full_axis_sha256") or {}
     for key, array in (("labels", all_labels), ("time_values_ns", all_times),
                        ("global_indices", all_indices), ("segment_ids", all_segment_ids)):
@@ -728,7 +750,7 @@ def _samples(source: Path, output: Path, manifest, rng, analysis_inputs=None):
 def _validate_output_target(source: Path, requested: Path, overwrite: bool):
     """Validate source/target relation before any output-side mutation."""
     source = source.resolve()
-    raw = requested.expanduser()
+    raw = Path(requested).expanduser()
     # Reject a link itself before normalization can hide its original identity.
     if raw.is_symlink():
         raise ValueError("analysis output must not be a symlink; choose a real new path")
@@ -810,7 +832,8 @@ def _require_full_analysis_evidence(run_dir: Path):
 
 
 def export(run_dir: Path, output_dir: Path, overwrite=False, already_validated=False):
-    run_dir = run_dir.resolve()
+    run_dir = Path(run_dir).expanduser().resolve()
+    output_dir = Path(output_dir).expanduser()
     if not run_dir.is_dir():
         raise ValueError(f"source run directory does not exist: {run_dir}")
     manifest_path = run_dir / "probe_manifest.json"
@@ -823,10 +846,10 @@ def export(run_dir: Path, output_dir: Path, overwrite=False, already_validated=F
         raise ValueError("analysis export requires artifact_policy=full; results-only runs cannot be recovered")
     if already_validated:
         raise ValueError("already_validated is forbidden; export always performs exactly one complete source validation")
-    _require_full_analysis_evidence(run_dir)
     validation = validate(run_dir)
     if validation.get("status") != "complete":
         raise ValueError(f"source run is not a complete full artifact: {validation}")
+    _require_full_analysis_evidence(run_dir)
     analysis_inputs = _load_analysis_inputs(run_dir, manifest)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_dir.parent / f".{output_dir.name}.tmp-{uuid.uuid4().hex}"
@@ -842,7 +865,7 @@ def export(run_dir: Path, output_dir: Path, overwrite=False, already_validated=F
         if status_path.is_file():
             shutil.copy2(status_path, temporary / "metadata" / "source_status.json")
         records = _copy_evidence(run_dir, temporary)
-        cache_records = _cache_inventory(run_dir, manifest)
+        cache_records = _cache_inventory(run_dir, manifest, validation)
         rng = np.random.default_rng(20261013)
         overview = _feature_overview(run_dir, temporary, manifest, rng)
         metrics = _metric_recheck(run_dir, temporary, analysis_inputs)
@@ -871,6 +894,11 @@ def export(run_dir: Path, output_dir: Path, overwrite=False, already_validated=F
             "source_manifest_sha256": source_manifest_hash, "source_validation": validation,
             "model_complete": True, "analysis_complete": True,
             "training_environment": (training_provenance or {}).get("training_environment"),
+            "training_provenance_status": (
+                "partial_historical_recovery" if (training_provenance or {}).get("provenance_type") == "recovered_partial"
+                else "training_time_receipt_verified" if (training_provenance or {}).get("captured_before_training") is True
+                else "unknown"
+            ),
             "export_environment": runtime, "evidence": records,
             "source_cache_inventory": cache_records,
             "feature_overview": overview,

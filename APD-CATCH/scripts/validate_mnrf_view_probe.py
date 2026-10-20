@@ -56,6 +56,7 @@ def validate(run_dir):
         return {"status": "stage1_complete", "run": str(run), "mode": mode,
                 "artifact_type": artifact_type,
                 "task_name": manifest.get("task_name", manifest.get("config", {}).get("task_name")),
+                "normalized_cache_validation": getattr(restored, "_normalized_cache_validation", None),
                 "feature_dim": int(manifest.get("cache_feature_dim", 0))}
     if status.get("status") != "complete" or manifest.get("stage_status") != "complete":
         raise ValueError("head artifact is not a complete run")
@@ -76,6 +77,7 @@ def validate(run_dir):
     return {"status": metrics.get("status"), "run": str(run), "mode": mode,
             "artifact_type": artifact_type, "head_type": head_type,
             "task_name": manifest.get("config", {}).get("task_name"),
+            "normalized_cache_validation": getattr(restored, "_normalized_cache_validation", None),
             "auc_roc": metrics.get("auc_roc"), "auc_pr": metrics.get("auc_pr")}
 
 

@@ -10,7 +10,7 @@ import pytest
 from scripts import export_mnrf_view_probe_analysis as analysis
 from scripts.export_mnrf_view_probe_analysis import export
 from scripts import supplement_mnrf_view_probe_analysis_inputs as supplement_tool
-from scripts.run_mnrf_view_probe import _write_run_supporting_evidence
+from scripts.run_mnrf_view_probe import _write_run_supporting_evidence, _write_run_supporting_evidence_unchecked
 from scripts.validate_mnrf_view_probe import validate
 from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe
 from ts_benchmark.baselines.mnrf_view_probe.probe import _chunked_array_hash
@@ -230,13 +230,41 @@ def test_supplemental_inputs_can_finish_without_training(tmp_path, monkeypatch, 
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     data_path = Path(provenance["source_data"]["data_file"])
     metadata_path = Path(provenance["source_data"]["metadata_file"])
-    monkeypatch.setattr(supplement_tool, "_read_task", lambda task, source: (
+    monkeypatch.setattr(supplement_tool, "_read_task", lambda task, source, data_root=None: (
         frame, train, labels[train:], data_path, metadata_path,
         {"file_name": "SYN.csv", "train_lens": "430"}))
     result = supplement_tool.supplement(run, tmp_path / "analysis")
     assert result["status"] == "complete"
     assert (run / "analysis_inputs.npz").is_file()
     assert json.loads((tmp_path / "analysis" / "analysis_complete.json").read_text())["status"] == "complete"
+
+
+def test_supporting_evidence_failure_rolls_back_auxiliary_files(tmp_path, monkeypatch, complete_source):
+    run, frame, labels, train = complete_source
+    before = _snapshot(run)
+    data_path = run / "synthetic.csv"
+    metadata_path = run / "synthetic-meta.csv"
+    data_path.write_text("synthetic\n")
+    metadata_path.write_text("file_name,train_lens\nSYN.csv,430\n")
+    provenance = json.loads((run / "training_provenance.json").read_text())
+    # Refresh fixture-only source file references, which are not used by this
+    # injected failure but must remain structurally valid for the writer.
+    provenance["source_data"]["data_file"] = str(data_path)
+    provenance["source_data"]["metadata_file"] = str(metadata_path)
+    before = _snapshot(run)
+
+    def partial_then_fail(*args, **kwargs):
+        path = run / "probe_manifest.json"
+        path.write_text("partial mutation")
+        (run / "training_provenance.json").write_text("partial mutation")
+        raise RuntimeError("injected support-write interruption")
+
+    monkeypatch.setattr("scripts.run_mnrf_view_probe._write_run_supporting_evidence_unchecked", partial_then_fail)
+    with pytest.raises(RuntimeError, match="injected"):
+        _write_run_supporting_evidence(run, frame, train, labels[train:], data_path,
+                                       metadata_path, provenance)
+    assert _snapshot(run) == before
+    assert json.loads((run / "run_status.json").read_text())["status"] == "complete"
 
 
 def test_feature_variance_is_over_time_per_variable_and_branch(tmp_path):

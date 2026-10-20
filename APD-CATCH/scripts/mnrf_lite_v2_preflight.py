@@ -18,6 +18,7 @@ from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
 from ts_benchmark.baselines.mnrf_lite_v2.windows import (
     TimeIndex, continuous_segments, infer_expected_interval, intersect_segments,
 )
+from ts_benchmark.baselines.mnrf_view_probe.integrity import normalize_binary_labels
 from ts_benchmark.data.data_source import LocalAnomalyDetectDataSource, LocalExternalAnomalyDetectDataSource
 
 def _load_task_read_only(source, folder, task):
@@ -126,6 +127,11 @@ def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
     frame = _load_task_read_only(source, folder, task)
     if "label" not in {str(column).lower() for column in frame.columns}:
         raise ValueError(f"task={task} source={source}: parsed series has no label column")
+    label_column = next(column for column in frame.columns if str(column).lower() == "label")
+    try:
+        normalize_binary_labels(frame[label_column].to_numpy(), len(frame), "parsed labels")
+    except ValueError as error:
+        raise ValueError(f"task={task} source={source}: invalid parsed labels: {error}") from error
     try:
         values, actual_variables = MNRFLiteV2._features_from_frame(frame)
     except Exception as error:

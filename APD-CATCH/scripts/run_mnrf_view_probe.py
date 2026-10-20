@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
 
 from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
 from ts_benchmark.baselines.mnrf_view_probe import IndexedViewProbeStrategy, MNRFViewProbe
+from ts_benchmark.baselines.mnrf_view_probe.integrity import canonical_segment_ids, normalize_binary_labels
 from ts_benchmark.data.data_source import LocalAnomalyDetectDataSource, LocalExternalAnomalyDetectDataSource
 
 
@@ -40,7 +41,7 @@ def _sha256_file(path):
 def _capture_training_provenance(args, startup_script=None, data_path=None,
                                  metadata_path=None, metadata_row=None,
                                  frame=None, train_length=None):
-    """Capture run facts in memory before training; persisted after preparation."""
+    """Capture run facts before training; the CLI persists them after preparation."""
     files = [Path(__file__).resolve(), ROOT / "ts_benchmark/baselines/mnrf_lite_v2/MNRFLiteV2.py",
              ROOT / "ts_benchmark/baselines/mnrf_lite_v2/windows.py",
              ROOT / "ts_benchmark/baselines/mnrf_lite_v2/training.py"]
@@ -112,23 +113,19 @@ def _capture_training_provenance(args, startup_script=None, data_path=None,
             }}
 
 
-def _write_run_supporting_evidence(output_path, frame, train_length, test_labels,
-                                   data_path, metadata_path, provenance):
+def _write_run_supporting_evidence_unchecked(output_path, frame, train_length, test_labels,
+                                            data_path, metadata_path, provenance):
     """Persist complete test-axis labels/coordinates and training provenance."""
     output_path = Path(output_path)
     if not output_path.is_dir() or not (output_path / "probe_manifest.json").is_file():
         raise ValueError("cannot write supporting evidence before a prepared completed run")
-    labels = np.asarray(test_labels)
-    if labels.ndim != 1 or labels.dtype.kind not in "iu" or not np.all(np.isin(labels, [0, 1])):
-        raise ValueError("test labels are not one-dimensional binary integers")
+    labels = normalize_binary_labels(test_labels, len(frame) - int(train_length), "test labels")
     times = np.asarray(MNRFLiteV2._time_index(frame).values_ns[int(train_length):], dtype=np.int64)
     indices = np.arange(int(train_length), int(train_length) + len(labels), dtype=np.int64)
     label_column = next((column for column in frame.columns if str(column).lower() == "label"), None)
     if label_column is None:
         raise ValueError("parsed source frame lost its label column")
-    full_labels = frame[label_column].to_numpy()
-    if full_labels.ndim != 1 or full_labels.dtype.kind not in "iu" or not np.all(np.isin(full_labels, [0, 1])):
-        raise ValueError("full source labels are not one-dimensional binary integers")
+    full_labels = normalize_binary_labels(frame[label_column].to_numpy(), len(frame), "full source labels")
     if not np.array_equal(full_labels[int(train_length):], labels):
         raise ValueError("test labels differ from the parsed full source frame")
     all_times = np.asarray(MNRFLiteV2._time_index(frame).values_ns, dtype=np.int64)
@@ -137,29 +134,26 @@ def _write_run_supporting_evidence(output_path, frame, train_length, test_labels
         raise ValueError("complete test time axis does not match labels")
     manifest_path = output_path / "probe_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    receipt_path = output_path / "training_provenance.json"
+    if receipt_path.is_file():
+        original_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        requested_migrations = (provenance or {}).get("migrations")
+        provenance = original_receipt
+        if requested_migrations is not None:
+            provenance["migrations"] = requested_migrations
     identity = manifest.get("source_identity", {})
     segments = identity.get("test_segments", [])
-    segment_ids = np.full(len(labels), -1, dtype=np.int32)
-    for segment_id, (left, right) in enumerate(segments):
-        left_local = max(0, int(left) - int(train_length))
-        right_local = min(len(labels), int(right) - int(train_length))
-        if right_local > left_local:
-            segment_ids[left_local:right_local] = segment_id
-    if np.any(segment_ids < 0):
-        raise ValueError("frozen test segments do not cover the complete test axis")
-    all_segments = identity.get("segments", [])
-    all_segment_ids = np.full(len(frame), -1, dtype=np.int32)
-    for segment_id, (left, right) in enumerate(all_segments):
-        all_segment_ids[int(left):int(right)] = segment_id
-    if np.any(all_segment_ids < 0):
-        raise ValueError("frozen continuous segments do not cover the full source axis")
+    all_segment_ids = canonical_segment_ids(identity)
+    segment_ids = all_segment_ids[int(train_length):]
     provenance = dict(provenance)
     startup = provenance.get("startup_script", {})
+    snapshot = output_path / "provenance" / "startup_script.sh"
     if startup.get("text") is not None:
-        snapshot_dir = output_path / "provenance"
-        snapshot_dir.mkdir(exist_ok=True)
-        snapshot = snapshot_dir / "startup_script.sh"
-        snapshot.write_text(startup["text"], encoding="utf-8")
+        if not snapshot.is_file():
+            snapshot.parent.mkdir(exist_ok=True)
+            temporary_snapshot = snapshot.with_name(snapshot.name + ".tmp")
+            temporary_snapshot.write_text(startup["text"], encoding="utf-8")
+            os.replace(temporary_snapshot, snapshot)
         startup["snapshot"] = str(snapshot.relative_to(output_path))
         startup["snapshot_sha256"] = _sha256_file(snapshot)
         startup.pop("text", None)
@@ -167,9 +161,7 @@ def _write_run_supporting_evidence(output_path, frame, train_length, test_labels
     # the latter is interrupted, the dedicated supplement command can verify
     # the original inputs and finish without rerunning the model.
     provenance_path = output_path / "training_provenance.json"
-    provenance_tmp = output_path / "training_provenance.json.tmp"
-    provenance_tmp.write_text(json.dumps(provenance, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    os.replace(provenance_tmp, provenance_path)
+    _atomic_json(provenance_path, provenance)
 
     temporary = output_path / (".analysis_inputs.tmp-{}.npz".format(os.getpid()))
     np.savez(temporary, test_labels=labels.astype(np.int8, copy=False),
@@ -188,19 +180,18 @@ def _write_run_supporting_evidence(output_path, frame, train_length, test_labels
         unique = list(dict.fromkeys(map(str, boundary_values[int(train_length):])))
         boundary_identity["values"] = unique
         boundary_identity["test_segment_identity"] = [
-            {"segment_id": index, "boundary_value": str(boundary_values[int(left)])}
-            for index, (left, _) in enumerate(segments)
+            {"segment_id": int(all_segment_ids[int(left)]), "boundary_value": str(boundary_values[int(left)])}
+            for left, _ in segments
         ]
     else:
         boundary_identity["test_segment_identity"] = [
-            {"segment_id": index, "boundary_value": None}
-            for index, _ in enumerate(segments)
+            {"segment_id": int(all_segment_ids[int(left)]), "boundary_value": None}
+            for left, _ in segments
         ]
     input_sha = _sha256_file(output_path / "analysis_inputs.npz")
     provenance["analysis_inputs"] = {"npz": str(output_path / "analysis_inputs.npz"),
                                       "sha256": input_sha}
-    provenance_tmp.write_text(json.dumps(provenance, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    os.replace(provenance_tmp, provenance_path)
+    _atomic_json(provenance_path, provenance)
     manifest.setdefault("analysis_artifacts", {})["analysis_inputs_sha256"] = input_sha
     manifest["analysis_artifacts"]["test_time_values_sha256"] = __import__(
         "ts_benchmark.baselines.mnrf_view_probe.probe", fromlist=["_chunked_array_hash"])._chunked_array_hash(times)
@@ -212,8 +203,7 @@ def _write_run_supporting_evidence(output_path, frame, train_length, test_labels
     }
     manifest["analysis_artifacts"]["training_provenance_sha256"] = _sha256_file(provenance_path)
     manifest_tmp = manifest_path.with_suffix(".json.tmp")
-    manifest_tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    os.replace(manifest_tmp, manifest_path)
+    _atomic_json(manifest_path, manifest)
     metadata = {
         "schema": "mnrf-view-probe-analysis-inputs-v1", "source_manifest_sha256": _sha256_file(manifest_path),
         "source_identity_sha256": manifest.get("source_identity_sha256"),
@@ -233,17 +223,92 @@ def _write_run_supporting_evidence(output_path, frame, train_length, test_labels
         "provenance_file": "training_provenance.json",
         "provenance_sha256": _sha256_file(provenance_path),
     }
-    (output_path / "analysis_inputs.json.tmp").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(output_path / "analysis_inputs.json.tmp", output_path / "analysis_inputs.json")
+    _atomic_json(output_path / "analysis_inputs.json", metadata)
 
 
-def _read_task(task, source):
+def _write_run_supporting_evidence(output_path, frame, train_length, test_labels,
+                                   data_path, metadata_path, provenance):
+    """Write auxiliary evidence transactionally, restoring old bytes on errors."""
+    output_path = Path(output_path)
+    tracked = [output_path / name for name in (
+        "probe_manifest.json", "training_provenance.json", "analysis_inputs.npz",
+        "analysis_inputs.json", "provenance/startup_script.sh")]
+    before = {path: path.read_bytes() if path.is_file() else None for path in tracked}
+    provenance_dir = output_path / "provenance"
+    before_provenance = ({path for path in provenance_dir.rglob("*") if path.is_file()}
+                         if provenance_dir.is_dir() else set())
+    try:
+        _write_run_supporting_evidence_unchecked(
+            output_path, frame, train_length, test_labels,
+            data_path, metadata_path, provenance)
+    except BaseException:
+        for path, data in before.items():
+            if data is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = path.with_name(path.name + ".rollback.tmp")
+                temporary.write_bytes(data)
+                os.replace(temporary, path)
+        if provenance_dir.is_dir():
+            for path in list(provenance_dir.rglob("*")):
+                if path.is_file() and path not in before_provenance:
+                    path.unlink(missing_ok=True)
+            try:
+                provenance_dir.rmdir()
+            except OSError:
+                pass
+        for pattern in (".analysis_inputs.tmp-*.npz", "*.json.tmp", "*.tmp"):
+            for path in output_path.glob(pattern):
+                path.unlink(missing_ok=True)
+        raise
+
+
+def _atomic_json(path, value):
+    path = Path(path)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _persist_training_receipt(output_path, provenance, resume=False):
+    """Persist immutable training facts after run preparation and before fit."""
+    output_path = Path(output_path)
+    receipt = output_path / "training_provenance.json"
+    if resume:
+        # The original training facts are immutable; the current invocation is
+        # recorded separately and can never replace them.
+        context = output_path / "provenance" / "resume_context.json"
+        context.parent.mkdir(exist_ok=True)
+        _atomic_json(context, {"resume_command": list(sys.argv), "resume_environment": provenance.get("training_environment")})
+        return
+    if receipt.exists():
+        raise ValueError("refusing to overwrite an existing training provenance receipt")
+    saved = dict(provenance)
+    startup = dict(saved.get("startup_script") or {})
+    if startup.get("text") is not None:
+        snapshot_dir = output_path / "provenance"
+        snapshot_dir.mkdir(exist_ok=True)
+        snapshot = snapshot_dir / "startup_script.sh"
+        temporary = snapshot.with_name(snapshot.name + ".tmp")
+        temporary.write_text(startup["text"], encoding="utf-8")
+        os.replace(temporary, snapshot)
+        startup["snapshot"] = str(snapshot.relative_to(output_path))
+        startup["snapshot_sha256"] = _sha256_file(snapshot)
+        startup.pop("text", None)
+    saved["startup_script"] = startup
+    saved["receipt_schema"] = "mnrf-view-probe-training-receipt-v1"
+    _atomic_json(receipt, saved)
+    print("MNRF event=training_receipt_saved_before_fit path={}".format(receipt), flush=True)
+
+
+def _read_task(task, source, data_root=None):
     if source == "large_detect":
-        folder = ROOT / "dataset" / "anomaly_detect"
+        folder = Path(data_root).expanduser() if data_root else ROOT / "dataset" / "anomaly_detect"
         source_class = LocalAnomalyDetectDataSource
         metadata_name = "DETECT_META.csv"
     elif source == "external_detect":
-        folder = ROOT / "dataset" / "external_validation"
+        folder = Path(data_root).expanduser() if data_root else ROOT / "dataset" / "external_validation"
         source_class = LocalExternalAnomalyDetectDataSource
         metadata_name = "EXTERNAL_DETECT_META.csv"
     else:
@@ -259,7 +324,9 @@ def _read_task(task, source):
     label_column = next((column for column in frame.columns if str(column).lower() == "label"), None)
     if label_column is None:
         raise ValueError("task data has no label column")
-    test_labels = frame.iloc[train_length:][label_column].to_numpy()
+    normalize_binary_labels(frame[label_column].to_numpy(), len(frame), "full source labels")
+    test_labels = normalize_binary_labels(frame.iloc[train_length:][label_column].to_numpy(),
+                                          len(frame) - train_length, "test labels")
     return frame, train_length, test_labels, folder / "data" / f"{task}.csv", folder / metadata_name, row.iloc[0].to_dict()
 
 
@@ -309,6 +376,8 @@ def main():
                         help="shell preflight log to include in the durable run log")
     parser.add_argument("--startup-script", default="",
                         help="invoking task script captured in training provenance")
+    parser.add_argument("--data-root", default="",
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     def _terminate(signum, _frame):
@@ -390,6 +459,7 @@ def main():
                       lambda: probe is not None and getattr(probe, "_writes_started", False), live_state)
     probe = None
     failed = None
+    failure_context = None
     try:
         print("MNRF event=startup task={} mode={} run_id={} pid={} output_dir={} log_path={} device={} "
               "cuda_visible_devices={} seed={} seq_len={} batch_size={} encoding_batch_size={} "
@@ -410,7 +480,8 @@ def main():
                   __import__("torch").cuda.get_device_name(0) if __import__("torch").cuda.is_available() else "cpu"),
               flush=True)
         print("MNRF event=preflight_start", flush=True)
-        frame, train_length, test_labels, data_path, metadata_path, metadata_row = _read_task(args.task, args.data_source)
+        frame, train_length, test_labels, data_path, metadata_path, metadata_row = _read_task(
+            args.task, args.data_source, args.data_root or None)
         training_provenance = _capture_training_provenance(
             args, args.startup_script, data_path, metadata_path, metadata_row, frame, train_length)
         kwargs = dict(seed=args.seed, seq_len=args.seq_len, pattern_len=args.pattern_len,
@@ -436,6 +507,9 @@ def main():
                       log_every_steps=args.log_every_steps, log_every_seconds=args.log_every_seconds,
                       gmm_log_every_iters=args.gmm_log_every_iters)
         probe = MNRFViewProbe(**kwargs)
+        if args.mode == "full_gmm" and args.artifact_policy == "full":
+            probe._on_writes_started = lambda: _persist_training_receipt(
+                output_path, training_provenance, resume=bool(args.resume_from))
         strategy = IndexedViewProbeStrategy(probe)
         print("MNRF event=data_read_complete task={} train_rows={} test_rows={} device={}".format(
             args.task, train_length, len(frame) - train_length, probe.device), flush=True)
@@ -444,15 +518,25 @@ def main():
         else:
             strategy.run(frame.iloc[:train_length].copy(), frame.iloc[train_length:].copy(), test_labels)
         if args.mode == "full_gmm" and args.artifact_policy == "full":
-            _write_run_supporting_evidence(output_path, frame, train_length, test_labels,
-                                           data_path, metadata_path, training_provenance)
+            if args.resume_from and not (output_path / "training_provenance.json").is_file():
+                raise ValueError("resumed run has no original training receipt; it will not be replaced with resume-time facts")
+            try:
+                _write_run_supporting_evidence(output_path, frame, train_length, test_labels,
+                                               data_path, metadata_path, training_provenance)
+            except Exception as error:
+                failure_context = "auxiliary_support"
+                print("MNRF event=auxiliary_support_failed model_status=complete reason={}".format(error), flush=True)
+                raise
         print("MNRF event=run_complete task={} output_dir={}".format(args.task, output_path), flush=True)
         print(json.dumps({"status": "complete", "task": args.task, "mode": args.mode,
                           "output_dir": str(probe.output_dir), "selected_views": list(probe.config.selected_views),
                           "selected_dim": probe.config.selected_dim, "layout": probe.config.layout.to_dict()}, sort_keys=True))
     except BaseException as error:
         failed = error
-        print("MNRF event=run_failed error_type={} reason={}".format(type(error).__name__, error), flush=True)
+        event = "auxiliary_support_failed" if failure_context == "auxiliary_support" else "run_failed"
+        model_status = " model_status=complete" if failure_context == "auxiliary_support" else ""
+        print("MNRF event={}{} error_type={} reason={}".format(
+            event, model_status, type(error).__name__, error), flush=True)
         traceback.print_exc()
     finally:
         sys.stdout, sys.stderr = original_stdout, original_stderr

@@ -90,16 +90,38 @@ or command-line flag can bypass it. It refuses source/target overlap and only
 allows `--overwrite` for a recognized analysis package bound to that same
 source. Replacement is staged so an export failure preserves the old package.
 The source includes the complete raw test label/time/global-coordinate axis
-and training-time code, script, data and environment provenance. If writing
-those auxiliary inputs fails after training, the model stays complete; run
-`scripts/supplement_mnrf_view_probe_analysis_inputs.py` with the completed run
-and a separate analysis destination to verify the frozen raw input, supplement
-the axis, validate, and export without training again. Old runs lacking
-training-time provenance are reported as unknown and are not reconstructed
-from the current checkout. The old SMD entry remains a results-only historical
-artifact because its prior budget was terminated; it is not restarted by this
-round. `load_probe`, source reuse and resume require full artifacts for new
-runs.
+and training-time code, script, data and environment provenance. Labels are
+accepted only when one-dimensional, finite, and exactly 0/1; integer, unsigned,
+float (including exact `0.0`/`1.0`), and Boolean arrays are explicitly accepted
+and stored as `int8`. Fractional, near-binary, non-finite, object, complex, and
+wrong-shape labels fail before model training. The CLI writes the immutable
+training receipt and startup-script snapshot after read-only resume checks and
+run-directory preparation, before the first optimizer step.
+
+Complete-axis continuous-segment IDs are canonical. Test-axis IDs are sliced
+from those full-axis IDs, so a gap before the official test boundary does not
+renumber a later segment. The complete source validator also opens
+`cache/normalized_values.npy` read-only as a memmap, checks its frozen shape,
+`float32` dtype and finite values by chunks, and hashes the actual `.npy` file
+bytes against the authoritative manifest binding. A missing or stale digest is
+not repaired automatically; restore a trusted source copy before reuse.
+
+If writing auxiliary inputs fails after training, the model remains complete.
+With the original receipt present, supplement against the same parsed local
+data and export without training. For an older completed full source whose
+support write failed before any receipt was saved, use the explicit
+`--recover-legacy` mode. Its training-time Git, script, versions, and original
+raw-file byte identity remain `unknown`; recovery records only the currently
+reparsed loader identity and the scored endpoint label agreement. It does not
+claim those current facts were captured during training. The explicit
+`--migrate-segment-ids` option only accepts the recognized old local-test-ID
+renumbering signature, preserves old auxiliary evidence, and records a
+migration. Core hashes must validate before either operation. A normal export
+remains read-only and never supplements or migrates its source.
+
+The old SMD entry remains a results-only historical artifact because its
+prior budget was terminated; it is not restarted by this round. `load_probe`,
+source reuse and resume require full artifacts for new runs.
 
 Feature overview variance is measured over windows for each variable-feature
 pair before aggregation by S/E/P/R. Cross-variable mean differences do not

@@ -139,8 +139,8 @@ statistics; the small validation/calibration counts limit robust MAD and
 0.995-quantile estimation.
 
 If auxiliary full-axis/provenance writing fails after training, the completed
-model source is retained. Supplement the verified source and export without
-rerunning Stage 1 or GMM:
+model source is retained. For a new run with its training receipt, supplement
+the verified source and export without rerunning Stage 1 or GMM:
 
 ```bash
 python scripts/supplement_mnrf_view_probe_analysis_inputs.py --run-dir /absolute/path/to/full-run --output-dir /absolute/path/to/analysis
@@ -153,6 +153,31 @@ python scripts/export_mnrf_view_probe_analysis.py --run-dir /absolute/path/to/fu
 ```
 
 Use `--overwrite` only for a recognized analysis package from the same source.
-Old `results`-policy runs cannot regain discarded encoders or caches, and old
-sources without training-time provenance are not backfilled from the current
-environment.
+An older completed `full` run that has no receipt because its historical CLI
+failed during the post-training auxiliary write can be recovered explicitly
+from the original local dataset. The recovery records current loader/data
+identity separately and leaves training-time provenance fields unknown; it
+does not claim the current checkout or file digest is training-time evidence:
+
+```bash
+python scripts/supplement_mnrf_view_probe_analysis_inputs.py \
+  --run-dir /absolute/path/to/completed-full-run \
+  --output-dir /absolute/path/to/analysis \
+  --recover-legacy
+```
+
+To migrate only the previously released bug where test segments were numbered
+from zero independently of the full axis, use the explicit migration mode:
+
+```bash
+python scripts/supplement_mnrf_view_probe_analysis_inputs.py \
+  --run-dir /absolute/path/to/completed-full-run \
+  --output-dir /absolute/path/to/analysis \
+  --migrate-segment-ids
+```
+
+Both write modes first validate the completed core, frozen source/data identity,
+and scored endpoint labels; neither trains, refits, re-encodes or recalibrates.
+Normal export remains read-only. A changed `normalized_values.npy` is rejected
+using its actual `.npy` byte digest and cannot be re-bound by these commands.
+Old `results`-policy runs cannot regain discarded encoders or caches.

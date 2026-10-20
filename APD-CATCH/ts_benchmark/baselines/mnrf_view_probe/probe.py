@@ -422,6 +422,7 @@ class MNRFViewProbe:
         self._noise_vectors = None
         self._run_identity = None
         self._writes_started = False
+        self._on_writes_started = None
 
     def _log_event(self, event, **fields):
         """Emit a flushed, human-readable event without an extra model pass."""
@@ -1801,6 +1802,8 @@ class MNRFViewProbe:
                             test_windows=len(self._current_test_endpoints))
         self._prepare_dirs()
         self._writes_started = True
+        if self._on_writes_started is not None:
+            self._on_writes_started()
         write_allowed = True
         try:
             seed_all(self.config.seed)
@@ -2164,6 +2167,7 @@ def _validate_result_bundle(path, allow_in_progress=False):
     if not manifest_path.is_file() or not status_path.is_file():
         raise ValueError("results bundle is missing manifest or run status")
     manifest = json.loads(manifest_path.read_text())
+    mode = manifest.get("mode")
     status = json.loads(status_path.read_text())
     if manifest.get("schema") != PROBE_SCHEMA:
         raise ValueError("results bundle has unsupported probe schema")
@@ -2466,6 +2470,7 @@ def load_probe(path, device="cpu"):
     if not manifest_path.is_file():
         raise FileNotFoundError(f"view probe manifest missing: {manifest_path}")
     manifest = json.loads(manifest_path.read_text())
+    mode = manifest.get("mode")
     if manifest.get("schema") != PROBE_SCHEMA:
         raise ValueError("view probe artifact schema is unsupported; re-export with the current probe")
     if (manifest.get("artifact_type") == ARTIFACT_RESULTS
@@ -2501,6 +2506,7 @@ def load_probe(path, device="cpu"):
     if manifest.get("source_identity") is None:
         raise ValueError("view probe artifact has no source identity")
     source_dir = manifest.get("source_dir") or ""
+    probe._normalized_cache_validation = None
     if source_dir:
         source = Path(source_dir).resolve()
         source_manifest_path = source / "probe_manifest.json"
@@ -2519,6 +2525,8 @@ def load_probe(path, device="cpu"):
                 or not source_is_frozen
                 or source_manifest.get("source_identity") != manifest.get("source_identity")):
             raise ValueError("view probe source identity does not match the loaded artifact")
+        from .integrity import validate_normalized_values_cache
+        probe._normalized_cache_validation = validate_normalized_values_cache(source, source_manifest)
         source_cache_hashes = manifest.get("source_cache_sha256", {})
         source_endpoint_hashes = manifest.get("source_endpoint_sha256", {})
         if any(name not in source_cache_hashes for name in ("train", "validation", "calibration", "test")):
@@ -2548,17 +2556,25 @@ def load_probe(path, device="cpu"):
             if (not cache_path.is_file() or _sha256_file(cache_path) != manifest["cache_sha256"][name]
                     or not endpoint_path.is_file() or _sha256_file(endpoint_path) != manifest["endpoint_sha256"][name]):
                 raise ValueError(f"view probe local cache binding mismatch: {name}")
-            cache = np.load(cache_path, mmap_mode="r")
+            cache = np.load(cache_path, mmap_mode="r", allow_pickle=False)
             expected_shape = tuple(manifest.get("cache_shapes", {}).get(name, ()))
             expected_dtype = manifest.get("cache_dtypes", {}).get(name)
             if (expected_shape and tuple(cache.shape) != expected_shape
                     or expected_dtype and str(cache.dtype) != expected_dtype
-                    or cache.dtype != np.float32 or cache.ndim != 3 or cache.shape[1] != len(manifest.get("variable_names", ()))
+                    or cache.dtype != np.float32 or cache.ndim != 3
+                    or cache.shape[1] != len(manifest.get("variable_names", ()))
                     or cache.shape[-1] != int(manifest.get("cache_feature_dim") or probe.config.layout.total_dim)
                     or not all(np.isfinite(cache[start:start + 65536]).all()
                                for start in range(0, len(cache), 65536))):
                 raise ValueError(f"view probe local cache metadata mismatch: {name}")
-    mode = manifest.get("mode")
+        # Full, self-contained encoder/GMM artifacts claim reusable raw
+        # normalization input. Validate the actual file bytes, not just the
+        # manifest declaration. Other local head modes retain their distinct
+        # artifact contracts.
+        if (manifest.get("artifact_policy") == "full"
+                and mode in {"full_gmm", "random_gmm", "pretrained", "random"}):
+            from .integrity import validate_normalized_values_cache
+            probe._normalized_cache_validation = validate_normalized_values_cache(path, manifest)
     stats_path = path / "heads" / "feature_statistics.npz"
     calibration_path = path / "heads" / "calibration.npz"
     model_path = path / "heads" / "gmm_models.pkl"
@@ -2572,6 +2588,8 @@ def load_probe(path, device="cpu"):
                            path / "checkpoints" / "best_encoder.pt")
         if any(not item.is_file() for item in required_source):
             raise ValueError("source encoder artifact is incomplete")
+        from .integrity import validate_normalized_values_cache
+        probe._normalized_cache_validation = validate_normalized_values_cache(path, manifest)
         for field, rel in (("input_statistics_sha256", "input_statistics.npz"),
                            ("checkpoint_sha256", "checkpoints/initial_encoder.pt")):
             declared = manifest.get(field)
