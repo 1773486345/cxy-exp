@@ -1891,14 +1891,23 @@ class MNRFViewProbe:
                             test_windows=len(test_endpoints))
             self._save_run_request(stage="running")
             self._set_run_status("running")
+            mode = self.config.mode
+            source_cache_mode = mode in {"select_gmm", "flow"} and bool(self.config.source_dir)
+            source_cache_mode = source_cache_mode or (mode == "s_only" and bool(self.config.source_dir))
+            # Historical 411e91a source-backed Flow construction seeded the
+            # process, created one formal trainer, then _load_source created
+            # the trainer actually used for stage2.  Preserve that RNG stream
+            # for new Flow runs while still restoring the validated source
+            # encoder/statistics into the second trainer.  Resume paths must
+            # construct only their checkpoint-bound trainer so saved RNG/state
+            # remains authoritative.
+            if mode == "flow" and bool(self.config.source_dir) and not resume_preflight:
+                self._make_trainer(len(self.variable_names))
             self.trainer = self._make_trainer(len(self.variable_names))
             if validated_source is not None:
                 self._restore_validated_source_state()
-            mode = self.config.mode
             reuse_local_cache = False
             reused_cache = None
-            source_cache_mode = mode in {"select_gmm", "flow"} and bool(self.config.source_dir)
-            source_cache_mode = source_cache_mode or (mode == "s_only" and bool(self.config.source_dir))
             if resume_preflight and mode in {"full_gmm", "random_gmm"}:
                 manifest_path = self.output_dir / "probe_manifest.json"
                 normalized_path = self.output_dir / "cache" / "normalized_values.npy"

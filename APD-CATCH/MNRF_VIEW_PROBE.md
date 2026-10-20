@@ -56,6 +56,14 @@ never labels the trained encoder as random.
 encoder/cache and trains the existing Flow head in a separate probe directory.
 It is not used for arbitrary deleted-view layouts.
 
+For a new source-backed Flow run, the probe deliberately preserves the
+historical 411e91a constructor/RNG sequence: after the formal seed it creates
+the discarded pre-source trainer and then the trainer used for stage2, before
+restoring the validated source encoder and input statistics. This keeps Flow
+initialization and subsequent training-noise draws comparable to that release;
+resume runs instead restore the checkpoint's saved weights and RNG without an
+extra construction.
+
 GMM and Flow use the same four deterministic feature-noise vectors. GMM fits
 one full-covariance head per original variable and averages negative
 `score_samples` over those perturbations; Flow uses its existing NLL head with

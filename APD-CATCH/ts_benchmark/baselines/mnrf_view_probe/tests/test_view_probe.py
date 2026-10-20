@@ -13,7 +13,7 @@ from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, ViewProbeConfi
 from ts_benchmark.baselines.mnrf_view_probe.strategy import IndexedViewProbeStrategy
 from ts_benchmark.baselines.mnrf_view_probe.probe import _json_hash, _select_stratified
 from ts_benchmark.models.model_loader import get_models
-from ts_benchmark.baselines.mnrf_lite_v2.training import MNRFTrainer
+from ts_benchmark.baselines.mnrf_lite_v2.training import MNRFTrainer, seed_all
 
 
 def test_probe_is_loadable_through_benchmark_model_factory():
@@ -135,14 +135,57 @@ def test_flow_feature_statistics_shape_and_completed_stage2_resume_only_finishes
                   stage2_epochs=1, patience=1, device="cpu", output_dir=str(flow_dir),
                   mode="flow", source_dir=str(source_dir))
     original_calibrate = MNRFTrainer.calibrate
+    original_stage2 = MNRFTrainer.stage2
+    original_make_trainer = MNRFViewProbe._make_trainer
+    trainer_constructions = []
+    stage2_entry = {}
+
+    # Independent reference for the historical post-seed construction order:
+    # the second trainer is the one whose Flow head enters stage2.
+    reference_probe = MNRFViewProbe(**kwargs)
+    reference_probe._set_protocol_identity(frame, train_length)
+    seed_all(reference_probe.config.seed)
+    reference_probe._make_trainer(len(reference_probe.variable_names))
+    reference_trainer = reference_probe._make_trainer(len(reference_probe.variable_names))
+    reference_flow = {key: value.detach().cpu().clone()
+                      for key, value in reference_trainer.flow.state_dict().items()}
+    reference_torch_rng = torch.get_rng_state().clone()
+    reference_python_rng = random.getstate()
+    reference_numpy_rng = copy.deepcopy(np.random.get_state())
+
+    def record_trainer_construction(self, variables):
+        trainer = original_make_trainer(self, variables)
+        trainer_constructions.append(trainer)
+        return trainer
 
     def fail_after_stage2(self, *args, **kwargs):
         raise RuntimeError("controlled post-stage2 interruption")
 
+    def capture_stage2_entry(self, *args, **kwargs):
+        stage2_entry["flow"] = {key: value.detach().cpu().clone()
+                                for key, value in self.flow.state_dict().items()}
+        stage2_entry["torch_rng"] = torch.get_rng_state().clone()
+        stage2_entry["python_rng"] = random.getstate()
+        stage2_entry["numpy_rng"] = copy.deepcopy(np.random.get_state())
+        return original_stage2(self, *args, **kwargs)
+
+    # The source preflight trainer is followed by the historical discarded
+    # formal trainer and then the trainer used for Flow.  This construction
+    # count is the observable contract that preserves the old RNG stream.
+    monkeypatch.setattr(MNRFViewProbe, "_make_trainer", record_trainer_construction)
+    monkeypatch.setattr(MNRFTrainer, "stage2", capture_stage2_entry)
     monkeypatch.setattr(MNRFTrainer, "calibrate", fail_after_stage2)
     with pytest.raises(RuntimeError, match="controlled post-stage2"):
         flow_probe = MNRFViewProbe(**kwargs)
         flow_probe.fit(frame, train_length)
+    assert len(trainer_constructions) == 3
+    assert flow_probe.trainer is trainer_constructions[-1]
+    assert set(stage2_entry["flow"]) == set(reference_flow)
+    assert all(torch.equal(stage2_entry["flow"][key], reference_flow[key]) for key in reference_flow)
+    assert torch.equal(stage2_entry["torch_rng"], reference_torch_rng)
+    assert stage2_entry["python_rng"] == reference_python_rng
+    assert np.array_equal(stage2_entry["numpy_rng"][1], reference_numpy_rng[1])
+    assert stage2_entry["numpy_rng"][2:] == reference_numpy_rng[2:]
     assert flow_probe.trainer.fingerprint() == source_manifest["feature_fingerprint"]
     flow_manifest = json.loads((flow_dir / "probe_manifest.json").read_text())
     assert flow_manifest["stage2_identity"]
