@@ -1,1 +1,0 @@
-"""Targeted TypeFusion-CATCH tests."""

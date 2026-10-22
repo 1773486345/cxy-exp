@@ -1,0 +1,118 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": {
+    "columns": [],
+    "test_segment_identity": [
+      {
+        "boundary_value": null,
+        "segment_id": 0
+      }
+    ],
+    "values": []
+  },
+  "data_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/MSL.csv",
+  "data_file_sha256": "893738efa9b7e6fbf64cb6d53e604cb44e9c373c613c4733eff7b32583533f21",
+  "full_rows": 132046,
+  "full_segments": [
+    [
+      0,
+      132046
+    ]
+  ],
+  "labels_sha256": "9026cd41790828981e1404cfe39c52b646fc959389ed173d666f5ec2676d2ae6",
+  "metadata_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_file_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "provenance_file": "training_provenance.json",
+  "provenance_sha256": "63978fe3952144ffb3f209739ab549fe8b78b89584c55e8d0a08b900975628ad",
+  "schema": "mnrf-view-probe-analysis-inputs-v1",
+  "selected_metadata_row": {
+    "anomaly_rate": "0.058812838",
+    "dataset_name": "MSL",
+    "file_name": "MSL.csv",
+    "if_univariate": "False",
+    "pattern": "nan",
+    "seasonal": "nan",
+    "shifting": "nan",
+    "size": "large",
+    "stationary": "nan",
+    "test_lens": "73729",
+    "time_steps": "132046",
+    "train_lens": "58317",
+    "trend": "nan",
+    "type_value": "nan"
+  },
+  "source_identity_sha256": "21fd4fd4673d1f8d55403c1bb02155ac222da11782a064c56194195bab2c6c39",
+  "source_manifest_sha256": "d795da020c87441205a2dac31dbd8867ddd2133496c980caffc9a7320d479f3b",
+  "test_length": 73729,
+  "test_segment_identity": [
+    {
+      "boundary_value": null,
+      "segment_id": 0
+    }
+  ],
+  "test_segments": [
+    [
+      58317,
+      132046
+    ]
+  ],
+  "time_kind": "timestamp_naive_ns",
+  "train_length": 58317,
+  "variable_names": [
+    "col_0",
+    "col_1",
+    "col_2",
+    "col_3",
+    "col_4",
+    "col_5",
+    "col_6",
+    "col_7",
+    "col_8",
+    "col_9",
+    "col_10",
+    "col_11",
+    "col_12",
+    "col_13",
+    "col_14",
+    "col_15",
+    "col_16",
+    "col_17",
+    "col_18",
+    "col_19",
+    "col_20",
+    "col_21",
+    "col_22",
+    "col_23",
+    "col_24",
+    "col_25",
+    "col_26",
+    "col_27",
+    "col_28",
+    "col_29",
+    "col_30",
+    "col_31",
+    "col_32",
+    "col_33",
+    "col_34",
+    "col_35",
+    "col_36",
+    "col_37",
+    "col_38",
+    "col_39",
+    "col_40",
+    "col_41",
+    "col_42",
+    "col_43",
+    "col_44",
+    "col_45",
+    "col_46",
+    "col_47",
+    "col_48",
+    "col_49",
+    "col_50",
+    "col_51",
+    "col_52",
+    "col_53",
+    "col_54"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "mode": "full_gmm",
+  "run_identity": "e0f397d0b116eaa273934ea5040505065f07acaa0c233aec03e1ea14c6017449",
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete",
+  "task_name": "NYC.csv"
+}

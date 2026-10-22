@@ -1,0 +1,1346 @@
+{
+  "analysis_complete": true,
+  "analysis_directory_logical_bytes": 599131,
+  "elapsed_seconds": 0.6904313564300537,
+  "evidence": [
+    {
+      "bytes": 9697,
+      "path": "probe_manifest.json",
+      "present": true,
+      "sha256": "eb951c662ada304fae6f713b6a078a97f85b5130868487e21696c363a8376c38"
+    },
+    {
+      "bytes": 259,
+      "path": "run_status.json",
+      "present": true,
+      "sha256": "b2fa0c956dcdc2199bc286e0538d3813e564abf41d9ea50f7ecfc11d2c004fa9"
+    },
+    {
+      "bytes": 4448,
+      "path": "run_request.json",
+      "present": true,
+      "sha256": "9cf6809f4f2bbf12cda157b056dc93be3376d62fc77a9f4e4b4375eb4d47d390"
+    },
+    {
+      "bytes": 520,
+      "path": "input_statistics.npz",
+      "present": true,
+      "sha256": "dec8161db061e2f6ccc4b8d5f3ed5b02c270cfeaa8d41f4c069ee37fab9532f9"
+    },
+    {
+      "bytes": 685,
+      "path": "results/metrics.json",
+      "present": true,
+      "sha256": "d2a58e02ffc54fc317b0c61bc10c68d95b56430f7572153407a6524e242cd05d"
+    },
+    {
+      "bytes": 39856,
+      "path": "results/aligned_scores.npz",
+      "present": true,
+      "sha256": "ab6236760a02144800bd5920bec30e631248e4efe5a4dc275e32893f9b5ba04d"
+    },
+    {
+      "bytes": 18760,
+      "path": "results/test_nll.npy",
+      "present": true,
+      "sha256": "775eea85ad44486839d9dabb370165218999d99783a8614399ece65cb32d7e44"
+    },
+    {
+      "bytes": 304,
+      "path": "heads/validation_nll.npy",
+      "present": true,
+      "sha256": "4d70900cdf459bf0a3cc56be016378df43bd79b3c01551ca9a5c595a67aecba8"
+    },
+    {
+      "bytes": 320,
+      "path": "heads/calibration_nll.npy",
+      "present": true,
+      "sha256": "fed98ead33ca36b89a66495f1eef4349cb5fb0a2afcbdbc80b7b19fbffc21ffb"
+    },
+    {
+      "bytes": 904,
+      "path": "heads/feature_statistics.npz",
+      "present": true,
+      "sha256": "a80a0ef11731eca7a87581c0920d914bef3b9d2476e7a10f4b09f4298ec290be"
+    },
+    {
+      "bytes": 1038,
+      "path": "heads/calibration.npz",
+      "present": true,
+      "sha256": "4e823834d901e9ccd5779ad97bf8541d635c2dd862419dd66cf4c55a8fd352a3"
+    },
+    {
+      "bytes": 12280,
+      "path": "heads/gmm_fit_endpoints.npy",
+      "present": true,
+      "sha256": "b9ddaa4e9e13556a70ac97af0eb45fb153dd8466b1637452dd8feeaa0f79484c"
+    },
+    {
+      "bytes": 528,
+      "path": "heads/fixed_noise.npy",
+      "present": true,
+      "sha256": "2d0c776ebb7bc0c2aabd583afd1cde0d853f4f29a2d68dd50b8235dd5187af89"
+    },
+    {
+      "bytes": 4580,
+      "path": "heads/gmm_status.json",
+      "present": true,
+      "sha256": "f34085946790e0a2ea534712d906f27b4984d4ba69289afa6be5de32d6513f94"
+    },
+    {
+      "bytes": 6149,
+      "path": "heads/gmm_progress.json",
+      "present": true,
+      "sha256": "35a18d6e66750d93299450843238eb09a6e7b4fe92750eab049b80e26795a245"
+    },
+    {
+      "bytes": 160890,
+      "path": "analysis_inputs.npz",
+      "present": true,
+      "sha256": "1ce11ac7f6736be219b0da54e0c1398044d29e2e5b47507fe3501e1c85321e31"
+    },
+    {
+      "bytes": 1825,
+      "path": "analysis_inputs.json",
+      "present": true,
+      "sha256": "c16722f2b0498222526467827cc542e02153a63bfcfd0a57672372773425cf42"
+    },
+    {
+      "bytes": 9607,
+      "path": "training_provenance.json",
+      "present": true,
+      "sha256": "f479f78fb51bb7e9660f982653912e9dcee86d6cda7e8a88916a418a29b09f33"
+    },
+    {
+      "bytes": 4103,
+      "path": "provenance/startup_script.sh",
+      "present": true,
+      "sha256": "775cb98a85bec966857f8eeac3bfe295b42507f6219ed17df9153d6d5c423984"
+    },
+    {
+      "bytes": 7655,
+      "path": "training.jsonl",
+      "present": true,
+      "sha256": "24a4c6dec2130f7ec1d66a7d086823fd9deb9de9d39d653b3b2ca89acc4a0732"
+    },
+    {
+      "bytes": 27241,
+      "path": "run.log",
+      "present": true,
+      "sha256": "41f12b8016a290b74f6ec0b978a5a1e2fc0c951ae8dbd0bd400a9c33943711d8"
+    }
+  ],
+  "export_environment": {
+    "cuda": "12.1",
+    "cuda_available": true,
+    "platform": "Linux-5.15.0-107-generic-x86_64-with-glibc2.17",
+    "python": "3.8.20 (default, Oct  3 2024, 15:24:27) \n[GCC 11.2.0]",
+    "torch": "2.4.1+cu121"
+  },
+  "feature_overview": {
+    "sampling": {
+      "max_windows": 4096,
+      "seed": 20261013
+    },
+    "splits": {
+      "calibration": {
+        "branches": {
+          "E": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 5.096961498260498,
+            "mean": -0.6161921171199841,
+            "min": -5.662099361419678,
+            "per_pair_mean_sample": [
+              [
+                1.1678191423416138,
+                -3.0517327785491943,
+                0.9483032822608948,
+                -1.6616226434707642,
+                -0.31071633100509644,
+                -0.7607862949371338,
+                -1.3318599462509155,
+                0.1517627090215683
+              ],
+              [
+                1.5018783807754517,
+                -3.3648722171783447,
+                1.0294755697250366,
+                -1.3238928318023682,
+                -0.6745309829711914,
+                -0.6988303661346436,
+                -1.2665696144104004,
+                -0.212898850440979
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                2.680936098098755,
+                1.938855528831482,
+                0.6560164093971252,
+                2.499018907546997,
+                2.8263063430786133,
+                0.5354398488998413,
+                0.33331769704818726,
+                3.1987125873565674
+              ],
+              [
+                2.305572748184204,
+                1.5861854553222656,
+                0.6425503492355347,
+                2.178206443786621,
+                2.3109350204467773,
+                0.5287932753562927,
+                0.3369923233985901,
+                2.7293381690979004
+              ]
+            ],
+            "reason": null,
+            "std": 2.399599900213497,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "P": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 4.946132659912109,
+            "mean": 1.3461111493622109,
+            "min": -1.5145766735076904,
+            "per_pair_mean_sample": [
+              [
+                3.749319076538086,
+                -0.34503304958343506,
+                0.3269999027252197,
+                0.2236691564321518,
+                1.253656029701233,
+                3.2517402172088623,
+                -0.011650453321635723,
+                2.2958626747131348
+              ],
+              [
+                3.6597824096679688,
+                -0.05479494109749794,
+                0.21551132202148438,
+                0.13678519427776337,
+                1.2475351095199585,
+                3.27734637260437,
+                -0.14241687953472137,
+                2.453465700149536
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                0.9462764859199524,
+                0.612740695476532,
+                0.4362120032310486,
+                0.4058949053287506,
+                0.8495070934295654,
+                0.3691977560520172,
+                0.478963166475296,
+                0.2761199474334717
+              ],
+              [
+                0.775078535079956,
+                0.5562092661857605,
+                0.3784674108028412,
+                0.45301955938339233,
+                0.7604705095291138,
+                0.36385178565979004,
+                0.32318544387817383,
+                0.3114877939224243
+              ]
+            ],
+            "reason": null,
+            "std": 1.5715702536888951,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "R": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 4.937385559082031,
+            "mean": 0.1745333898240157,
+            "min": -4.8731865882873535,
+            "per_pair_mean_sample": [
+              [
+                1.8684602975845337,
+                -1.7774626016616821,
+                1.2883453369140625,
+                0.48136571049690247,
+                -1.1342973709106445,
+                0.8719262480735779,
+                -0.5038701891899109,
+                0.13329385221004486
+              ],
+              [
+                1.3277631998062134,
+                -1.1938530206680298,
+                1.1297589540481567,
+                0.20959903299808502,
+                -0.6618617177009583,
+                0.8397728800773621,
+                -0.41660165786743164,
+                0.33019599318504333
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                2.7373170852661133,
+                2.785811185836792,
+                0.5845637917518616,
+                1.4628175497055054,
+                2.6571850776672363,
+                0.11761140078306198,
+                0.33284929394721985,
+                1.3297659158706665
+              ],
+              [
+                3.0005624294281006,
+                3.0453379154205322,
+                0.6442893743515015,
+                1.6405868530273438,
+                2.92061185836792,
+                0.13717634975910187,
+                0.3744397461414337,
+                1.4810490608215332
+              ]
+            ],
+            "reason": null,
+            "std": 2.168855240146049,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "S": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 2.017871856689453,
+            "mean": -0.13998872647061944,
+            "min": -0.7070747017860413,
+            "per_pair_mean_sample": [
+              [
+                -0.05950039625167847
+              ],
+              [
+                -0.2204771488904953
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                0.8720114827156067
+              ],
+              [
+                0.7965946197509766
+              ]
+            ],
+            "reason": null,
+            "std": 0.8390243981723178,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          }
+        },
+        "dtype": "float32",
+        "sample_count": 24,
+        "shape": [
+          24,
+          2,
+          25
+        ]
+      },
+      "test": {
+        "branches": {
+          "E": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 6.680174827575684,
+            "mean": -0.6795081366088978,
+            "min": -6.769718170166016,
+            "per_pair_mean_sample": [
+              [
+                0.6581138372421265,
+                -2.7520768642425537,
+                0.5540977716445923,
+                -1.9804052114486694,
+                -0.0013185561401769519,
+                -0.7648971676826477,
+                -1.2367186546325684,
+                0.20707696676254272
+              ],
+              [
+                0.5766691565513611,
+                -2.8658676147460938,
+                0.5223562121391296,
+                -1.9653739929199219,
+                0.0449540875852108,
+                -0.8264478445053101,
+                -1.3012487888336182,
+                0.258955717086792
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                2.627101182937622,
+                1.5865914821624756,
+                1.0201526880264282,
+                2.0067903995513916,
+                2.2568137645721436,
+                0.6094064116477966,
+                0.5005237460136414,
+                2.7496330738067627
+              ],
+              [
+                2.4127156734466553,
+                1.4617098569869995,
+                0.978032112121582,
+                1.9169436693191528,
+                2.1380739212036133,
+                0.6237223744392395,
+                0.5401694774627686,
+                2.519969940185547
+              ]
+            ],
+            "reason": null,
+            "std": 2.1518351305164645,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "P": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 5.983622074127197,
+            "mean": 1.416805481277654,
+            "min": -1.9822419881820679,
+            "per_pair_mean_sample": [
+              [
+                3.803319215774536,
+                0.04232955351471901,
+                0.05739348754286766,
+                0.5404528379440308,
+                1.5335619449615479,
+                2.9998743534088135,
+                -0.06747424602508545,
+                2.308467388153076
+              ],
+              [
+                3.753134250640869,
+                0.3265736699104309,
+                -0.07156272977590561,
+                0.1860634982585907,
+                1.757878065109253,
+                2.9468183517456055,
+                -0.06117946282029152,
+                2.6132404804229736
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                0.8394500613212585,
+                0.8378108143806458,
+                0.7377589344978333,
+                0.8249939680099487,
+                1.2930642366409302,
+                0.6041473150253296,
+                0.43662092089653015,
+                0.8720729947090149
+              ],
+              [
+                0.7809514403343201,
+                0.7251175045967102,
+                0.6294529438018799,
+                0.6110737919807434,
+                1.1214487552642822,
+                0.5926571488380432,
+                0.4425676763057709,
+                0.6113361716270447
+              ]
+            ],
+            "reason": null,
+            "std": 1.617717052911549,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "R": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 4.998858451843262,
+            "mean": 0.22498596589405992,
+            "min": -5.042144298553467,
+            "per_pair_mean_sample": [
+              [
+                1.0090776681900024,
+                -0.7936226725578308,
+                0.9710648655891418,
+                0.009469146840274334,
+                -0.2747594118118286,
+                0.8451403379440308,
+                -0.34054598212242126,
+                0.43138760328292847
+              ],
+              [
+                1.0348386764526367,
+                -0.8284205794334412,
+                0.9666451811790466,
+                0.05549490079283714,
+                -0.33656883239746094,
+                0.8139657974243164,
+                -0.32428494095802307,
+                0.3608902096748352
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                2.6102724075317383,
+                2.719670057296753,
+                0.5950610041618347,
+                1.3812466859817505,
+                2.5073354244232178,
+                0.10400565713644028,
+                0.33850616216659546,
+                1.1867281198501587
+              ],
+              [
+                2.6464836597442627,
+                2.7604901790618896,
+                0.6065703630447388,
+                1.415795922279358,
+                2.5559399127960205,
+                0.10394350439310074,
+                0.345856636762619,
+                1.2102136611938477
+              ]
+            ],
+            "reason": null,
+            "std": 1.8707599952521,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "S": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 2.95851993560791,
+            "mean": 0.041080630506349254,
+            "min": -0.7070747017860413,
+            "per_pair_mean_sample": [
+              [
+                0.01619497314095497
+              ],
+              [
+                0.06596551835536957
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                1.0407153367996216
+              ],
+              [
+                1.0026367902755737
+              ]
+            ],
+            "reason": null,
+            "std": 1.0221605075986901,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          }
+        },
+        "dtype": "float32",
+        "sample_count": 2329,
+        "shape": [
+          2329,
+          2,
+          25
+        ]
+      },
+      "train": {
+        "branches": {
+          "E": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 6.576448917388916,
+            "mean": -0.6771304665956541,
+            "min": -6.463847637176514,
+            "per_pair_mean_sample": [
+              [
+                0.7328212857246399,
+                -2.8028199672698975,
+                0.57093745470047,
+                -1.9149131774902344,
+                -0.06497406214475632,
+                -0.7802962064743042,
+                -1.2320220470428467,
+                0.1437467485666275
+              ],
+              [
+                0.7507259249687195,
+                -2.9282679557800293,
+                0.5895751118659973,
+                -1.8509554862976074,
+                -0.11186040192842484,
+                -0.7977627515792847,
+                -1.2556065320968628,
+                0.11758717149496078
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                2.6211628913879395,
+                1.5978425741195679,
+                1.010650396347046,
+                2.031501293182373,
+                2.283599376678467,
+                0.585236132144928,
+                0.5147114992141724,
+                2.750171184539795
+              ],
+              [
+                2.4776084423065186,
+                1.5027799606323242,
+                0.978564977645874,
+                1.9562243223190308,
+                2.196368455886841,
+                0.5972756743431091,
+                0.51496821641922,
+                2.585679769515991
+              ]
+            ],
+            "reason": null,
+            "std": 2.1740404313234283,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "P": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 5.919187068939209,
+            "mean": 1.4089195805292458,
+            "min": -2.1750919818878174,
+            "per_pair_mean_sample": [
+              [
+                3.791231870651245,
+                0.03872397169470787,
+                0.053129103034734726,
+                0.4803183972835541,
+                1.544137716293335,
+                2.9967732429504395,
+                -0.07220034301280975,
+                2.3129069805145264
+              ],
+              [
+                3.7995386123657227,
+                0.29178205132484436,
+                -0.03530903533101082,
+                0.2923696041107178,
+                1.6410205364227295,
+                2.9922587871551514,
+                -0.12212477624416351,
+                2.5381581783294678
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                0.846591591835022,
+                0.8152171969413757,
+                0.7150009274482727,
+                0.7965416312217712,
+                1.2852686643600464,
+                0.5980057716369629,
+                0.4194490313529968,
+                0.8203610181808472
+              ],
+              [
+                0.784909725189209,
+                0.7407759428024292,
+                0.6831297278404236,
+                0.6361979246139526,
+                1.1562297344207764,
+                0.6251851320266724,
+                0.4428974986076355,
+                0.6814197301864624
+              ]
+            ],
+            "reason": null,
+            "std": 1.6219076790352505,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "R": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 5.059989929199219,
+            "mean": 0.20964460777501387,
+            "min": -5.123805522918701,
+            "per_pair_mean_sample": [
+              [
+                1.2442699670791626,
+                -1.0444717407226562,
+                1.0379530191421509,
+                0.14149770140647888,
+                -0.5076169967651367,
+                0.8413199782371521,
+                -0.3752903342247009,
+                0.32377880811691284
+              ],
+              [
+                1.1053599119186401,
+                -0.9046853184700012,
+                0.9880896806716919,
+                0.0929832011461258,
+                -0.4062037169933319,
+                0.8175791501998901,
+                -0.33617499470710754,
+                0.335925430059433
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                2.691420555114746,
+                2.804405927658081,
+                0.6183800101280212,
+                1.4208812713623047,
+                2.581888437271118,
+                0.09671003371477127,
+                0.3519918918609619,
+                1.21465003490448
+              ],
+              [
+                2.658505439758301,
+                2.7708334922790527,
+                0.6068829298019409,
+                1.4199364185333252,
+                2.562685012817383,
+                0.10334791988134384,
+                0.34505459666252136,
+                1.2225592136383057
+              ]
+            ],
+            "reason": null,
+            "std": 1.9273518964899163,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "S": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 2.95851993560791,
+            "mean": -0.008706336913334844,
+            "min": -0.7070747017860413,
+            "per_pair_mean_sample": [
+              [
+                -0.00765568669885397
+              ],
+              [
+                -0.009757009334862232
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                1.0006781816482544
+              ],
+              [
+                1.000342845916748
+              ]
+            ],
+            "reason": null,
+            "std": 1.0005098583226477,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          }
+        },
+        "dtype": "float32",
+        "sample_count": 1519,
+        "shape": [
+          1519,
+          2,
+          25
+        ]
+      },
+      "validation": {
+        "branches": {
+          "E": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 3.030071258544922,
+            "mean": -0.5102143192833121,
+            "min": -4.51302433013916,
+            "per_pair_mean_sample": [
+              [
+                1.6476867198944092,
+                -2.8515119552612305,
+                1.5704598426818848,
+                -1.686540126800537,
+                -0.6693037748336792,
+                -0.18546628952026367,
+                -0.9336022734642029,
+                -0.8553157448768616
+              ],
+              [
+                1.2837704420089722,
+                -2.9409661293029785,
+                1.3771920204162598,
+                -1.9055272340774536,
+                -0.31271597743034363,
+                -0.21342530846595764,
+                -1.085267186164856,
+                -0.40289580821990967
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                0.7241193056106567,
+                0.4696275591850281,
+                0.47621089220046997,
+                0.8406656980514526,
+                0.8892251253128052,
+                0.43836891651153564,
+                0.2677280306816101,
+                0.8198567628860474
+              ],
+              [
+                0.9106743931770325,
+                0.7125215530395508,
+                0.41276299953460693,
+                0.9970996379852295,
+                1.0735931396484375,
+                0.4240104556083679,
+                0.34888678789138794,
+                1.0558234453201294
+              ]
+            ],
+            "reason": null,
+            "std": 1.57839534454329,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "P": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 4.957418918609619,
+            "mean": 1.329541944697584,
+            "min": -1.0300136804580688,
+            "per_pair_mean_sample": [
+              [
+                4.0710129737854,
+                -0.401332288980484,
+                0.849368155002594,
+                1.1634283065795898,
+                0.4069369435310364,
+                3.315443277359009,
+                -0.30811163783073425,
+                1.287928581237793
+              ],
+              [
+                4.106967449188232,
+                -0.028191344812512398,
+                0.3935391306877136,
+                0.5462086200714111,
+                1.0095139741897583,
+                3.2929437160491943,
+                -0.3244214355945587,
+                1.8914374113082886
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                0.23865537345409393,
+                0.2983814775943756,
+                0.22664888203144073,
+                0.37461888790130615,
+                0.524631142616272,
+                0.2368268519639969,
+                0.2743595540523529,
+                0.21088850498199463
+              ],
+              [
+                0.3709767460823059,
+                0.3549332022666931,
+                0.17483282089233398,
+                0.3492681086063385,
+                0.5682754516601562,
+                0.28719761967658997,
+                0.29649829864501953,
+                0.32730135321617126
+              ]
+            ],
+            "reason": null,
+            "std": 1.5433264452848803,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "R": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 3.8380510807037354,
+            "mean": 0.10429131072437899,
+            "min": -3.6845438480377197,
+            "per_pair_mean_sample": [
+              [
+                1.813215970993042,
+                -1.6352370977401733,
+                1.066605806350708,
+                0.34810739755630493,
+                -1.0117906332015991,
+                0.8791857361793518,
+                -0.5130107402801514,
+                0.06389463692903519
+              ],
+              [
+                2.113241672515869,
+                -1.9630974531173706,
+                1.1101549863815308,
+                0.5413461327552795,
+                -1.3507577180862427,
+                0.8470785021781921,
+                -0.5149297714233398,
+                -0.12534596025943756
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                1.1548477411270142,
+                1.1986569166183472,
+                0.3107262849807739,
+                0.629418671131134,
+                1.1035230159759521,
+                0.07986228913068771,
+                0.129365012049675,
+                0.5104181170463562
+              ],
+              [
+                0.7484990954399109,
+                0.790895402431488,
+                0.22728851437568665,
+                0.4128738343715668,
+                0.7156767249107361,
+                0.059871312230825424,
+                0.10569152981042862,
+                0.34726521372795105
+              ]
+            ],
+            "reason": null,
+            "std": 1.3369392223301246,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          },
+          "S": {
+            "finite_fraction": 1.0,
+            "low_variance_by_variable": [
+              0,
+              0
+            ],
+            "low_variance_dimensions": 0,
+            "low_variance_threshold": 1e-06,
+            "low_variance_unit": "variable x feature dimension pair",
+            "max": 1.2393157482147217,
+            "mean": -0.44332279535857116,
+            "min": -0.7070747017860413,
+            "per_pair_mean_sample": [
+              [
+                -0.5157655477523804
+              ],
+              [
+                -0.37088000774383545
+              ]
+            ],
+            "per_pair_std_sample": [
+              [
+                0.30491963028907776
+              ],
+              [
+                0.5155742168426514
+              ]
+            ],
+            "reason": null,
+            "std": 0.42970254357824883,
+            "undefined_pair_count": 0,
+            "variance_axis": "windows_N"
+          }
+        },
+        "dtype": "float32",
+        "sample_count": 22,
+        "shape": [
+          22,
+          2,
+          25
+        ]
+      }
+    }
+  },
+  "metric_recheck": {
+    "alarm_points": 98,
+    "anomaly_points": 70,
+    "auc_roc": 0.7130399038765574,
+    "auc_roc_undefined_reason": null,
+    "average_precision": 0.0539712685708693,
+    "coverage": 0.9242063492063493,
+    "f1": 0.03571428571428572,
+    "fn": 67,
+    "fp": 95,
+    "precision": 0.030612244897959183,
+    "recall": 0.04285714285714286,
+    "status": "complete",
+    "threshold": 4.047459717988971,
+    "tn": 2164,
+    "tp": 3
+  },
+  "model_complete": true,
+  "note": "diagnostic export; sampled feature summaries do not replace full-test metrics",
+  "samples": {
+    "calibration": {
+      "candidate_counts": {
+        "deterministic_uniform": 24
+      },
+      "count": 24,
+      "reason_counts": {
+        "deterministic_uniform": 24
+      },
+      "selected_counts": {
+        "deterministic_uniform": 24
+      },
+      "shape": [
+        24,
+        2,
+        25
+      ],
+      "total_windows": 24
+    },
+    "test": {
+      "candidate_counts": {
+        "fn": 67,
+        "fp": 95,
+        "tn": 2164,
+        "tp": 3
+      },
+      "count": 512,
+      "reason_counts": {
+        "deterministic_uniform": 440,
+        "fn": 67,
+        "fp": 1,
+        "tn": 1,
+        "tp": 3
+      },
+      "selected_counts": {
+        "deterministic_uniform": 440,
+        "fn": 67,
+        "fp": 1,
+        "tn": 1,
+        "tp": 3
+      },
+      "shape": [
+        512,
+        2,
+        25
+      ],
+      "total_windows": 2329
+    },
+    "train": {
+      "candidate_counts": {
+        "deterministic_uniform": 1519
+      },
+      "count": 256,
+      "reason_counts": {
+        "deterministic_uniform": 256
+      },
+      "selected_counts": {
+        "deterministic_uniform": 256
+      },
+      "shape": [
+        256,
+        2,
+        25
+      ],
+      "total_windows": 1519
+    },
+    "validation": {
+      "candidate_counts": {
+        "deterministic_uniform": 22
+      },
+      "count": 22,
+      "reason_counts": {
+        "deterministic_uniform": 22
+      },
+      "selected_counts": {
+        "deterministic_uniform": 22
+      },
+      "shape": [
+        22,
+        2,
+        25
+      ],
+      "total_windows": 22
+    }
+  },
+  "schema": "mnrf-view-probe-analysis-v1",
+  "segment_count": 13,
+  "source_cache_inventory": [
+    {
+      "bytes": 40448,
+      "dtype": "float32",
+      "hash_source": "validated source manifest",
+      "nbytes": 40320,
+      "path": "cache/normalized_values.npy",
+      "sha256": "ca0bb3ff26922258b11988a00ce5af1c2f2cdd7cfbb62c0bd352610998ffd263",
+      "shape": [
+        5040,
+        2
+      ]
+    },
+    {
+      "bytes": 303928,
+      "dtype": "float32",
+      "hash_source": "validated source manifest",
+      "nbytes": 303800,
+      "path": "cache/train_features.npy",
+      "sha256": "5325620a5f1a661838d23f91e544ce2d59d0c230a36807ba778d000aef338adc",
+      "shape": [
+        1519,
+        2,
+        25
+      ]
+    },
+    {
+      "bytes": 4528,
+      "dtype": "float32",
+      "hash_source": "validated source manifest",
+      "nbytes": 4400,
+      "path": "cache/validation_features.npy",
+      "sha256": "de366d04de1cfcec9a451a24fe5c94bda356fbf20359d31eea4f7ce764385c66",
+      "shape": [
+        22,
+        2,
+        25
+      ]
+    },
+    {
+      "bytes": 4928,
+      "dtype": "float32",
+      "hash_source": "validated source manifest",
+      "nbytes": 4800,
+      "path": "cache/calibration_features.npy",
+      "sha256": "05cc70eb3fe37cdcdb18fc20389e6c08abea4e3f22bf66335220aa8aebc7d4dc",
+      "shape": [
+        24,
+        2,
+        25
+      ]
+    },
+    {
+      "bytes": 465928,
+      "dtype": "float32",
+      "hash_source": "validated source manifest",
+      "nbytes": 465800,
+      "path": "cache/test_features.npy",
+      "sha256": "f7e0ed3831936632a8c64214b5cf46d3c7788b8a70cc429fa498d56e2a77a52e",
+      "shape": [
+        2329,
+        2,
+        25
+      ]
+    },
+    {
+      "bytes": 12280,
+      "dtype": "int64",
+      "hash_source": "validated source manifest",
+      "nbytes": 12152,
+      "path": "cache/train_window_end_indices.npy",
+      "sha256": "b9ddaa4e9e13556a70ac97af0eb45fb153dd8466b1637452dd8feeaa0f79484c",
+      "shape": [
+        1519
+      ]
+    },
+    {
+      "bytes": 304,
+      "dtype": "int64",
+      "hash_source": "validated source manifest",
+      "nbytes": 176,
+      "path": "cache/validation_window_end_indices.npy",
+      "sha256": "0e32a00cd353e54b89f8a1a20040df66e01c7306ffd9760653690482d7b2611f",
+      "shape": [
+        22
+      ]
+    },
+    {
+      "bytes": 320,
+      "dtype": "int64",
+      "hash_source": "validated source manifest",
+      "nbytes": 192,
+      "path": "cache/calibration_window_end_indices.npy",
+      "sha256": "0d2a34e442fc98645c7cf22cf2fab1e930515674a47a418524213c48dbad7773",
+      "shape": [
+        24
+      ]
+    },
+    {
+      "bytes": 18760,
+      "dtype": "int64",
+      "hash_source": "validated source manifest",
+      "nbytes": 18632,
+      "path": "cache/test_window_end_indices.npy",
+      "sha256": "11489782a2e3f34edbd6a5b41b039f535d694ba0f9985fcbe24bdd6e962e2be4",
+      "shape": [
+        2329
+      ]
+    }
+  ],
+  "source_directory_logical_bytes": 2400631,
+  "source_manifest_sha256": "eb951c662ada304fae6f713b6a078a97f85b5130868487e21696c363a8376c38",
+  "source_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004",
+  "source_run_identity": null,
+  "source_validation": {
+    "artifact_type": "probe_head",
+    "auc_pr": 0.0539712685708693,
+    "auc_roc": 0.7130399038765574,
+    "head_type": "gmm",
+    "mode": "pretrained",
+    "normalized_cache_validation": {
+      "bytes": 40448,
+      "dtype": "float32",
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004/cache/normalized_values.npy",
+      "sha256": "ca0bb3ff26922258b11988a00ce5af1c2f2cdd7cfbb62c0bd352610998ffd263",
+      "shape": [
+        5040,
+        2
+      ]
+    },
+    "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004",
+    "status": "complete",
+    "task_name": "CalIt2.csv"
+  },
+  "status": "complete",
+  "training_environment": {
+    "cuda_available": true,
+    "cuda_runtime": "12.1",
+    "gpu": "NVIDIA A800-SXM4-80GB",
+    "numpy": "1.24.4",
+    "pandas": "1.5.3",
+    "platform": "Linux-5.15.0-107-generic-x86_64-with-glibc2.17",
+    "python": "3.8.20",
+    "requested_device": "cuda:0",
+    "scikit_learn": "1.3.2",
+    "torch": "2.4.1+cu121"
+  },
+  "training_provenance_status": "training_time_receipt_verified",
+  "variable_diagnostics": {
+    "aggregation_matches_predictions": true,
+    "aggregation_matches_scores": true,
+    "formula": "max_c((test_nll[:,c]-center[c])/scale[c])",
+    "scale_floor": 0.001,
+    "status": "complete",
+    "threshold": 4.047459717988971,
+    "variables": [
+      {
+        "anomaly_median": 6.9311206340789795,
+        "anomaly_standard_q95": 3.612516229652344,
+        "center": 1.0346161127090454,
+        "max_score_frequency": 1065,
+        "normal_median": 1.7070000171661377,
+        "normal_standard_q95": 3.1815254881084596,
+        "scale": 4.205467700958252,
+        "scale_floor_active": false,
+        "score_mad_floor": 0.001,
+        "variable_index": 0,
+        "variable_name": "9"
+      },
+      {
+        "anomaly_median": 8.399211883544922,
+        "anomaly_standard_q95": 2.850539654376397,
+        "center": 2.183238983154297,
+        "max_score_frequency": 1264,
+        "normal_median": 3.5522704124450684,
+        "normal_standard_q95": 3.078075852980247,
+        "scale": 4.526801586151123,
+        "scale_floor_active": false,
+        "score_mad_floor": 0.001,
+        "variable_index": 1,
+        "variable_name": "7"
+      }
+    ]
+  }
+}

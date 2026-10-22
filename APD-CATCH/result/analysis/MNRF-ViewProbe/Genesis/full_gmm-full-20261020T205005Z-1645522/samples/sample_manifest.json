@@ -1,0 +1,97 @@
+{
+  "budgets": {
+    "calibration": 128,
+    "test": 512,
+    "train": 256,
+    "validation": 128
+  },
+  "diagnostic_only": true,
+  "seed": 20261013,
+  "selection": "deterministic bounded sampling; test stratifies available confusion classes and anomalies",
+  "source_manifest_sha256": "d9c790772ba682c7d298e626da9744e01591429da03fa51d130b34313d2bc020",
+  "splits": {
+    "calibration": {
+      "candidate_counts": {
+        "deterministic_uniform": 132
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        18,
+        25
+      ],
+      "total_windows": 132
+    },
+    "test": {
+      "candidate_counts": {
+        "fn": 27,
+        "fp": 375,
+        "tn": 12000,
+        "tp": 23
+      },
+      "count": 512,
+      "reason_counts": {
+        "deterministic_uniform": 460,
+        "fn": 27,
+        "fp": 1,
+        "tn": 1,
+        "tp": 23
+      },
+      "selected_counts": {
+        "deterministic_uniform": 460,
+        "fn": 27,
+        "fp": 1,
+        "tn": 1,
+        "tp": 23
+      },
+      "shape": [
+        512,
+        18,
+        25
+      ],
+      "total_windows": 12425
+    },
+    "train": {
+      "candidate_counts": {
+        "deterministic_uniform": 2386
+      },
+      "count": 256,
+      "reason_counts": {
+        "deterministic_uniform": 256
+      },
+      "selected_counts": {
+        "deterministic_uniform": 256
+      },
+      "shape": [
+        256,
+        18,
+        25
+      ],
+      "total_windows": 2386
+    },
+    "validation": {
+      "candidate_counts": {
+        "deterministic_uniform": 131
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        18,
+        25
+      ],
+      "total_windows": 131
+    }
+  }
+}

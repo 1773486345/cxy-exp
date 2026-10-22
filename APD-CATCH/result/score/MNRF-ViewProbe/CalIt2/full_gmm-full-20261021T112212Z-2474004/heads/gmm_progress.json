@@ -1,0 +1,287 @@
+{
+  "completed": {
+    "0": {
+      "model_sha256": "de032aefeeb8cf5af2f846a3c120b3b37ea6ee26df57f04d73d36a37ae6e9459",
+      "status": {
+        "converged": true,
+        "covariance_type": "full",
+        "lower_bound": 0.04827519729543989,
+        "model_sha256": "de032aefeeb8cf5af2f846a3c120b3b37ea6ee26df57f04d73d36a37ae6e9459",
+        "n_components": 4,
+        "n_features_in": 25,
+        "n_iter": 9,
+        "parameter_count_free": 1403,
+        "parameter_count_storage": 2604,
+        "sample_count": 1519,
+        "variable": 0
+      }
+    },
+    "1": {
+      "model_sha256": "2cb4d6e9cce3ba1f7a8a6a5d80de27e835e65db55901322d905c0ef0b4dff375",
+      "status": {
+        "converged": true,
+        "covariance_type": "full",
+        "lower_bound": -0.7655995879978896,
+        "model_sha256": "2cb4d6e9cce3ba1f7a8a6a5d80de27e835e65db55901322d905c0ef0b4dff375",
+        "n_components": 4,
+        "n_features_in": 25,
+        "n_iter": 31,
+        "parameter_count_free": 1403,
+        "parameter_count_storage": 2604,
+        "sample_count": 1519,
+        "variable": 1
+      }
+    }
+  },
+  "config_projection": {
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "full",
+    "gmm_fit_max_windows": 20000,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "mode": "full_gmm",
+    "noise_seed": 20261013,
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 25,
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "selected_views": [
+      "S",
+      "E",
+      "P",
+      "R"
+    ],
+    "seq_len": 192,
+    "source_dir": "",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "CalIt2.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "identity": "9336d929fad51383fb53b39bbece25e849c729a877e97ef21db3ad10c92ad395",
+  "identity_payload": {
+    "cache_hashes": {
+      "calibration": "05cc70eb3fe37cdcdb18fc20389e6c08abea4e3f22bf66335220aa8aebc7d4dc",
+      "test": "f7e0ed3831936632a8c64214b5cf46d3c7788b8a70cc429fa498d56e2a77a52e",
+      "train": "5325620a5f1a661838d23f91e544ce2d59d0c230a36807ba778d000aef338adc",
+      "validation": "de366d04de1cfcec9a451a24fe5c94bda356fbf20359d31eea4f7ce764385c66"
+    },
+    "config": {
+      "batch_size": 128,
+      "cache_chunk_size": 256,
+      "calibration_quantile": 0.995,
+      "cpu_threads": 1,
+      "data_source": "large_detect",
+      "encoding_batch_size": 128,
+      "evolution_dim": 8,
+      "feature_std_floor": 0.05,
+      "gmm_components": 4,
+      "gmm_covariance_type": "full",
+      "gmm_fit_max_windows": 20000,
+      "gmm_max_iter": 100,
+      "gmm_n_init": 1,
+      "gmm_reg_covar": 0.001,
+      "hidden_dim": 32,
+      "learning_rate": 0.001,
+      "mode": "full_gmm",
+      "noise_seed": 20261013,
+      "patience": 5,
+      "pattern_dim": 8,
+      "pattern_len": 32,
+      "relation_dim": 8,
+      "resolved_layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "score_mad_floor": 0.001,
+      "seed": 2021,
+      "selected_dim": 25,
+      "selected_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "selected_views": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "seq_len": 192,
+      "source_dir": "",
+      "stage1_epochs": 50,
+      "stage2_epochs": 30,
+      "task_name": "CalIt2.csv",
+      "train_noise_std": 0.01,
+      "view_dim": 8,
+      "weight_decay": 0.0001
+    },
+    "endpoint_hashes": {
+      "calibration": "0d2a34e442fc98645c7cf22cf2fab1e930515674a47a418524213c48dbad7773",
+      "test": "11489782a2e3f34edbd6a5b41b039f535d694ba0f9985fcbe24bdd6e962e2be4",
+      "train": "b9ddaa4e9e13556a70ac97af0eb45fb153dd8466b1637452dd8feeaa0f79484c",
+      "validation": "0e32a00cd353e54b89f8a1a20040df66e01c7306ffd9760653690482d7b2611f"
+    },
+    "noise_hash": "2d0c776ebb7bc0c2aabd583afd1cde0d853f4f29a2d68dd50b8235dd5187af89",
+    "sample_hash": "b9ddaa4e9e13556a70ac97af0eb45fb153dd8466b1637452dd8feeaa0f79484c",
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "source": null,
+    "statistics_hash": "a80a0ef11731eca7a87581c0920d914bef3b9d2476e7a10f4b09f4298ec290be",
+    "version": 2
+  },
+  "identity_version": 2,
+  "schema": "mnrf-view-probe-v2"
+}

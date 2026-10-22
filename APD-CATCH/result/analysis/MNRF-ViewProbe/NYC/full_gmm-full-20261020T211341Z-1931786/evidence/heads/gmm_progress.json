@@ -1,0 +1,303 @@
+{
+  "completed": {
+    "0": {
+      "model_sha256": "efc72cf08c00c65bc9f437590b9192440c721b0ca91464103ee9fd53d0e5dd1e",
+      "status": {
+        "converged": true,
+        "covariance_type": "full",
+        "lower_bound": 5.7114673275771,
+        "model_sha256": "efc72cf08c00c65bc9f437590b9192440c721b0ca91464103ee9fd53d0e5dd1e",
+        "n_components": 4,
+        "n_features_in": 25,
+        "n_iter": 16,
+        "parameter_count_free": 1403,
+        "parameter_count_storage": 2604,
+        "sample_count": 9986,
+        "variable": 0
+      }
+    },
+    "1": {
+      "model_sha256": "5b439634ec90e6f0c8ea315b84116720e74e0efe07fdaffd52839742dd18f3d3",
+      "status": {
+        "converged": true,
+        "covariance_type": "full",
+        "lower_bound": 29.16534962080772,
+        "model_sha256": "5b439634ec90e6f0c8ea315b84116720e74e0efe07fdaffd52839742dd18f3d3",
+        "n_components": 4,
+        "n_features_in": 25,
+        "n_iter": 3,
+        "parameter_count_free": 1403,
+        "parameter_count_storage": 2604,
+        "sample_count": 9986,
+        "variable": 1
+      }
+    },
+    "2": {
+      "model_sha256": "e825b68f51eb1e6248fa176280cf887d2277cee14c8e88ad092b5c2424a1437b",
+      "status": {
+        "converged": true,
+        "covariance_type": "full",
+        "lower_bound": 19.334484997577007,
+        "model_sha256": "e825b68f51eb1e6248fa176280cf887d2277cee14c8e88ad092b5c2424a1437b",
+        "n_components": 4,
+        "n_features_in": 25,
+        "n_iter": 9,
+        "parameter_count_free": 1403,
+        "parameter_count_storage": 2604,
+        "sample_count": 9986,
+        "variable": 2
+      }
+    }
+  },
+  "config_projection": {
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "full",
+    "gmm_fit_max_windows": 20000,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "mode": "full_gmm",
+    "noise_seed": 20261013,
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 25,
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "selected_views": [
+      "S",
+      "E",
+      "P",
+      "R"
+    ],
+    "seq_len": 192,
+    "source_dir": "",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "NYC.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "identity": "2d5e5b9e33e76447eb558b5ea115e69f3fc57e9532f14080765d8811f8e646a0",
+  "identity_payload": {
+    "cache_hashes": {
+      "calibration": "328887d5aea1c5a7944adaa0957b64b08ee837297bf7e3bb7752220659d54f7a",
+      "test": "49a2e59546266dd44efd7019171aba6223fec55e3a5da4cfa7b21a65ecdeb77e",
+      "train": "d7358c79874db62a9562501ed3ddd45b2467cdb47c869d19a44097e232c60103",
+      "validation": "dba4e31a0db3e59951ee4f3c9160da23cc65e64000824ad7535e3d755d675f1b"
+    },
+    "config": {
+      "batch_size": 128,
+      "cache_chunk_size": 256,
+      "calibration_quantile": 0.995,
+      "cpu_threads": 1,
+      "data_source": "large_detect",
+      "encoding_batch_size": 128,
+      "evolution_dim": 8,
+      "feature_std_floor": 0.05,
+      "gmm_components": 4,
+      "gmm_covariance_type": "full",
+      "gmm_fit_max_windows": 20000,
+      "gmm_max_iter": 100,
+      "gmm_n_init": 1,
+      "gmm_reg_covar": 0.001,
+      "hidden_dim": 32,
+      "learning_rate": 0.001,
+      "mode": "full_gmm",
+      "noise_seed": 20261013,
+      "patience": 5,
+      "pattern_dim": 8,
+      "pattern_len": 32,
+      "relation_dim": 8,
+      "resolved_layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "score_mad_floor": 0.001,
+      "seed": 2021,
+      "selected_dim": 25,
+      "selected_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "selected_views": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "seq_len": 192,
+      "source_dir": "",
+      "stage1_epochs": 50,
+      "stage2_epochs": 30,
+      "task_name": "NYC.csv",
+      "train_noise_std": 0.01,
+      "view_dim": 8,
+      "weight_decay": 0.0001
+    },
+    "endpoint_hashes": {
+      "calibration": "e585b1ce6f8247fc20d3f128a4055e504eb19fcc99c0f015abc9a5a6558f2ed9",
+      "test": "e117f4cf25ab4478e83417b10b86bfeb7783845f93aae61efa3ed3f1518dbae5",
+      "train": "29729d39d222454a2ab5f941a2940776ec89095c5710263dd30315940e789252",
+      "validation": "e7d53efc2387536428b0b62fbf0cfb40ca0b105db724cb3e2cacb45bc98e3ff0"
+    },
+    "noise_hash": "2d0c776ebb7bc0c2aabd583afd1cde0d853f4f29a2d68dd50b8235dd5187af89",
+    "sample_hash": "29729d39d222454a2ab5f941a2940776ec89095c5710263dd30315940e789252",
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "source": null,
+    "statistics_hash": "9b2e7bf82c69c46842de9d2c5de4c3586a4d42707345a4075226e0c2126a018c",
+    "version": 2
+  },
+  "identity_version": 2,
+  "schema": "mnrf-view-probe-v2"
+}

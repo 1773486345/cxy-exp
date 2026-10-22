@@ -1,0 +1,72 @@
+{
+  "diagnostic_only": true,
+  "note": "anomaly hit means at least one fixed-threshold alarm; this is not Aff-F or point adjustment",
+  "segment_summary": {
+    "raw_anomaly_segments": 3,
+    "segments_with_any_alarm": 3,
+    "segments_with_valid_scores": 3,
+    "segments_without_valid_scores": 0
+  },
+  "segments": [
+    {
+      "end_original": 15539,
+      "end_time_ns": 15540,
+      "first_hit_original": 15539,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 186.5186004638672,
+      "median_score": 110.6740608215332,
+      "no_valid_scores": false,
+      "peak_original": 15539,
+      "point_count": 2,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 15538,
+      "start_time_ns": 15539,
+      "valid_points": 2
+    },
+    {
+      "end_original": 15566,
+      "end_time_ns": 15567,
+      "first_hit_original": 15561,
+      "hit": true,
+      "hit_points": 5,
+      "max_score": 179.3727569580078,
+      "median_score": 26.915379524230957,
+      "no_valid_scores": false,
+      "peak_original": 15561,
+      "point_count": 26,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 15541,
+      "start_time_ns": 15542,
+      "valid_points": 26
+    },
+    {
+      "end_original": 15937,
+      "end_time_ns": 15938,
+      "first_hit_original": 15916,
+      "hit": true,
+      "hit_points": 17,
+      "max_score": 999.8361206054688,
+      "median_score": 50.72506523132324,
+      "no_valid_scores": false,
+      "peak_original": 15937,
+      "point_count": 22,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 15916,
+      "start_time_ns": 15917,
+      "valid_points": 22
+    }
+  ]
+}

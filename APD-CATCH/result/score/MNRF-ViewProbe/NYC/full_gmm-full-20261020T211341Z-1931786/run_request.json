@@ -1,0 +1,231 @@
+{
+  "config": {
+    "artifact_policy": "full",
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "device": "cuda:0",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "full",
+    "gmm_fit_max_windows": 20000,
+    "gmm_log_every_iters": 10,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "log_every_seconds": 30.0,
+    "log_every_steps": 100,
+    "mode": "full_gmm",
+    "noise_seed": 20261013,
+    "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "resume_from": "",
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 25,
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "selected_views": [
+      "S",
+      "E",
+      "P",
+      "R"
+    ],
+    "seq_len": 192,
+    "source_dir": "",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "NYC.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "gmm_progress_identity": "2d5e5b9e33e76447eb558b5ea115e69f3fc57e9532f14080765d8811f8e646a0",
+  "initial_encoder_sha256": "f9ce7343be11ce041c10d55c47f98e74399c09106c38b1a271d9ce3955d94bea",
+  "mode": "full_gmm",
+  "run_identity": "e0f397d0b116eaa273934ea5040505065f07acaa0c233aec03e1ea14c6017449",
+  "schema": "mnrf-view-probe-v2",
+  "source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "f1f036249a8ac221780af1e677aaa4ca116db78bb8b27cd1b14656e928a1cccf",
+    "input_length": 17520,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        11831,
+        13104
+      ],
+      "train": [
+        0,
+        10177
+      ],
+      "validation": [
+        10368,
+        11640
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          11831,
+          13104
+        ]
+      ],
+      "train": [
+        [
+          0,
+          10177
+        ]
+      ],
+      "validation": [
+        [
+          10368,
+          11640
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        17520
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "NYC.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        10177
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 4225,
+    "test_endpoints_sha256": "1d0140dc22aed4e5829f0794ac9443495573d420b324a0b7298ffa793d76261e",
+    "test_segments": [
+      [
+        13104,
+        17520
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "15f2f9583870525bbbbb509b787165a74f54f06eb0b69faf0cbc296ed5e29038"
+    },
+    "train_length": 13104,
+    "variable_names": [
+      "channnel1",
+      "channnel2",
+      "channnel3"
+    ]
+  },
+  "stage": "gmm_fitting",
+  "task_name": "NYC.csv"
+}

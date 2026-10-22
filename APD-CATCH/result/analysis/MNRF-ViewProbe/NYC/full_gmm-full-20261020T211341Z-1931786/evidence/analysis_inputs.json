@@ -1,0 +1,66 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": {
+    "columns": [],
+    "test_segment_identity": [
+      {
+        "boundary_value": null,
+        "segment_id": 0
+      }
+    ],
+    "values": []
+  },
+  "data_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/NYC.csv",
+  "data_file_sha256": "64049d2d09967e90c47f8169bb54efb82c0199e9ff3b8b8ac952990aff266b9f",
+  "full_rows": 17520,
+  "full_segments": [
+    [
+      0,
+      17520
+    ]
+  ],
+  "labels_sha256": "35720eaa8b11c226346bef13d0622be01bc7705756f6435618d0ebf6fb90dea5",
+  "metadata_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_file_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "provenance_file": "training_provenance.json",
+  "provenance_sha256": "d4d413e7180fa03869aac4618b8e4ee080e6539e47dd54f2cc8769146069c0a3",
+  "schema": "mnrf-view-probe-analysis-inputs-v1",
+  "selected_metadata_row": {
+    "anomaly_rate": "0.005650685",
+    "dataset_name": "NYC",
+    "file_name": "NYC.csv",
+    "if_univariate": "False",
+    "pattern": "nan",
+    "seasonal": "nan",
+    "shifting": "nan",
+    "size": "large",
+    "stationary": "nan",
+    "test_lens": "4416",
+    "time_steps": "17520",
+    "train_lens": "13104",
+    "trend": "nan",
+    "type_value": "nan"
+  },
+  "source_identity_sha256": "09849d805e96ab8c7dd221a3a9cf3b068c6e2fe14692ee28cdfce8508462ef37",
+  "source_manifest_sha256": "06eebc2845264ec1cca3255d7f6b8e3958b2380291aca3773ff1895a23f87e09",
+  "test_length": 4416,
+  "test_segment_identity": [
+    {
+      "boundary_value": null,
+      "segment_id": 0
+    }
+  ],
+  "test_segments": [
+    [
+      13104,
+      17520
+    ]
+  ],
+  "time_kind": "timestamp_naive_ns",
+  "train_length": 13104,
+  "variable_names": [
+    "channnel1",
+    "channnel2",
+    "channnel3"
+  ]
+}

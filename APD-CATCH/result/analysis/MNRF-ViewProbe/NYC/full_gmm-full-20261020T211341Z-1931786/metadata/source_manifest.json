@@ -1,0 +1,389 @@
+{
+  "aligned_scores_sha256": "25b16dc5e648c03242990ecd9ac10eb60e3c5dee264a531fab6b60eb2aa37158",
+  "analysis_artifacts": {
+    "analysis_inputs_sha256": "35720eaa8b11c226346bef13d0622be01bc7705756f6435618d0ebf6fb90dea5",
+    "full_axis_sha256": {
+      "global_indices": "785b4f0f324a82513affab746422084bd52bf107e8b9da1b38a420af417c21c8",
+      "labels": "11ba4df6c6e09017261aff479de907a9d3c0fe69830dad6d2210eabe55fdb3bd",
+      "segment_ids": "e4692dc4e77ddbab4ec04bee48e4a4f3cf17364f51b723558fee7d0ac60a3f59",
+      "time_values_ns": "15f2f9583870525bbbbb509b787165a74f54f06eb0b69faf0cbc296ed5e29038"
+    },
+    "test_time_values_sha256": "b93107d96c1f574427e8fbef7103a0e8098b57b16dbd4019ee5a46cd017bf2a0",
+    "training_provenance_sha256": "d4d413e7180fa03869aac4618b8e4ee080e6539e47dd54f2cc8769146069c0a3"
+  },
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "cache_dtypes": {
+    "calibration": "float32",
+    "test": "float32",
+    "train": "float32",
+    "validation": "float32"
+  },
+  "cache_feature_dim": 25,
+  "cache_paths": {
+    "calibration": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/cache/calibration_window_end_indices.npy",
+    "test": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/cache/test_window_end_indices.npy",
+    "train": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/cache/train_window_end_indices.npy",
+    "validation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/cache/validation_window_end_indices.npy"
+  },
+  "cache_sha256": {
+    "calibration": "328887d5aea1c5a7944adaa0957b64b08ee837297bf7e3bb7752220659d54f7a",
+    "test": "49a2e59546266dd44efd7019171aba6223fec55e3a5da4cfa7b21a65ecdeb77e",
+    "train": "d7358c79874db62a9562501ed3ddd45b2467cdb47c869d19a44097e232c60103",
+    "validation": "dba4e31a0db3e59951ee4f3c9160da23cc65e64000824ad7535e3d755d675f1b"
+  },
+  "cache_shapes": {
+    "calibration": [
+      1082,
+      3,
+      25
+    ],
+    "test": [
+      4225,
+      3,
+      25
+    ],
+    "train": [
+      9986,
+      3,
+      25
+    ],
+    "validation": [
+      1081,
+      3,
+      25
+    ]
+  },
+  "calibration_sha256": "4ca5176dcd0341221a8ae09bf6309e190a776e407e835bd8ebe85a796083915b",
+  "checkpoint_sha256": {
+    "best_encoder.pt": "aec64372e3822ea4cc6c89ae43a20b4840e33e5895a5976a6c4e175e7ef54a69",
+    "initial_encoder.pt": "f9ce7343be11ce041c10d55c47f98e74399c09106c38b1a271d9ce3955d94bea"
+  },
+  "config": {
+    "artifact_policy": "full",
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "device": "cuda:0",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "full",
+    "gmm_fit_max_windows": 20000,
+    "gmm_log_every_iters": 10,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "log_every_seconds": 30.0,
+    "log_every_steps": 100,
+    "mode": "full_gmm",
+    "noise_seed": 20261013,
+    "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "resume_from": "",
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 25,
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "selected_views": [
+      "S",
+      "E",
+      "P",
+      "R"
+    ],
+    "seq_len": 192,
+    "source_dir": "",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "NYC.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "created_with": {
+    "numpy": "1.24.4",
+    "python": "3.8.20",
+    "torch": "2.4.1+cu121"
+  },
+  "endpoint_sha256": {
+    "calibration": "e585b1ce6f8247fc20d3f128a4055e504eb19fcc99c0f015abc9a5a6558f2ed9",
+    "test": "e117f4cf25ab4478e83417b10b86bfeb7783845f93aae61efa3ed3f1518dbae5",
+    "train": "29729d39d222454a2ab5f941a2940776ec89095c5710263dd30315940e789252",
+    "validation": "e7d53efc2387536428b0b62fbf0cfb40ca0b105db724cb3e2cacb45bc98e3ff0"
+  },
+  "feature_fingerprint": "c2e8c1fcfdd958d297ab9819f7b715013f48abab87c199d12b965159ad35c9f3",
+  "feature_statistics_sha256": "9b2e7bf82c69c46842de9d2c5de4c3586a4d42707345a4075226e0c2126a018c",
+  "fixed_noise_sha256": "2d0c776ebb7bc0c2aabd583afd1cde0d853f4f29a2d68dd50b8235dd5187af89",
+  "gmm_fit_endpoint_count": 9986,
+  "gmm_fit_endpoints_sha256": "29729d39d222454a2ab5f941a2940776ec89095c5710263dd30315940e789252",
+  "gmm_status_sha256": "f60e25ce717ed4d70820c1c7617c962c68e2f2c9221282b6910d706c26dcce0b",
+  "head": "gmm",
+  "head_status": "complete",
+  "head_type": "gmm",
+  "initial_encoder_saved": true,
+  "input_statistics_sha256": "d10f3a1000a6161310eb8b430f04189b12d801c81902634dadedf0aa8c5377a4",
+  "layout": {
+    "F": 25,
+    "dimensions": {
+      "E": 8,
+      "P": 8,
+      "R": 8,
+      "S": 1
+    },
+    "order": [
+      "S",
+      "E",
+      "P",
+      "R"
+    ],
+    "slices": {
+      "E": [
+        1,
+        9
+      ],
+      "P": [
+        9,
+        17
+      ],
+      "R": [
+        17,
+        25
+      ],
+      "S": [
+        0,
+        1
+      ]
+    }
+  },
+  "metrics_sha256": "4bbd2f3c7c11d204bfb915d3d44d8690fda4b556bb680a24c67dfcbd23da8e06",
+  "mode": "pretrained",
+  "normalized_cache_sha256": "66efb73189a78eafe52aba76d4af4eb377e267479a2936944a442ce4243e4a68",
+  "ranges": {
+    "calibration": [
+      11831,
+      13104
+    ],
+    "train": [
+      0,
+      10177
+    ],
+    "validation": [
+      10368,
+      11640
+    ]
+  },
+  "raw_input_statistics_sha256": "d10f3a1000a6161310eb8b430f04189b12d801c81902634dadedf0aa8c5377a4",
+  "schema": "mnrf-view-probe-v2",
+  "segments": [
+    [
+      0,
+      17520
+    ]
+  ],
+  "source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "f1f036249a8ac221780af1e677aaa4ca116db78bb8b27cd1b14656e928a1cccf",
+    "input_length": 17520,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        11831,
+        13104
+      ],
+      "train": [
+        0,
+        10177
+      ],
+      "validation": [
+        10368,
+        11640
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          11831,
+          13104
+        ]
+      ],
+      "train": [
+        [
+          0,
+          10177
+        ]
+      ],
+      "validation": [
+        [
+          10368,
+          11640
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        17520
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "NYC.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        10177
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 4225,
+    "test_endpoints_sha256": "1d0140dc22aed4e5829f0794ac9443495573d420b324a0b7298ffa793d76261e",
+    "test_segments": [
+      [
+        13104,
+        17520
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "15f2f9583870525bbbbb509b787165a74f54f06eb0b69faf0cbc296ed5e29038"
+    },
+    "train_length": 13104,
+    "variable_names": [
+      "channnel1",
+      "channnel2",
+      "channnel3"
+    ]
+  },
+  "source_identity_sha256": "09849d805e96ab8c7dd221a3a9cf3b068c6e2fe14692ee28cdfce8508462ef37",
+  "stage_status": "complete",
+  "task_name": "NYC.csv",
+  "temporal_rule": {
+    "entity_boundary_columns": [],
+    "expected_interval_ns": 1,
+    "fit_range": [
+      0,
+      10177
+    ],
+    "time_kind": "timestamp_naive_ns",
+    "tolerance": 0.05,
+    "version": "train-frozen-cadence-v1"
+  },
+  "test_endpoint_count": 4225,
+  "test_endpoint_sha256": "1d0140dc22aed4e5829f0794ac9443495573d420b324a0b7298ffa793d76261e",
+  "test_length": 4416,
+  "test_local_indices_sha256": "5a8cd540461b90758b5151afbf0e1ac82bf8524088ab6bc36aa8690dfcd1bc3e",
+  "test_nll_sha256": "b19b3b7264c0d9a2d7fcb2b97761393b5fbfe4add737982b728892d78f15b8a3",
+  "test_time_values_sha256": "c18f6ffa9d5cf39845b4418cef1290a62c426f50a0c4a337d5b4bae52fa16cdb",
+  "variable_names": [
+    "channnel1",
+    "channnel2",
+    "channnel3"
+  ]
+}

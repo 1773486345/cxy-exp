@@ -1,0 +1,9 @@
+{
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "mode": "full_gmm",
+  "run_identity": "1953372f0ebb1c1c5a38ea4f39c06fa38845dc1cc44db54561ecf7f203a1918a",
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete",
+  "task_name": "CalIt2.csv"
+}

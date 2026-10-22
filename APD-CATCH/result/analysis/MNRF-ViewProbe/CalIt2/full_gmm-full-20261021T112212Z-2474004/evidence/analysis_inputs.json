@@ -1,0 +1,65 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": {
+    "columns": [],
+    "test_segment_identity": [
+      {
+        "boundary_value": null,
+        "segment_id": 0
+      }
+    ],
+    "values": []
+  },
+  "data_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/CalIt2.csv",
+  "data_file_sha256": "2a60825e112d4e80eeaa6aba1e554420db7cd04755e9bb3b7dccd618cd64ff8a",
+  "full_rows": 5040,
+  "full_segments": [
+    [
+      0,
+      5040
+    ]
+  ],
+  "labels_sha256": "1ce11ac7f6736be219b0da54e0c1398044d29e2e5b47507fe3501e1c85321e31",
+  "metadata_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_file_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "provenance_file": "training_provenance.json",
+  "provenance_sha256": "f479f78fb51bb7e9660f982653912e9dcee86d6cda7e8a88916a418a29b09f33",
+  "schema": "mnrf-view-probe-analysis-inputs-v1",
+  "selected_metadata_row": {
+    "anomaly_rate": "0.040873016",
+    "dataset_name": "CalIt2",
+    "file_name": "CalIt2.csv",
+    "if_univariate": "False",
+    "pattern": "nan",
+    "seasonal": "nan",
+    "shifting": "nan",
+    "size": "large",
+    "stationary": "nan",
+    "test_lens": "2520",
+    "time_steps": "5040",
+    "train_lens": "2520",
+    "trend": "nan",
+    "type_value": "nan"
+  },
+  "source_identity_sha256": "cd577ffa9d59aa1fa9cd52a1479ccbfe6a4a639c1091d1954869fadb57b0b307",
+  "source_manifest_sha256": "eb951c662ada304fae6f713b6a078a97f85b5130868487e21696c363a8376c38",
+  "test_length": 2520,
+  "test_segment_identity": [
+    {
+      "boundary_value": null,
+      "segment_id": 0
+    }
+  ],
+  "test_segments": [
+    [
+      2520,
+      5040
+    ]
+  ],
+  "time_kind": "timestamp_naive_ns",
+  "train_length": 2520,
+  "variable_names": [
+    "9",
+    "7"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "aggregation_matches_predictions": true,
+  "aggregation_matches_scores": true,
+  "formula": "max_c((test_nll[:,c]-center[c])/scale[c])",
+  "scale_floor": 0.001,
+  "status": "complete",
+  "threshold": 5.727228491306314,
+  "variables": [
+    {
+      "anomaly_median": -6.394634246826172,
+      "anomaly_standard_q95": 2.405126890478112,
+      "center": -7.521874904632568,
+      "max_score_frequency": 1446,
+      "normal_median": -7.912061929702759,
+      "normal_standard_q95": 1.9926659312602886,
+      "scale": 5.257439613342285,
+      "scale_floor_active": false,
+      "score_mad_floor": 0.001,
+      "variable_index": 0,
+      "variable_name": "channnel1"
+    },
+    {
+      "anomaly_median": -30.425647735595703,
+      "anomaly_standard_q95": 1.8152085920778709,
+      "center": -29.91584587097168,
+      "max_score_frequency": 1325,
+      "normal_median": -30.09354305267334,
+      "normal_standard_q95": 1.5739404682226565,
+      "scale": 5.552083492279053,
+      "scale_floor_active": false,
+      "score_mad_floor": 0.001,
+      "variable_index": 1,
+      "variable_name": "channnel2"
+    },
+    {
+      "anomaly_median": -15.409339904785156,
+      "anomaly_standard_q95": 2.620328465550881,
+      "center": -20.39994239807129,
+      "max_score_frequency": 1454,
+      "normal_median": -20.47498321533203,
+      "normal_standard_q95": 2.086125028233753,
+      "scale": 4.963226795196533,
+      "scale_floor_active": false,
+      "score_mad_floor": 0.001,
+      "variable_index": 2,
+      "variable_name": "channnel3"
+    }
+  ]
+}

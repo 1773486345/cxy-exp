@@ -1,0 +1,32 @@
+{
+  "diagnostic_only": true,
+  "note": "anomaly hit means at least one fixed-threshold alarm; this is not Aff-F or point adjustment",
+  "segment_summary": {
+    "raw_anomaly_segments": 1,
+    "segments_with_any_alarm": 0,
+    "segments_with_valid_scores": 1,
+    "segments_without_valid_scores": 0
+  },
+  "segments": [
+    {
+      "end_original": 14799,
+      "end_time_ns": 14800,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 4.878796577453613,
+      "median_score": 1.4261126518249512,
+      "no_valid_scores": false,
+      "peak_original": 14735,
+      "point_count": 99,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 14701,
+      "start_time_ns": 14702,
+      "valid_points": 99
+    }
+  ]
+}

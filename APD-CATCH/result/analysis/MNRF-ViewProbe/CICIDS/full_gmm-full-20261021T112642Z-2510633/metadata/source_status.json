@@ -1,0 +1,9 @@
+{
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "mode": "full_gmm",
+  "run_identity": "4ba3ec2427276a67f0ad43663af8855e7ae3784938c771e7b82ac6dedc926d19",
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete",
+  "task_name": "CICIDS.csv"
+}

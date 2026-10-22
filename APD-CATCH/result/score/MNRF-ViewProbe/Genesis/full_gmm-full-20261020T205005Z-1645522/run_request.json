@@ -1,0 +1,246 @@
+{
+  "config": {
+    "artifact_policy": "full",
+    "batch_size": 4,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "device": "cuda:0",
+    "encoding_batch_size": 4,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "full",
+    "gmm_fit_max_windows": 20000,
+    "gmm_log_every_iters": 10,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "log_every_seconds": 30.0,
+    "log_every_steps": 100,
+    "mode": "full_gmm",
+    "noise_seed": 20261013,
+    "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522",
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "resume_from": "",
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 25,
+    "selected_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "selected_views": [
+      "S",
+      "E",
+      "P",
+      "R"
+    ],
+    "seq_len": 192,
+    "source_dir": "",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "Genesis.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "gmm_progress_identity": "5ce80cc76dff7b6529f4d0119aa8900d809a4cc550e5a04f49af1747a50740d8",
+  "initial_encoder_sha256": "5549a90b0d23f64a7351aedda0ab831cda2a96680403628ea239b8b6be56ee03",
+  "mode": "full_gmm",
+  "run_identity": "23ce797a8b8d6b54b6d5392fe1e1d3cc0ee57f8ea59c6140cd02b43e312f3b52",
+  "schema": "mnrf-view-probe-v2",
+  "source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "cbc812eabd653e945f37c2005316654ce836d26138e6d091565296348bc62e88",
+    "input_length": 16220,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        3281,
+        3604
+      ],
+      "train": [
+        0,
+        2577
+      ],
+      "validation": [
+        2768,
+        3090
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          3281,
+          3604
+        ]
+      ],
+      "train": [
+        [
+          0,
+          2577
+        ]
+      ],
+      "validation": [
+        [
+          2768,
+          3090
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        16220
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "Genesis.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        2577
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 12425,
+    "test_endpoints_sha256": "2f8d6c5b72ddc74c22b87963ae5921d819e6be80dbd017ddf9877fac955af615",
+    "test_segments": [
+      [
+        3604,
+        16220
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "35b03ab6a1ec09a1845fad934e57a6e72997b9bd5851d1b769a1b267b79452bb"
+    },
+    "train_length": 3604,
+    "variable_names": [
+      "MotorData.ActCurrent",
+      "MotorData.ActPosition",
+      "MotorData.ActSpeed",
+      "MotorData.IsAcceleration",
+      "MotorData.IsForce",
+      "MotorData.Motor_Pos1reached",
+      "MotorData.Motor_Pos2reached",
+      "MotorData.Motor_Pos3reached",
+      "MotorData.Motor_Pos4reached",
+      "NVL_Recv_Ind.GL_Metall",
+      "NVL_Recv_Ind.GL_NonMetall",
+      "NVL_Recv_Storage.GL_I_ProcessStarted",
+      "NVL_Recv_Storage.GL_I_Slider_IN",
+      "NVL_Recv_Storage.GL_I_Slider_OUT",
+      "NVL_Recv_Storage.GL_LightBarrier",
+      "NVL_Send_Storage.ActivateStorage",
+      "PLC_PRG.Gripper",
+      "PLC_PRG.MaterialIsMetal"
+    ]
+  },
+  "stage": "gmm_fitting",
+  "task_name": "Genesis.csv"
+}

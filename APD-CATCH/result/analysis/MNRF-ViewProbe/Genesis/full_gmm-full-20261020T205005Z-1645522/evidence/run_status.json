@@ -1,0 +1,9 @@
+{
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "mode": "full_gmm",
+  "run_identity": "23ce797a8b8d6b54b6d5392fe1e1d3cc0ee57f8ea59c6140cd02b43e312f3b52",
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete",
+  "task_name": "Genesis.csv"
+}

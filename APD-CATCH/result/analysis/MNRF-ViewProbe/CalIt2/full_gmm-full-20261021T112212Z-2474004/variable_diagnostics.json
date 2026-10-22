@@ -1,0 +1,36 @@
+{
+  "aggregation_matches_predictions": true,
+  "aggregation_matches_scores": true,
+  "formula": "max_c((test_nll[:,c]-center[c])/scale[c])",
+  "scale_floor": 0.001,
+  "status": "complete",
+  "threshold": 4.047459717988971,
+  "variables": [
+    {
+      "anomaly_median": 6.9311206340789795,
+      "anomaly_standard_q95": 3.612516229652344,
+      "center": 1.0346161127090454,
+      "max_score_frequency": 1065,
+      "normal_median": 1.7070000171661377,
+      "normal_standard_q95": 3.1815254881084596,
+      "scale": 4.205467700958252,
+      "scale_floor_active": false,
+      "score_mad_floor": 0.001,
+      "variable_index": 0,
+      "variable_name": "9"
+    },
+    {
+      "anomaly_median": 8.399211883544922,
+      "anomaly_standard_q95": 2.850539654376397,
+      "center": 2.183238983154297,
+      "max_score_frequency": 1264,
+      "normal_median": 3.5522704124450684,
+      "normal_standard_q95": 3.078075852980247,
+      "scale": 4.526801586151123,
+      "scale_floor_active": false,
+      "score_mad_floor": 0.001,
+      "variable_index": 1,
+      "variable_name": "7"
+    }
+  ]
+}

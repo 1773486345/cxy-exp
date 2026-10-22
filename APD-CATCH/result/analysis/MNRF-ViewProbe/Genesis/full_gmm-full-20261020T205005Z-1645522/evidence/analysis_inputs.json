@@ -1,0 +1,81 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": {
+    "columns": [],
+    "test_segment_identity": [
+      {
+        "boundary_value": null,
+        "segment_id": 0
+      }
+    ],
+    "values": []
+  },
+  "data_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/Genesis.csv",
+  "data_file_sha256": "fcc840cd2f8d8a64792c1f8ae95422f6c6bb2d0c7420487c1f8352a643bde672",
+  "full_rows": 16220,
+  "full_segments": [
+    [
+      0,
+      16220
+    ]
+  ],
+  "labels_sha256": "c2f96dea8c13ddd7ad1821cb21b010cb4aea19be0be2d00f3f3697175461f304",
+  "metadata_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_file_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "provenance_file": "training_provenance.json",
+  "provenance_sha256": "de3523ec2aa821781f49138b7c5798b43e7111ab768c8ec7a8c4817288eb10b2",
+  "schema": "mnrf-view-probe-analysis-inputs-v1",
+  "selected_metadata_row": {
+    "anomaly_rate": "0.003082614",
+    "dataset_name": "M_genesis",
+    "file_name": "Genesis.csv",
+    "if_univariate": "False",
+    "pattern": "nan",
+    "seasonal": "nan",
+    "shifting": "nan",
+    "size": "large",
+    "stationary": "nan",
+    "test_lens": "12616",
+    "time_steps": "16220",
+    "train_lens": "3604",
+    "trend": "nan",
+    "type_value": "nan"
+  },
+  "source_identity_sha256": "8f2ac9b44bfd46a914791d9380e772e50c7b35cee7269892513df9d43844b442",
+  "source_manifest_sha256": "d9c790772ba682c7d298e626da9744e01591429da03fa51d130b34313d2bc020",
+  "test_length": 12616,
+  "test_segment_identity": [
+    {
+      "boundary_value": null,
+      "segment_id": 0
+    }
+  ],
+  "test_segments": [
+    [
+      3604,
+      16220
+    ]
+  ],
+  "time_kind": "timestamp_naive_ns",
+  "train_length": 3604,
+  "variable_names": [
+    "MotorData.ActCurrent",
+    "MotorData.ActPosition",
+    "MotorData.ActSpeed",
+    "MotorData.IsAcceleration",
+    "MotorData.IsForce",
+    "MotorData.Motor_Pos1reached",
+    "MotorData.Motor_Pos2reached",
+    "MotorData.Motor_Pos3reached",
+    "MotorData.Motor_Pos4reached",
+    "NVL_Recv_Ind.GL_Metall",
+    "NVL_Recv_Ind.GL_NonMetall",
+    "NVL_Recv_Storage.GL_I_ProcessStarted",
+    "NVL_Recv_Storage.GL_I_Slider_IN",
+    "NVL_Recv_Storage.GL_I_Slider_OUT",
+    "NVL_Recv_Storage.GL_LightBarrier",
+    "NVL_Send_Storage.ActivateStorage",
+    "PLC_PRG.Gripper",
+    "PLC_PRG.MaterialIsMetal"
+  ]
+}

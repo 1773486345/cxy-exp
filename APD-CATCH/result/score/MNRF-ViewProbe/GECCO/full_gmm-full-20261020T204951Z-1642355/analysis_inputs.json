@@ -1,0 +1,72 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": {
+    "columns": [],
+    "test_segment_identity": [
+      {
+        "boundary_value": null,
+        "segment_id": 0
+      }
+    ],
+    "values": []
+  },
+  "data_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/GECCO.csv",
+  "data_file_sha256": "9921f43173d50c637115098bf61e2d3fc20d5b0bd87d2fee7550d139da05cbf4",
+  "full_rows": 138521,
+  "full_segments": [
+    [
+      0,
+      138521
+    ]
+  ],
+  "labels_sha256": "9b7165a21549f378af78691a5e1c3077c467bff45004655acf59d673359e5a6e",
+  "metadata_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_file_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "provenance_file": "training_provenance.json",
+  "provenance_sha256": "aab6184a17f968cfd70911a57cf7adf6a8372a05f962b909fe996644a762103b",
+  "schema": "mnrf-view-probe-analysis-inputs-v1",
+  "selected_metadata_row": {
+    "anomaly_rate": "0.012460205",
+    "dataset_name": "GECCO",
+    "file_name": "GECCO.csv",
+    "if_univariate": "False",
+    "pattern": "nan",
+    "seasonal": "nan",
+    "shifting": "nan",
+    "size": "large",
+    "stationary": "nan",
+    "test_lens": "69261",
+    "time_steps": "138521",
+    "train_lens": "69260",
+    "trend": "nan",
+    "type_value": "nan"
+  },
+  "source_identity_sha256": "48c8006439ec7c75005781fe62b8f5ef07b84970831508ec1c3418e8d191f4a3",
+  "source_manifest_sha256": "27c4d6420a5d4db6fa8972aa8d165f7ce8323b018fb3b96a2cdcd82ee94b4bde",
+  "test_length": 69261,
+  "test_segment_identity": [
+    {
+      "boundary_value": null,
+      "segment_id": 0
+    }
+  ],
+  "test_segments": [
+    [
+      69260,
+      138521
+    ]
+  ],
+  "time_kind": "timestamp_naive_ns",
+  "train_length": 69260,
+  "variable_names": [
+    "Tp",
+    "Cl",
+    "pH",
+    "Redox",
+    "Leit",
+    "Trueb",
+    "Cl_2",
+    "Fm",
+    "Fm_2"
+  ]
+}

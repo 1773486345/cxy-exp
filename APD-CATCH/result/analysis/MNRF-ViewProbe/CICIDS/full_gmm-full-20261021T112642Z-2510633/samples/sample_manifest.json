@@ -1,0 +1,95 @@
+{
+  "budgets": {
+    "calibration": 128,
+    "test": 512,
+    "train": 256,
+    "validation": 128
+  },
+  "diagnostic_only": true,
+  "seed": 20261013,
+  "selection": "deterministic bounded sampling; test stratifies available confusion classes and anomalies",
+  "source_manifest_sha256": "e4d2b84af7847fafd8660366987bdbcf5cd1f8799d4a11d6a2e15abf36c28b05",
+  "splits": {
+    "calibration": {
+      "candidate_counts": {
+        "deterministic_uniform": 8283
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        72,
+        25
+      ],
+      "total_windows": 8283
+    },
+    "test": {
+      "candidate_counts": {
+        "fn": 74,
+        "fp": 1411,
+        "tn": 83440,
+        "tp": 0
+      },
+      "count": 512,
+      "reason_counts": {
+        "deterministic_uniform": 436,
+        "fn": 74,
+        "fp": 1,
+        "tn": 1
+      },
+      "selected_counts": {
+        "deterministic_uniform": 436,
+        "fn": 74,
+        "fp": 1,
+        "tn": 1
+      },
+      "shape": [
+        512,
+        72,
+        25
+      ],
+      "total_windows": 84925
+    },
+    "train": {
+      "candidate_counts": {
+        "deterministic_uniform": 67595
+      },
+      "count": 256,
+      "reason_counts": {
+        "deterministic_uniform": 256
+      },
+      "selected_counts": {
+        "deterministic_uniform": 256
+      },
+      "shape": [
+        256,
+        72,
+        25
+      ],
+      "total_windows": 67595
+    },
+    "validation": {
+      "candidate_counts": {
+        "deterministic_uniform": 8282
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        72,
+        25
+      ],
+      "total_windows": 8282
+    }
+  }
+}

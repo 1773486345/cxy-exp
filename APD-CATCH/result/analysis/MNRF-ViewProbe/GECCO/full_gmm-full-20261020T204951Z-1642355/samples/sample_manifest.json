@@ -1,0 +1,99 @@
+{
+  "budgets": {
+    "calibration": 128,
+    "test": 512,
+    "train": 256,
+    "validation": 128
+  },
+  "diagnostic_only": true,
+  "seed": 20261013,
+  "selection": "deterministic bounded sampling; test stratifies available confusion classes and anomalies",
+  "source_manifest_sha256": "27c4d6420a5d4db6fa8972aa8d165f7ce8323b018fb3b96a2cdcd82ee94b4bde",
+  "splits": {
+    "calibration": {
+      "candidate_counts": {
+        "deterministic_uniform": 6812
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        9,
+        25
+      ],
+      "total_windows": 6812
+    },
+    "test": {
+      "candidate_counts": {
+        "fn": 544,
+        "fp": 70,
+        "tn": 68366,
+        "tp": 186
+      },
+      "count": 512,
+      "reason_counts": {
+        "anomaly_segment_stratified": 256,
+        "deterministic_uniform": 252,
+        "fn": 1,
+        "fp": 1,
+        "tn": 1,
+        "tp": 1
+      },
+      "selected_counts": {
+        "anomaly_segment_stratified": 256,
+        "deterministic_uniform": 252,
+        "fn": 1,
+        "fp": 1,
+        "tn": 1,
+        "tp": 1
+      },
+      "shape": [
+        512,
+        9,
+        25
+      ],
+      "total_windows": 69166
+    },
+    "train": {
+      "candidate_counts": {
+        "deterministic_uniform": 55161
+      },
+      "count": 256,
+      "reason_counts": {
+        "deterministic_uniform": 256
+      },
+      "selected_counts": {
+        "deterministic_uniform": 256
+      },
+      "shape": [
+        256,
+        9,
+        25
+      ],
+      "total_windows": 55161
+    },
+    "validation": {
+      "candidate_counts": {
+        "deterministic_uniform": 6812
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        9,
+        25
+      ],
+      "total_windows": 6812
+    }
+  }
+}
