@@ -18,6 +18,40 @@ The default device is
 the inherited logical `cuda:0`; edit the literal `DEVICE="cuda:0"` near the
 top of one script to `cpu` when a CPU run is intended.
 
+## Frozen-view branch ablation
+
+Use `python scripts/run_mnrf_branch_ablation.py --all --mode plan` for a
+read-only 8x9 matrix. The nine combinations are S, SE, SP, SR, FULL,
+WITHOUT_S, WITHOUT_E, WITHOUT_P and WITHOUT_R (widths 1/9/9/9/25/24/17/17/17).
+`--repeat-plan` expands the head seed list to 2021/2022/2023 (216 positions);
+these are frozen-feature GMM-head seeds, not encoder seeds. Missing cells stay
+`planned/pending`, while blocked and conflicting cells remain visible.
+
+After reviewing the plan, start one dataset at a time with its independent
+entry, for example:
+
+```bash
+bash scripts/multivariate_detection/detect_score/PSM_script/MNRFBranchAblation.sh
+```
+
+The other seven entries use the same filename under MSL, GECCO, Genesis, NYC,
+CalIt2, Creditcard and CICIDS. Repeat mode has a corresponding
+`MNRFBranchAblationRepeat.sh`. Derived heads reference the pinned Full cache;
+they do not copy an encoder or cache and add no GPU lock or scheduler. Summarize
+a completed plan read-only with:
+
+```bash
+python scripts/summarize_mnrf_branch_ablation.py \
+  --plan /absolute/path/to/result/analysis/MNRF-ViewProbe-Ablation/<batch>/plan.json
+```
+
+The summary independently rechecks scores, labels, confusion counts, full-axis
+anomaly segments and paired contribution deltas. For E/P/R, addition is
+`metric(S+branch)-metric(S)` and deletion is
+`metric(FULL)-metric(FULL-minus-branch)`; a positive deletion means removal
+hurt. S has deletion only. This evaluates frozen representations and heads; it
+is not causal proof, paper-protocol equivalence, or a claim over CATCH.
+
 The eight entries use `artifact_policy=full` literally. A successful run keeps
 the encoder checkpoints, complete split caches, GMM heads, calibration,
 per-variable NLL and score evidence for later read-only reuse. The log can be

@@ -359,3 +359,13 @@ storage, retention, and load-device fields while retaining model, sample,
 statistics, noise, cache, endpoint, and source bindings. Progress written by
 the previous release is accepted only after its persisted configuration is
 reconstructed and all immutable bindings match, then migrated atomically.
+
+## Frozen-view branch ablations
+
+Branch ablations select columns from the saved 25-dimensional S/E/P/R cache;
+they do not remove network branches or retrain an encoder. The nine combinations
+are S, SE, SP, SR, FULL, EPR (without S), SPR (without E), SER (without P), and
+SEP (without R), with widths 1/9/9/9/25/24/17/17/17. Each combination fits an
+independent CPU GMM and calibration on the source's fixed endpoints. Positive
+deletion means that removing the branch hurt the metric; negative deletion is
+a head/fusion diagnostic, not proof that the representation is useless.
