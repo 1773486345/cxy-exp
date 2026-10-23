@@ -34,7 +34,7 @@ COMBINATIONS = (
     ("WITHOUT_S", ("E", "P", "R")), ("WITHOUT_E", ("S", "P", "R")),
     ("WITHOUT_P", ("S", "E", "R")), ("WITHOUT_R", ("S", "E", "P")),
 )
-SEEDS = (2021, 2022, 2023)
+HEAD_SEED = 2021
 EXPECTED_LAYOUT = {
     "F": 25,
     "order": ["S", "E", "P", "R"],
@@ -346,9 +346,9 @@ def _row(task, combo, views, seed, source, status, candidate=None, output_path="
     }
 
 
-def build_plan(tasks, repeat=False, batch_id=None, validate_sources=True):
+def build_plan(tasks, batch_id=None, validate_sources=True):
     batch_id = batch_id or "branch-ablation-{}-{}".format(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()), os.getpid())
-    seeds = SEEDS if repeat else (2021,)
+    seeds = (HEAD_SEED,)
     validate_cache = {}
     inventory = {}
     source_records = {task: _source_record(task, validate_cache) if validate_sources else {
@@ -368,7 +368,7 @@ def build_plan(tasks, repeat=False, batch_id=None, validate_sources=True):
                     status = candidate["status"]
                 rows.append(_row(task, combo, views, seed, source, status, candidate,
                                  str(output.resolve())))
-    return {"batch_id": batch_id, "mode": "repeat" if repeat else "first_round",
+    return {"batch_id": batch_id, "mode": "first_round", "head_seed": HEAD_SEED,
             "tasks": list(tasks), "seeds": list(seeds), "source_records": source_records,
             "candidate_paths": {task: [str(path) for path in paths]
                                 for task, paths in inventory.items()},
@@ -385,7 +385,8 @@ def _save_batch(plan, summary_root=None):
     _write_json(batch_dir / "plan.json", plan)
     _write_csv(batch_dir / "matrix.csv", plan["rows"])
     note = {
-        "batch_id": plan["batch_id"], "positions": plan["positions"],
+        "batch_id": plan["batch_id"], "mode": plan["mode"], "head_seed": HEAD_SEED,
+        "seeds": [HEAD_SEED], "positions": plan["positions"],
         "reused": plan["reused_count"], "pending": plan["pending_count"],
         "blocked": plan["blocked_count"], "conflict": plan["conflict_count"],
         "notice": "Plan only; no encoder, GMM fit, calibration or training was run.",
@@ -421,10 +422,10 @@ def _command(task, combo, views, seed, source, output):
     return command
 
 
-def execute_task(task, repeat=False):
+def execute_task(task):
     if task not in TASKS:
         raise ValueError("unknown task: {}".format(task))
-    plan = build_plan([task], repeat=repeat)
+    plan = build_plan([task])
     batch_dir = _save_batch(plan)
     sources = plan["source_records"]
     source = sources[task]
@@ -544,16 +545,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", choices=tuple(TASKS))
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--mode", choices=("plan", "execute", "repeat"), default="plan")
-    parser.add_argument("--repeat-plan", action="store_true",
-                        help="plan all three head seeds without fitting; valid with --mode plan")
+    parser.add_argument("--mode", choices=("plan", "execute"), default="plan")
     parser.add_argument("--validate-sources", action="store_true", default=True)
     args = parser.parse_args()
     tasks = list(TASKS) if args.all else ([args.task] if args.task else [])
     if not tasks:
         parser.error("provide --task TASK or --all")
     if args.mode == "plan":
-        plan = build_plan(tasks, repeat=args.repeat_plan, validate_sources=args.validate_sources)
+        plan = build_plan(tasks, validate_sources=args.validate_sources)
         batch_dir = _save_batch(plan)
         print("plan_dir={}".format(batch_dir.resolve()))
         print("positions={} reused={} pending={} blocked={} conflict={}".format(
@@ -563,10 +562,7 @@ def main():
     if args.mode == "execute":
         if len(tasks) != 1:
             parser.error("execute accepts exactly one --task; no cross-dataset batch scheduling")
-        return execute_task(tasks[0], repeat=False)
-    if len(tasks) != 1:
-        parser.error("repeat accepts exactly one --task; no cross-dataset batch scheduling")
-    return execute_task(tasks[0], repeat=True)
+        return execute_task(tasks[0])
 
 
 if __name__ == "__main__":

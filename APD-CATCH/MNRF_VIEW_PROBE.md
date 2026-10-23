@@ -375,6 +375,7 @@ with the native validator. It requires the exact Full scoring axes, masks,
 labels, times, and segment identities, and reproduces each candidate score from
 its saved test NLL and calibration center/scale. Missing, failed, blocked, or
 invalid cells remain explicit and make the summary non-complete; no score or
-point bundle is retained from a failed verification. Repeat head seeds are
-paired by the same seed, and paired reports separate added/lost TP, added/
-removed FP, and gained/lost anomaly segments.
+point bundle is retained from a failed verification. The current ablation
+matrix is fixed to head seed 2021 (72 positions across eight datasets); paired
+reports separate added/lost TP, added/removed FP, and gained/lost anomaly
+segments.

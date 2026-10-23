@@ -1,0 +1,32 @@
+{
+  "operation": "remove-obsolete-multi-seed-ablation",
+  "fixed_head_seed": 2021,
+  "deleted_repeat_batches": [
+    {
+      "path": "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T133432Z-3432874",
+      "evidence": {"mode": "repeat", "seeds": [2021, 2022, 2023], "positions": 216}
+    },
+    {
+      "path": "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T140233Z-3612049",
+      "evidence": {"mode": "repeat", "seeds": [2021, 2022, 2023], "positions": 216}
+    },
+    {
+      "path": "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T180322Z-2",
+      "evidence": {"mode": "repeat", "seeds": [2021, 2022, 2023], "positions": 216}
+    }
+  ],
+  "deleted_review_packages": [
+    "result/review/MNRF-ViewProbe/MNRF_BRANCH_ABLATION_branch-ablation-20261023T140233Z-3612049.zip"
+  ],
+  "execution_result": "all listed repeat directories, package, and launchers were removed; no deletion error occurred",
+  "deleted_repeat_launchers": [
+    "PSM", "MSL", "GECCO", "Genesis", "NYC", "CalIt2", "Creditcard", "CICIDS"
+  ],
+  "preserved_single_seed_batches": [
+    "branch-ablation-20261023T132059Z-3358281",
+    "branch-ablation-20261023T135838Z-3590307",
+    "branch-ablation-20261023T173741Z-2"
+  ],
+  "exceptions_retained": [],
+  "scope": "No Full source, cache, checkpoint, data, or seed=2021 ablation run was deleted."
+}

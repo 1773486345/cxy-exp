@@ -1,0 +1,25 @@
+{
+  "batch_id": "branch-ablation-20261023T185511Z-1181216",
+  "batch_status": "failed",
+  "blocked": 36,
+  "complete": 0,
+  "complete_or_reused": 4,
+  "conflict": 0,
+  "contribution_sign": "added = AP(S+branch)-AP(S); deleted = AP(FULL)-AP(FULL-minus-branch); positive deletion means removal hurts.",
+  "datasets_complete": 0,
+  "datasets_requested": 8,
+  "datasets_with_results": 4,
+  "failed": 0,
+  "interpretation": "Frozen encoder representations with independently refit GMM heads; not encoder-seed variance or causal proof.",
+  "invalid": 0,
+  "pending": 32,
+  "plan_errors": {
+    "duplicate": 0,
+    "missing": 0,
+    "unexpected": 0
+  },
+  "positions_expected": 72,
+  "positions_present": 72,
+  "reused": 4,
+  "running": 0
+}

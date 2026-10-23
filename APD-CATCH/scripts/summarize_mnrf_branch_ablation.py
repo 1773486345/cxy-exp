@@ -411,6 +411,46 @@ def contribution_deltas(metrics_by_combo):
     return result
 
 
+def cross_dataset_summary(tasks, evals, tolerance=1e-12):
+    """Summarize fixed-seed contribution signs across requested datasets.
+
+    Only cells validated in this invocation are included. Missing, blocked and
+    invalid cells remain represented by ``observed=0`` rather than being
+    treated as ties or zeros.
+    """
+    rows = []
+    for branch in ("S", "E", "P", "R"):
+        for direction in ("added", "deleted"):
+            if direction == "added" and branch == "S":
+                combinations = (None,)
+            else:
+                combinations = ("average_precision", "auc_roc")
+            for metric in combinations:
+                values = []
+                participating = []
+                for task in tasks:
+                    table = {combo: evals.get((task, combo, 2021)) for combo, _ in COMBINATIONS}
+                    delta = contribution_deltas(table)[branch][direction]
+                    value = None if metric is None else delta.get(metric)
+                    if value is not None and np.isfinite(value):
+                        values.append(float(value))
+                        participating.append(task)
+                rows.append({
+                    "branch": branch, "direction": direction,
+                    "metric": "not_applicable" if metric is None else metric,
+                    "requested": len(tasks), "observed": len(values),
+                    "wins": sum(value > tolerance for value in values),
+                    "ties": sum(abs(value) <= tolerance for value in values),
+                    "losses": sum(value < -tolerance for value in values),
+                    "mean": float(np.mean(values)) if values else None,
+                    "participating_datasets": json.dumps(participating),
+                    "missing_datasets": json.dumps([task for task in tasks if task not in participating]),
+                    "tie_tolerance": tolerance,
+                    "not_applicable": metric is None,
+                })
+    return rows
+
+
 PAIRED_COMPARISONS = (("S", "SE"), ("S", "SP"), ("S", "SR"),
                       ("FULL", "WITHOUT_S"), ("FULL", "WITHOUT_E"),
                       ("FULL", "WITHOUT_P"), ("FULL", "WITHOUT_R"))
@@ -525,48 +565,14 @@ def completion_counts(tasks, seeds, rows):
                             "duplicate": len(duplicate)}}
 
 
-def paired_seed_contribution_rows(tasks, seeds, evals):
-    rows = []
-    for task in tasks:
-        for branch in ("S", "E", "P", "R"):
-            for direction, base_combo, changed_combo in (
-                    ("added", "S", "S" + branch), ("deleted", "FULL", "WITHOUT_" + branch)):
-                if direction == "added" and branch == "S":
-                    for metric in ("average_precision", "auc_roc"):
-                        rows.append({"dataset": task, "branch": branch, "direction": direction,
-                                     "metric": metric, "n_requested": len(seeds), "n_pairs": 0,
-                                     "mean": None, "std": None, "per_seed": "{}",
-                                     "participating_seeds": "[]", "missing_seeds": json.dumps(list(seeds)),
-                                     "not_applicable": True})
-                    continue
-                for metric in ("average_precision", "auc_roc"):
-                    paired = {}
-                    for seed in seeds:
-                        base = evals.get((task, base_combo, int(seed)))
-                        changed = evals.get((task, changed_combo, int(seed)))
-                        if base and changed and base.get(metric) is not None and changed.get(metric) is not None:
-                            paired[str(seed)] = changed[metric] - base[metric]
-                    values = list(paired.values())
-                    participating = [int(seed) for seed in seeds if str(seed) in paired]
-                    rows.append({"dataset": task, "branch": branch, "direction": direction,
-                        "metric": metric, "n_requested": len(seeds), "n_pairs": len(values),
-                        "mean": float(np.mean(values)) if values else None,
-                        "std": float(np.std(values, ddof=1)) if len(values) > 1 else None,
-                        "per_seed": json.dumps(paired, sort_keys=True),
-                        "participating_seeds": json.dumps(participating),
-                        "missing_seeds": json.dumps([int(seed) for seed in seeds if int(seed) not in participating]),
-                        "not_applicable": False})
-    return rows
-
-
 def summarize(plan_path):
     plan_path = Path(plan_path).resolve()
     plan = _json(plan_path)
     source_records = plan["source_records"]
     requested_tasks = list(plan.get("tasks", ()))
     requested_seeds = [int(seed) for seed in plan.get("seeds", ())]
-    if not requested_tasks or not requested_seeds:
-        raise ValueError("plan must declare requested tasks and head seeds")
+    if not requested_tasks or requested_seeds != [2021]:
+        raise ValueError("this summarizer accepts exactly the fixed head seed [2021]; repeat plans are obsolete")
     expected_keys = {(task, combo, seed) for task in requested_tasks
                      for combo, _ in COMBINATIONS for seed in requested_seeds}
     raw_rows = plan.get("rows", [])
@@ -679,31 +685,7 @@ def summarize(plan_path):
                                "added_segment_hits": len(added_segments), "lost_segment_hits": len(lost_segments),
                                "change_cases": json.dumps(cases, separators=(",", ":"))})
 
-    repeat_rows = []
-    if len(plan["seeds"]) > 1:
-        for task in plan["tasks"]:
-            for combo, _ in COMBINATIONS:
-                available = [evals[(task, combo, seed)] for seed in plan["seeds"] if (task, combo, seed) in evals]
-                for metric in ("average_precision", "auc_roc", "point_f1", "normal_fpr", "recall"):
-                    values = [item[metric] for item in available if item[metric] is not None]
-                    present_metric_seeds = [int(seed) for seed in requested_seeds
-                                            if (task, combo, int(seed)) in evals
-                                            and evals[(task, combo, int(seed))].get(metric) is not None]
-                    repeat_rows.append({"dataset": task, "combination": combo, "metric": metric,
-                                        "n_complete": len(values), "mean": float(np.mean(values)) if values else None,
-                                        "std": float(np.std(values, ddof=1)) if len(values) > 1 else None,
-                                        "n_requested": len(requested_seeds),
-                                        "n_pairs": len(values),
-                                        "participating_seeds": json.dumps(present_metric_seeds),
-                                        "missing_seeds": json.dumps([int(seed) for seed in requested_seeds
-                                            if int(seed) not in present_metric_seeds]),
-                                        "per_seed": json.dumps({str(seed): evals[(task, combo, seed)].get(metric)
-                                            for seed in plan["seeds"] if (task, combo, seed) in evals})})
-
-    contribution_repeats = (paired_seed_contribution_rows(requested_tasks, requested_seeds, evals)
-                            if len(requested_seeds) > 1 else [])
-
-    return rows, contributions, paired, repeat_rows, contribution_repeats, bundles
+    return rows, contributions, paired, bundles
 
 
 def _write_bundle(path, bundles):
@@ -720,20 +702,23 @@ def main():
     parser.add_argument("--plan", required=True, help="plan.json from run_mnrf_branch_ablation.py")
     args = parser.parse_args()
     plan_path = Path(args.plan).resolve()
-    rows, contributions, paired, repeats, contribution_repeats, bundles = summarize(plan_path)
+    rows, contributions, paired, bundles = summarize(plan_path)
     batch_dir = plan_path.parent
     plan = _json(plan_path)
     _atomic_csv(batch_dir / "long_table.csv", rows)
     _atomic_csv(batch_dir / "branch_contributions.csv", contributions)
     _atomic_csv(batch_dir / "paired_changes.csv", paired)
-    if repeats:
-        _atomic_csv(batch_dir / "repeat_summary.csv", repeats)
-    else:
-        (batch_dir / "repeat_summary.csv").unlink(missing_ok=True)
-    if contribution_repeats:
-        _atomic_csv(batch_dir / "contribution_repeat_summary.csv", contribution_repeats)
-    else:
-        (batch_dir / "contribution_repeat_summary.csv").unlink(missing_ok=True)
+    # Always regenerate this table from this invocation's validated cells; an
+    # older table must never be carried into a new partial/failed summary.
+    evals = {}
+    for row in rows:
+        if row.get("status") in {"complete", "reused"}:
+            evals[(row.get("dataset"), row.get("combination"), int(row.get("head_seed")))] = row
+    _atomic_csv(batch_dir / "cross_dataset_summary.csv",
+                cross_dataset_summary(plan["tasks"], evals))
+    for obsolete in ("repeat_summary.csv", "contribution_repeat_summary.csv"):
+        # Do not carry stale repeat tables into a regenerated single-seed batch.
+        (batch_dir / obsolete).unlink(missing_ok=True)
     _atomic_json(batch_dir / "change_cases.json", {
         "case_limit_per_category": 8,
         "ordering": "increasing global coordinate / source segment key",
@@ -762,7 +747,7 @@ Batch status: `{status}`. Coverage: {datasets_complete}/{datasets_requested} com
 
 For E/P/R, addition is `metric(S+branch)-metric(S)` and deletion is `metric(FULL)-metric(FULL-minus-branch)`. Positive deletion means removal hurt. S has deletion only. AP is average precision, not Aff-F. Segment hits mean at least one predicted point and are diagnostic only.
 
-Head seeds vary GMM initialization on frozen features; they are not encoder seeds. These results do not prove causal representation contribution, paper-protocol equivalence, or superiority to CATCH. Full caches, encoders and GMM files stay in their server source runs.
+The head seed is fixed to 2021 for this matrix; it is a GMM-head seed on frozen features, not an encoder seed. These results do not prove causal representation contribution, paper-protocol equivalence, or superiority to CATCH. Full caches, encoders and GMM files stay in their server source runs.
 """.format(batch=report["batch_id"], status=report["batch_status"],
            datasets_complete=report["datasets_complete"], datasets_requested=report["datasets_requested"],
            complete_or_reused=report["complete_or_reused"], positions_expected=report["positions_expected"]))
@@ -772,8 +757,7 @@ Head seeds vary GMM initialization on frozen features; they are not encoder seed
     temporary_archive = archive.with_name(archive.name + ".tmp-{}".format(os.getpid()))
     with zipfile.ZipFile(str(temporary_archive), "w", compression=zipfile.ZIP_DEFLATED) as output:
         for name in ("plan.json", "matrix.csv", "long_table.csv", "branch_contributions.csv",
-                     "paired_changes.csv", "cross_dataset_summary.csv", "repeat_summary.csv",
-                     "contribution_repeat_summary.csv", "change_cases.json",
+                     "paired_changes.csv", "cross_dataset_summary.csv", "change_cases.json",
                      "summary.json", "README.md", "paired_point_scores.npz"):
             candidate = batch_dir / name
             if candidate.is_file():

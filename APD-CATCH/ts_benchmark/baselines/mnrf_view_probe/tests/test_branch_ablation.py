@@ -1,4 +1,7 @@
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 import hashlib
@@ -13,7 +16,7 @@ from scripts.validate_mnrf_view_probe import validate
 from scripts.run_mnrf_branch_ablation import COMBINATIONS, EXPECTED_LAYOUT, build_plan, selected_indices
 from scripts.summarize_mnrf_branch_ablation import (
     _evaluation, _point_and_segment_changes, completion_counts,
-    contribution_deltas, paired_seed_contribution_rows, segment_counts_from_axis,
+    contribution_deltas, segment_counts_from_axis, summarize,
 )
 
 
@@ -110,24 +113,26 @@ def test_paired_changes_report_added_and_lost_even_when_net_is_zero():
     assert len(added_segments) == len(lost_segments) == 1
 
 
-def test_repeat_contribution_pairs_same_seeds_and_reports_missing_pairs():
-    evals = {
-        ("PSM", "S", 2021): {"average_precision": .4, "auc_roc": .6},
-        ("PSM", "SE", 2021): {"average_precision": .5, "auc_roc": .7},
-        ("PSM", "S", 2022): {"average_precision": .5, "auc_roc": .7},
-        ("PSM", "SE", 2022): {"average_precision": .4, "auc_roc": .6},
-        ("PSM", "SE", 2023): {"average_precision": .3, "auc_roc": .5},
+def test_repeat_plan_is_rejected_instead_of_shrinking_to_single_seed(tmp_path):
+    plan = {
+        "tasks": ["PSM"], "seeds": [2021, 2022, 2023], "source_records": {},
+        "rows": [], "batch_id": "obsolete-repeat",
     }
-    rows = paired_seed_contribution_rows(["PSM"], [2021, 2022, 2023], evals)
-    row = next(item for item in rows if item["branch"] == "E" and item["direction"] == "added"
-               and item["metric"] == "average_precision")
-    assert row["n_requested"] == 3 and row["n_pairs"] == 2
-    assert json.loads(row["participating_seeds"]) == [2021, 2022]
-    assert json.loads(row["missing_seeds"]) == [2023]
-    assert row["mean"] == pytest.approx(0.0)
-    assert row["std"] == pytest.approx(np.std([.1, -.1], ddof=1))
-    s_added = next(item for item in rows if item["branch"] == "S" and item["direction"] == "added")
-    assert s_added["not_applicable"] is True and s_added["mean"] is None
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixed head seed"):
+        summarize(path)
+
+
+def test_runner_rejects_removed_repeat_cli_without_creating_a_batch(tmp_path):
+    runner = Path(__file__).resolve().parents[4] / "scripts" / "run_mnrf_branch_ablation.py"
+    result = subprocess.run(
+        [sys.executable, str(runner), "--task", "PSM", "--mode", "repeat"],
+        cwd=str(runner.parents[1]), text=True, capture_output=True,
+    )
+    assert result.returncode != 0
+    assert "invalid choice" in result.stderr
+    assert not list((runner.parents[1] / "result/analysis/MNRF-ViewProbe-Ablation").glob("*repeat*"))
 
 
 def test_summary_native_validation_rejects_tampered_scores_and_changed_point_set(tmp_path, monkeypatch):
