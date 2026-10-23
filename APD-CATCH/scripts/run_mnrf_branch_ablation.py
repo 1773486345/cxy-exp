@@ -507,6 +507,11 @@ def _metrics_row(task, combo, views, seed, source, run, checked):
     from scripts.summarize_mnrf_branch_ablation import segment_counts
     segment = segment_counts(source["path"], endpoints, predictions)
     metrics = checked["metrics"]
+    manifest = _json(path / "probe_manifest.json")
+    config = manifest.get("config", {})
+    gmm_status_path = path / "heads/gmm_status.json"
+    gmm_status = _json(gmm_status_path) if gmm_status_path.is_file() else {}
+    parameter_count = metrics.get("head_parameter_count", gmm_status.get("head_parameter_count"))
     return {
         "dataset": task, "combination": combo, "head_seed": seed,
         "source_encoder_seed": 2021, "source_run_id": Path(source["path"]).name,
@@ -514,8 +519,12 @@ def _metrics_row(task, combo, views, seed, source, run, checked):
         "feature_fingerprint": source.get("feature_fingerprint"),
         "selected_views": ",".join(views), "selected_indices": json.dumps(selected_indices(views)),
         "selected_dim": len(selected_indices(views)),
-        "gmm_components": metrics.get("gmm_components"), "gmm_covariance_type": metrics.get("gmm_covariance_type"),
-        "fit_endpoint_hash": _json(Path(run) / "probe_manifest.json").get("gmm_fit_endpoints_sha256"),
+        "gmm_components": config.get("gmm_components"), "gmm_covariance_type": config.get("gmm_covariance_type"),
+        "gmm_reg_covar": config.get("gmm_reg_covar"), "gmm_n_init": config.get("gmm_n_init"),
+        "gmm_max_iter": config.get("gmm_max_iter"),
+        "gmm_fit_max_windows": config.get("gmm_fit_max_windows"),
+        "head_parameter_count": parameter_count,
+        "fit_endpoint_hash": manifest.get("gmm_fit_endpoints_sha256"),
         "candidate_or_output_path": str(path.resolve()), "status": "complete", "reason": "",
         "auc_roc": float(roc_auc_score(actual, scores)) if np.unique(actual).size == 2 else None,
         "average_precision": float(average_precision_score(actual, scores)),

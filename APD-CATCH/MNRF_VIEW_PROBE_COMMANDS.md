@@ -52,6 +52,17 @@ anomaly segments and paired contribution deltas. For E/P/R, addition is
 hurt. S has deletion only. This evaluates frozen representations and heads; it
 is not causal proof, paper-protocol equivalence, or a claim over CATCH.
 
+Each summary invocation revalidates the pinned Full source and each candidate
+with the native read-only validator, requires exact equality of candidate and
+Full scoring axes/masks, and recomputes scores from saved per-variable NLL plus
+that head's calibration statistics. Invalid cells are excluded from metrics
+and point bundles. `summary.json` reports expected/present cells, fully
+complete datasets, and complete/reused/pending/running/failed/blocked/conflict/
+invalid counts; failed, blocked, conflicting, or invalid plans exit nonzero.
+Repeat summaries pair contribution deltas by the same head seed and list
+missing seeds. Paired changes distinguish added/lost TP, added/removed FP, and
+gained/lost anomaly-segment hits, with bounded examples in `change_cases.json`.
+
 The eight entries use `artifact_policy=full` literally. A successful run keeps
 the encoder checkpoints, complete split caches, GMM heads, calibration,
 per-variable NLL and score evidence for later read-only reuse. The log can be

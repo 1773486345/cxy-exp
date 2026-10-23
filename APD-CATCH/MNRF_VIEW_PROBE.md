@@ -369,3 +369,12 @@ SEP (without R), with widths 1/9/9/9/25/24/17/17/17. Each combination fits an
 independent CPU GMM and calibration on the source's fixed endpoints. Positive
 deletion means that removing the branch hurt the metric; negative deletion is
 a head/fusion diagnostic, not proof that the representation is useless.
+
+The read-only summary validates the pinned Full source and every candidate again
+with the native validator. It requires the exact Full scoring axes, masks,
+labels, times, and segment identities, and reproduces each candidate score from
+its saved test NLL and calibration center/scale. Missing, failed, blocked, or
+invalid cells remain explicit and make the summary non-complete; no score or
+point bundle is retained from a failed verification. Repeat head seeds are
+paired by the same seed, and paired reports separate added/lost TP, added/
+removed FP, and gained/lost anomaly segments.

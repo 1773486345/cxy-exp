@@ -18,7 +18,9 @@ if str(ROOT) not in sys.path:
 
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-from scripts.run_mnrf_branch_ablation import COMBINATIONS, _json, selected_indices
+from scripts.run_mnrf_branch_ablation import (
+    COMBINATIONS, TASKS, _json, _same_conditions, _validate_run, _views, selected_indices,
+)
 
 
 def _atomic_json(path, value):
@@ -54,46 +56,136 @@ def _npz(path):
     return np.load(path, allow_pickle=False)
 
 
-def _evaluation(run_dir, pinned_source, dataset, combination, seed):
+def _evaluation(run_dir, pinned_source, dataset, combination, seed, checked_runs=None):
     run_dir = Path(run_dir)
     pinned_source = Path(pinned_source)
-    manifest = _json(run_dir / "probe_manifest.json")
+    checked_runs = checked_runs if checked_runs is not None else {}
+    source_key, run_key = pinned_source.resolve(), run_dir.resolve()
+    if source_key not in checked_runs:
+        checked_runs[source_key] = _validate_run(pinned_source)
+    if run_key not in checked_runs:
+        checked_runs[run_key] = checked_runs[source_key] if run_key == source_key else _validate_run(run_dir)
+    source_checked, run_checked = checked_runs[source_key], checked_runs[run_key]
+    manifest = run_checked["manifest"]
     aligned = _npz(run_dir / "results/aligned_scores.npz")
-    source_manifest = _json(pinned_source / "probe_manifest.json")
-    if run_dir.resolve() != pinned_source.resolve():
-        if manifest.get("source_identity") != source_manifest.get("source_identity"):
-            raise ValueError("run source_identity differs from pinned full source")
-        if manifest.get("source_feature_fingerprint", manifest.get("feature_fingerprint")) != source_manifest.get("feature_fingerprint"):
-            raise ValueError("run feature fingerprint differs from pinned full source")
-        if manifest.get("source_dir") and Path(manifest["source_dir"]).resolve() != pinned_source.resolve():
-            raise ValueError("run source_dir differs from pinned full source")
+    source_manifest = source_checked["manifest"]
+    source_config = source_manifest.get("config", {})
+    if dataset in TASKS:
+        expected_run_id, expected_seq_len, _ = TASKS[dataset]
+        expected_source = (ROOT / "result/score/MNRF-ViewProbe" / dataset / expected_run_id).resolve()
+        if pinned_source.resolve() != expected_source:
+            raise ValueError("summary source path is not the pinned Full run for {}".format(dataset))
+        if pinned_source.name != expected_run_id or source_config.get("seq_len") != expected_seq_len:
+            raise ValueError("pinned source Run ID or window length differs from the ablation contract")
+    if (source_manifest.get("artifact_policy") != "full" or source_manifest.get("stage_status") != "complete"
+            or source_manifest.get("head_type") != "gmm" or source_manifest.get("head_status") != "complete"
+            or source_manifest.get("layout") != {
+                "F": 25, "order": ["S", "E", "P", "R"],
+                "dimensions": {"S": 1, "E": 8, "P": 8, "R": 8},
+                "slices": {"S": [0, 1], "E": [1, 9], "P": [9, 17], "R": [17, 25]}}
+            or source_manifest.get("artifact_type") != "probe_head"
+            or _views(source_manifest) != ("S", "E", "P", "R")):
+        raise ValueError("pinned source is not the required full-layout completed GMM run")
+    if dataset in TASKS:
+        expected_source_numeric = {
+            "seed": 2021, "gmm_components": 4, "gmm_covariance_type": "full",
+            "gmm_reg_covar": 0.001, "gmm_n_init": 1, "gmm_max_iter": 100,
+            "gmm_fit_max_windows": 20000, "train_noise_std": 0.01, "noise_seed": 20261013,
+            "feature_std_floor": 0.05, "score_mad_floor": 0.001, "calibration_quantile": 0.995,
+        }
+        for name, expected_value in expected_source_numeric.items():
+            actual_value = source_config.get(name)
+            if actual_value != expected_value:
+                raise ValueError("pinned source config {}={} expected {}".format(name, actual_value, expected_value))
+    from scripts.export_mnrf_view_probe_analysis import _load_analysis_inputs
+    source_analysis = _load_analysis_inputs(pinned_source, source_manifest)
+    canonical_test_labels = source_analysis[0]
+    canonical_test_times = source_analysis[1]
+    canonical_test_global = source_analysis[2]
+    canonical_test_segments = source_analysis[4]
+    canonical_full_labels = source_analysis[5]
+    canonical_full_times = source_analysis[6]
+    canonical_full_global = source_analysis[7]
+    canonical_full_segments = source_analysis[8]
+    if manifest.get("artifact_type") != "probe_head" or manifest.get("head_type") != "gmm":
+        raise ValueError("candidate is not a completed GMM probe head")
+    if run_key == source_key:
+        if combination != "FULL" or int(seed) != 2021:
+            raise ValueError("pinned Full source can only fill FULL/head_seed=2021")
+    else:
+        source_identity = source_manifest.get("source_identity") or {}
+        source_record = {
+            "path": str(pinned_source.resolve()), "run_id": pinned_source.name,
+            "source_identity": source_identity,
+            "source_identity_sha256": source_manifest.get("source_identity_sha256"),
+            "feature_fingerprint": source_manifest.get("feature_fingerprint"),
+            "cache_sha256": source_manifest.get("cache_sha256"),
+            "endpoint_sha256": source_manifest.get("endpoint_sha256"),
+            "gmm_fit_endpoints_sha256": source_manifest.get("gmm_fit_endpoints_sha256"),
+            "gmm_fit_endpoints_path": str((pinned_source / "heads/gmm_fit_endpoints.npy").resolve()),
+            "input_statistics_sha256": source_manifest.get("raw_input_statistics_sha256",
+                                                              source_manifest.get("input_statistics_sha256")),
+            "fixed_noise_sha256": source_manifest.get("fixed_noise_sha256"),
+            "fixed_noise_path": str((pinned_source / "heads/fixed_noise.npy").resolve()),
+            "config": source_manifest.get("config", {}),
+        }
+        compatible, reason = _same_conditions(run_checked, source_record, combination, int(seed))
+        if not compatible:
+            raise ValueError("candidate does not match pinned source contract: " + reason)
     views = tuple(manifest.get("selected_views") or manifest.get("config", {}).get("selected_views") or ())
     expected_views = dict(COMBINATIONS)[combination]
     indices = manifest.get("selected_indices") or manifest.get("config", {}).get("selected_indices")
     if indices is None:
         indices = selected_indices(views)
-    if views != expected_views or [int(i) for i in indices] != selected_indices(expected_views):
+    if (not isinstance(indices, (list, tuple))
+            or any(isinstance(i, (bool, np.bool_)) or not isinstance(i, (int, np.integer)) for i in indices)
+            or views != expected_views or list(indices) != selected_indices(expected_views)):
         raise ValueError("run combination or selected feature coordinates differ")
     config = manifest.get("config", {})
-    if int(config.get("seed", -1)) != int(seed):
+    if (isinstance(config.get("seed"), bool) or not isinstance(config.get("seed"), int)
+            or config.get("seed") != int(seed)):
         raise ValueError("run head seed differs from summary cell")
     scores = np.asarray(aligned["scores"])
     predictions = np.asarray(aligned["predictions"])
     actual = np.asarray(aligned["actual"])
     global_indices = np.asarray(aligned["time_indices"])
     local_indices = np.asarray(aligned["local_indices"])
-    valid_mask = np.asarray(aligned["valid_mask"], dtype=bool)
+    valid_raw = np.asarray(aligned["valid_mask"])
+    if valid_raw.dtype.kind != "b":
+        raise ValueError("saved valid_mask must be boolean")
+    valid_mask = valid_raw
     threshold = float(aligned["threshold"])
     if scores.ndim != 1 or actual.shape != scores.shape or predictions.shape != scores.shape:
         raise ValueError("saved endpoint score arrays do not align")
-    if global_indices.shape != scores.shape or local_indices.shape != scores.shape:
+    if (global_indices.shape != scores.shape or local_indices.shape != scores.shape
+            or global_indices.ndim != 1 or local_indices.ndim != 1):
         raise ValueError("saved endpoint coordinate arrays do not align")
+    for name, coordinate in (("global", global_indices), ("local", local_indices)):
+        if coordinate.dtype.kind not in "iu":
+            raise ValueError("{} coordinates must have integer dtype".format(name))
+        if np.any(np.diff(coordinate.astype(np.int64, copy=False)) <= 0):
+            raise ValueError("{} coordinates must be strictly increasing and unique".format(name))
     if not np.isfinite(scores).all() or not np.isfinite(threshold):
         raise ValueError("saved scores or threshold are non-finite")
     if actual.dtype.kind not in "iu" or not np.isin(actual, (0, 1)).all():
         raise ValueError("saved endpoint labels are not binary integers")
+    if predictions.dtype.kind not in "iu" or not np.isin(predictions, (0, 1)).all():
+        raise ValueError("saved predictions are not binary integers")
     if not np.array_equal(predictions, scores > threshold):
         raise ValueError("saved predictions disagree with calibrated threshold")
+    for key in ("aligned_scores", "aligned_predictions", "aligned_actual"):
+        if key not in aligned.files:
+            raise ValueError("saved aligned score bundle is missing {}".format(key))
+    aligned_scores = np.asarray(aligned["aligned_scores"])
+    aligned_predictions = np.asarray(aligned["aligned_predictions"])
+    aligned_actual = np.asarray(aligned["aligned_actual"])
+    if (aligned_scores.shape != valid_mask.shape or aligned_predictions.shape != valid_mask.shape
+            or aligned_actual.shape != valid_mask.shape):
+        raise ValueError("full aligned score arrays do not match valid_mask")
+    if (not np.allclose(aligned_scores[valid_mask], scores, rtol=0, atol=0)
+            or not np.array_equal(aligned_predictions[valid_mask], predictions)
+            or not np.array_equal(aligned_actual[valid_mask].astype(np.int8), actual.astype(np.int8))):
+        raise ValueError("aligned score/label arrays disagree with valid endpoint arrays")
 
     with _npz(pinned_source / "analysis_inputs.npz") as inputs:
         all_labels = np.asarray(inputs["all_labels"])
@@ -101,18 +193,37 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed):
         all_global = np.asarray(inputs["all_global_indices"])
         all_segments = np.asarray(inputs["all_segment_ids"])
         test_labels = np.asarray(inputs["test_labels"])
+        test_times = np.asarray(inputs["test_time_values_ns"])
         test_global = np.asarray(inputs["test_global_indices"])
         test_segments = np.asarray(inputs["test_segment_ids"])
     if (all_labels.ndim != 1 or all_times.shape != all_labels.shape
             or all_global.shape != all_labels.shape or all_segments.shape != all_labels.shape
-            or test_labels.ndim != 1 or test_global.shape != test_labels.shape or test_segments.shape != test_labels.shape):
+            or test_labels.ndim != 1 or test_times.shape != test_labels.shape
+            or test_global.shape != test_labels.shape or test_segments.shape != test_labels.shape):
         raise ValueError("pinned source full-axis label/coordinate inputs are invalid")
     if not np.array_equal(test_global, all_global[len(all_labels) - len(test_labels):]):
         raise ValueError("source test coordinate axis is not the suffix of its full axis")
+    for actual_axis, expected_axis, name in (
+            (test_labels, canonical_test_labels, "test labels"),
+            (all_labels, canonical_full_labels, "full labels"),
+            (test_global, canonical_test_global, "test global indices"),
+            (test_segments, canonical_test_segments, "test segment IDs"),
+            (all_global, canonical_full_global, "full global indices"),
+            (all_segments, canonical_full_segments, "full segment IDs"),
+            (all_times, canonical_full_times, "full time axis"),
+            (test_times, canonical_test_times, "test time axis")):
+        if not np.array_equal(actual_axis, expected_axis):
+            raise ValueError("validated source analysis input {} differs".format(name))
+    if all_global.dtype.kind not in "iu" or test_global.dtype.kind not in "iu":
+        raise ValueError("pinned full-axis coordinates must have integer dtype")
+    if not np.array_equal(test_labels, all_labels[len(all_labels) - len(test_labels):]):
+        raise ValueError("pinned test labels differ from full label axis suffix")
+    if not np.array_equal(test_segments, all_segments[len(all_segments) - len(test_segments):]):
+        raise ValueError("pinned test segment IDs differ from full-axis canonical IDs")
     local = local_indices.astype(np.int64, copy=False)
     if np.any(local < 0) or np.any(local >= len(test_labels)):
         raise ValueError("scored local coordinate is outside pinned source test axis")
-    if not np.array_equal(global_indices.astype(np.int64), test_global[local]):
+    if not np.array_equal(global_indices, test_global[local]):
         raise ValueError("scored global coordinates differ from pinned source")
     if not np.array_equal(actual.astype(np.int8), test_labels[local].astype(np.int8)):
         raise ValueError("saved scored labels differ from pinned full label axis")
@@ -122,6 +233,43 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed):
         raise ValueError("saved valid mask differs from scored local coordinates")
     if len(test_labels) != len(valid_mask):
         raise ValueError("candidate test axis length differs from pinned full source")
+    if not np.array_equal(expected_mask, valid_mask):
+        raise ValueError("candidate scored point set differs from its saved coordinates")
+
+    with _npz(pinned_source / "results/aligned_scores.npz") as source_aligned:
+        for key in ("time_indices", "time_values_ns", "local_indices", "valid_mask", "aligned_actual"):
+            if key not in aligned.files or key not in source_aligned.files:
+                raise ValueError("candidate/source aligned evidence missing {}".format(key))
+            if not np.array_equal(np.asarray(aligned[key]), np.asarray(source_aligned[key])):
+                raise ValueError("candidate {} differs from pinned Full scoring axis".format(key))
+        if "time_values_ns" not in aligned.files or not np.array_equal(
+                np.asarray(aligned["time_values_ns"]), np.asarray(source_aligned["time_values_ns"])):
+            raise ValueError("candidate time_values_ns differ from pinned Full scoring axis")
+
+    nll = np.load(run_dir / "results/test_nll.npy", mmap_mode="r", allow_pickle=False)
+    calibration_path = run_dir / "heads/calibration.npz"
+    if nll.ndim != 2 or nll.shape[0] != int(valid_mask.sum()) or not np.isfinite(nll).all():
+        raise ValueError("saved test_nll shape/values do not match the exact scored points")
+    with _npz(calibration_path) as calibration:
+        center = np.asarray(calibration["center"])
+        scale = np.asarray(calibration["scale"])
+        saved_threshold = float(np.asarray(calibration["threshold"]))
+    if center.shape != (nll.shape[1],) or scale.shape != center.shape:
+        raise ValueError("calibration center/scale shape differs from test_nll")
+    if not np.isfinite(center).all() or not np.isfinite(scale).all() or np.any(scale <= 0):
+        raise ValueError("calibration statistics are invalid")
+    if not np.isclose(threshold, saved_threshold, rtol=0, atol=1e-7):
+        raise ValueError("aligned threshold differs from saved calibration threshold")
+    recomputed = np.max((np.asarray(nll) - center) / scale, axis=1)
+    if not np.allclose(scores, recomputed, rtol=1e-6, atol=1e-7):
+        raise ValueError("saved scores do not reproduce from test_nll and calibration statistics")
+    run_metrics = run_checked["metrics"]
+    gmm_status_path = run_dir / "heads/gmm_status.json"
+    gmm_status = _json(gmm_status_path) if gmm_status_path.is_file() else {}
+    gmm_config = manifest.get("config", {})
+    head_parameter_count = run_metrics.get("head_parameter_count", gmm_status.get("head_parameter_count"))
+    if head_parameter_count is None:
+        raise ValueError("validated GMM head parameter count is missing")
 
     tp = int(np.sum((actual == 1) & (predictions == 1)))
     fp = int(np.sum((actual == 0) & (predictions == 1)))
@@ -132,6 +280,16 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed):
     f1 = 2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
     auc = float(roc_auc_score(actual, scores)) if np.unique(actual).size == 2 else None
     ap = float(average_precision_score(actual, scores)) if len(actual) else None
+    metrics = run_checked["metrics"]
+    for metric_key, computed in (("auc_roc", auc), ("auc_pr", ap), ("threshold", threshold)):
+        recorded = metrics.get(metric_key)
+        if computed is None:
+            if recorded is not None:
+                raise ValueError("metrics {} should be undefined for this label set".format(metric_key))
+        elif recorded is None or not np.isclose(float(recorded), float(computed), rtol=1e-6, atol=1e-7):
+            raise ValueError("metrics {} differs from aligned score recomputation".format(metric_key))
+    if int(metrics.get("valid_points", -1)) != int(valid_mask.sum()):
+        raise ValueError("metrics valid_points differs from exact scoring mask")
     input_metadata = _json(pinned_source / "analysis_inputs.json")
     segment_identity = {int(item["segment_id"]): item.get("boundary_value")
                         for item in input_metadata.get("test_segment_identity", [])}
@@ -150,6 +308,18 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed):
         "anomaly_segments_total": segment["total"], "anomaly_segments_scored": segment["scored"],
         "anomaly_segments_hit": segment["hit"], "segment_details": segment["details"],
         "source_run_id": pinned_source.name, "source_encoder_seed": 2021,
+        "source_identity": source_manifest.get("source_identity_sha256"),
+        "feature_fingerprint": source_manifest.get("feature_fingerprint"),
+        "gmm_components": gmm_config.get("gmm_components"),
+        "gmm_covariance_type": gmm_config.get("gmm_covariance_type"),
+        "gmm_reg_covar": gmm_config.get("gmm_reg_covar"),
+        "gmm_n_init": gmm_config.get("gmm_n_init"),
+        "gmm_max_iter": gmm_config.get("gmm_max_iter"),
+        "gmm_fit_max_windows": gmm_config.get("gmm_fit_max_windows"),
+        "head_parameter_count": head_parameter_count,
+        "fit_time_seconds": run_metrics.get("fit_time_seconds"),
+        "inference_time_seconds": run_metrics.get("inference_time_seconds"),
+        "elapsed_seconds_kind": "historical_or_reused",
         "independent_recheck": True,
     }
     bundle = {
@@ -241,37 +411,236 @@ def contribution_deltas(metrics_by_combo):
     return result
 
 
+PAIRED_COMPARISONS = (("S", "SE"), ("S", "SP"), ("S", "SR"),
+                      ("FULL", "WITHOUT_S"), ("FULL", "WITHOUT_E"),
+                      ("FULL", "WITHOUT_P"), ("FULL", "WITHOUT_R"))
+
+
+def _point_and_segment_changes(base, changed, source_run_id, limit=8):
+    base_global = np.asarray(base["global_indices"])
+    changed_global = np.asarray(changed["global_indices"])
+    if not np.array_equal(base_global, changed_global):
+        raise ValueError("paired point comparisons require identical global indices")
+    labels = np.asarray(base["labels"])
+    if not np.array_equal(labels, changed["labels"]):
+        raise ValueError("paired point comparisons require identical labels")
+    bp = np.asarray(base["predictions"], dtype=bool)
+    cp = np.asarray(changed["predictions"], dtype=bool)
+    categories = {
+        "added_tp": (labels == 1) & ~bp & cp,
+        "lost_tp": (labels == 1) & bp & ~cp,
+        "added_fp": (labels == 0) & ~bp & cp,
+        "removed_fp": (labels == 0) & bp & ~cp,
+    }
+    point_indices = {name: np.flatnonzero(mask) for name, mask in categories.items()}
+    base_segments = {(_segment_key(source_run_id, item)): item
+                     for item in base.get("segment_details", [])}
+    changed_segments = {(_segment_key(source_run_id, item)): item
+                        for item in changed.get("segment_details", [])}
+    added_hits, lost_hits = [], []
+    for key in sorted(set(base_segments) | set(changed_segments)):
+        left, right = base_segments.get(key), changed_segments.get(key)
+        left_hit = bool(left and left.get("hit"))
+        right_hit = bool(right and right.get("hit"))
+        item = dict(right or left)
+        item.update({"base_hit": left_hit, "changed_hit": right_hit,
+                     "base_threshold": float(base["threshold"]),
+                     "changed_threshold": float(changed["threshold"])})
+        if not left_hit and right_hit:
+            added_hits.append(item)
+        elif left_hit and not right_hit:
+            lost_hits.append(item)
+    return point_indices, added_hits, lost_hits
+
+
+def _segment_key(source_run_id, item):
+    return (source_run_id, int(item["segment_id"]), int(item["start_global"]), int(item["end_global"]))
+
+
+def _change_cases(base, changed, indices, added_segments, lost_segments, limit=8):
+    cases = {}
+    for kind, positions in indices.items():
+        cases[kind] = [{
+            "global_index": int(base["global_indices"][pos]),
+            "local_index": int(base["local_indices"][pos]),
+            "label": int(base["labels"][pos]),
+            "base_score": float(base["scores"][pos]),
+            "changed_score": float(changed["scores"][pos]),
+            "base_threshold": float(base["threshold"]),
+            "changed_threshold": float(changed["threshold"]),
+            "base_prediction": int(base["predictions"][pos]),
+            "changed_prediction": int(changed["predictions"][pos]),
+        } for pos in positions[:limit]]
+    for name, items in (("added_segment_hit", added_segments), ("lost_segment_hit", lost_segments)):
+        cases[name] = [{
+            "segment_id": int(item["segment_id"]), "boundary_value": item.get("boundary_value"),
+            "start_global": int(item["start_global"]), "end_global": int(item["end_global"]),
+            "points": int(item["points"]), "valid_points": int(item["valid_points"]),
+            "hit_points": int(item["hit_points"]),
+            "base_hit": bool(item["base_hit"]), "changed_hit": bool(item["changed_hit"]),
+            "base_threshold": float(item["base_threshold"]),
+            "changed_threshold": float(item["changed_threshold"]),
+        } for item in items[:limit]]
+    return cases
+
+
+def completion_counts(tasks, seeds, rows):
+    expected = {(task, combo, int(seed)) for task in tasks
+                for combo, _ in COMBINATIONS for seed in seeds}
+    seen, duplicate = {}, set()
+    for row in rows:
+        try:
+            key = (row["dataset"], row["combination"], int(row["head_seed"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if key in seen:
+            duplicate.add(key)
+        else:
+            seen[key] = row
+    statuses = ("complete", "reused", "planned/pending", "running", "failed", "blocked", "conflict", "invalid")
+    known = set(statuses)
+    if any(row.get("status") not in known for row in rows):
+        rows = [dict(row, status="invalid") if row.get("status") not in known else row for row in rows]
+    counts = {status: sum(row.get("status") == status for row in rows) for status in statuses}
+    missing, unexpected = expected - set(seen), set(seen) - expected
+    complete_datasets = datasets_with_results = 0
+    for task in tasks:
+        keys = {(task, combo, int(seed)) for combo, _ in COMBINATIONS for seed in seeds}
+        success = {key for key in keys if key in seen and seen[key].get("status") in {"complete", "reused"}}
+        datasets_with_results += int(bool(success))
+        complete_datasets += int(keys == success and not (keys & duplicate))
+    illegal = bool(duplicate or missing or unexpected or counts["invalid"])
+    hard_error = illegal or any(counts[key] for key in ("failed", "blocked", "conflict", "invalid"))
+    successful = counts["complete"] + counts["reused"]
+    status = "complete" if successful == len(expected) and not hard_error else ("failed" if hard_error else "partial")
+    return {"positions_expected": len(expected), "positions_present": len(rows),
+            "complete": counts["complete"], "reused": counts["reused"],
+            "complete_or_reused": successful, "pending": counts["planned/pending"],
+            "running": counts["running"], "failed": counts["failed"], "blocked": counts["blocked"],
+            "conflict": counts["conflict"],
+            "invalid": counts["invalid"] + len(missing) + len(unexpected) + len(duplicate),
+            "datasets_requested": len(tasks), "datasets_complete": complete_datasets,
+            "datasets_with_results": datasets_with_results, "batch_status": status,
+            "plan_errors": {"missing": len(missing), "unexpected": len(unexpected),
+                            "duplicate": len(duplicate)}}
+
+
+def paired_seed_contribution_rows(tasks, seeds, evals):
+    rows = []
+    for task in tasks:
+        for branch in ("S", "E", "P", "R"):
+            for direction, base_combo, changed_combo in (
+                    ("added", "S", "S" + branch), ("deleted", "FULL", "WITHOUT_" + branch)):
+                if direction == "added" and branch == "S":
+                    for metric in ("average_precision", "auc_roc"):
+                        rows.append({"dataset": task, "branch": branch, "direction": direction,
+                                     "metric": metric, "n_requested": len(seeds), "n_pairs": 0,
+                                     "mean": None, "std": None, "per_seed": "{}",
+                                     "participating_seeds": "[]", "missing_seeds": json.dumps(list(seeds)),
+                                     "not_applicable": True})
+                    continue
+                for metric in ("average_precision", "auc_roc"):
+                    paired = {}
+                    for seed in seeds:
+                        base = evals.get((task, base_combo, int(seed)))
+                        changed = evals.get((task, changed_combo, int(seed)))
+                        if base and changed and base.get(metric) is not None and changed.get(metric) is not None:
+                            paired[str(seed)] = changed[metric] - base[metric]
+                    values = list(paired.values())
+                    participating = [int(seed) for seed in seeds if str(seed) in paired]
+                    rows.append({"dataset": task, "branch": branch, "direction": direction,
+                        "metric": metric, "n_requested": len(seeds), "n_pairs": len(values),
+                        "mean": float(np.mean(values)) if values else None,
+                        "std": float(np.std(values, ddof=1)) if len(values) > 1 else None,
+                        "per_seed": json.dumps(paired, sort_keys=True),
+                        "participating_seeds": json.dumps(participating),
+                        "missing_seeds": json.dumps([int(seed) for seed in seeds if int(seed) not in participating]),
+                        "not_applicable": False})
+    return rows
+
+
 def summarize(plan_path):
     plan_path = Path(plan_path).resolve()
     plan = _json(plan_path)
     source_records = plan["source_records"]
+    requested_tasks = list(plan.get("tasks", ()))
+    requested_seeds = [int(seed) for seed in plan.get("seeds", ())]
+    if not requested_tasks or not requested_seeds:
+        raise ValueError("plan must declare requested tasks and head seeds")
+    expected_keys = {(task, combo, seed) for task in requested_tasks
+                     for combo, _ in COMBINATIONS for seed in requested_seeds}
+    raw_rows = plan.get("rows", [])
+    by_key = {}
+    duplicates = set()
+    malformed = []
+    for row in raw_rows:
+        try:
+            key = (row["dataset"], row["combination"], int(row["head_seed"]))
+        except (KeyError, TypeError, ValueError):
+            malformed.append(row)
+            continue
+        if key in by_key:
+            duplicates.add(key)
+        else:
+            by_key[key] = row
     rows = []
     bundles = {}
     evals = {}
-    for planned in plan["rows"]:
+    checked_runs = {}
+    for expected in sorted(expected_keys, key=lambda k: (requested_tasks.index(k[0]), requested_seeds.index(k[2]),
+                                                         [c for c, _ in COMBINATIONS].index(k[1]))):
+        planned = by_key.get(expected)
+        if planned is None:
+            rows.append({"dataset": expected[0], "combination": expected[1], "head_seed": expected[2],
+                         "status": "invalid", "reason": "expected matrix key is missing"})
+            continue
         row = dict(planned)
-        if row.get("status") not in {"blocked", "conflict", "failed", "planned/pending", "running"}:
-            task, combo, seed = row["dataset"], row["combination"], int(row["head_seed"])
+        task, combo, seed = expected
+        if expected in duplicates:
+            row.update(status="invalid", reason="duplicate matrix key")
+        elif row.get("status") in {"complete", "reused"}:
             source = source_records[task]
             path = row.get("candidate_or_output_path")
             try:
-                result, bundle = _evaluation(path, source["path"], task, combo, seed)
+                if source.get("status") != "complete":
+                    raise ValueError("pinned source is not verified complete: {}".format(source.get("reason")))
+                result, bundle = _evaluation(path, source["path"], task, combo, seed, checked_runs)
+                elapsed_kind = row.get("elapsed_seconds_kind")
                 for key, value in result.items():
                     if key != "segment_details":
                         row[key] = value
                 row["segment_details"] = json.dumps(result["segment_details"], separators=(",", ":"))
                 row["status"] = "reused" if planned.get("status") == "reused" else "complete"
-                row["elapsed_seconds_kind"] = "historical_or_reused"
+                row["elapsed_seconds_kind"] = elapsed_kind if elapsed_kind in {
+                    "this_run", "historical_or_reused"} else "historical_or_reused"
                 key = "{}_{}_{}".format(task, combo, seed)
                 bundles[key] = bundle
+                result["_bundle"] = bundle
                 evals[(task, combo, seed)] = result
             except Exception as error:
-                row["status"] = "blocked"
+                row["status"] = "invalid"
                 row["reason"] = "read-only summary verification failed: {}: {}".format(type(error).__name__, error)
                 for key in ("auc_roc", "average_precision", "precision", "recall", "point_f1",
                             "fp", "fn", "tp", "tn", "normal_fpr", "coverage"):
                     row[key] = None
+        elif row.get("status") not in {"blocked", "conflict", "failed", "planned/pending", "running"}:
+            row.update(status="invalid", reason="illegal plan status")
+        if row.get("status") == "blocked" and not row.get("reason"):
+            row["reason"] = "blocked by plan/source validation"
+        if row.get("status") not in {"complete", "reused"}:
+            for metric_key in ("auc_roc", "average_precision", "precision", "recall", "point_f1",
+                               "fp", "fn", "tp", "tn", "normal_fpr", "coverage",
+                               "anomaly_segments_total", "anomaly_segments_scored", "anomaly_segments_hit"):
+                row[metric_key] = None
         rows.append(row)
+
+    extra_keys = set(by_key) - expected_keys
+    if malformed:
+        rows.append({"dataset": "", "combination": "", "head_seed": "", "status": "invalid",
+                     "reason": "plan contains {} malformed rows".format(len(malformed))})
+    for key in sorted(extra_keys):
+        rows.append({"dataset": key[0], "combination": key[1], "head_seed": key[2], "status": "invalid",
+                     "reason": "unexpected matrix key outside requested task/seed set"})
 
     contributions = []
     paired = []
@@ -287,12 +656,16 @@ def summarize(plan_path):
                        "deleted_auc_roc": values["deleted"]["auc_roc"],
                        "removal_combination": values["removal_combination"]}
                 contributions.append(row)
-            comparisons = [("S", "SE"), ("S", "SP"), ("S", "SR"), ("FULL", "WITHOUT_S"),
-                           ("FULL", "WITHOUT_E"), ("FULL", "WITHOUT_P"), ("FULL", "WITHOUT_R")]
-            for base, changed in comparisons:
+            for base, changed in PAIRED_COMPARISONS:
                 left, right = table.get(base), table.get(changed)
                 if not left or not right:
                     continue
+                left_bundle, right_bundle = left["_bundle"], right["_bundle"]
+                left_points = dict(left_bundle, segment_details=left["segment_details"])
+                right_points = dict(right_bundle, segment_details=right["segment_details"])
+                changes, added_segments, lost_segments = _point_and_segment_changes(
+                    left_points, right_points, left["source_run_id"])
+                cases = _change_cases(left_points, right_points, changes, added_segments, lost_segments)
                 paired.append({"dataset": task, "head_seed": int(seed), "base": base, "changed": changed,
                                "delta_ap_changed_minus_base": (right["average_precision"] - left["average_precision"]
                                    if right["average_precision"] is not None and left["average_precision"] is not None else None),
@@ -300,7 +673,11 @@ def summarize(plan_path):
                                    if right["auc_roc"] is not None and left["auc_roc"] is not None else None),
                                "delta_tp": right["tp"] - left["tp"], "delta_fp": right["fp"] - left["fp"],
                                "delta_fn": right["fn"] - left["fn"],
-                               "delta_segments_hit": right["anomaly_segments_hit"] - left["anomaly_segments_hit"]})
+                               "delta_segments_hit": right["anomaly_segments_hit"] - left["anomaly_segments_hit"],
+                               "added_tp": len(changes["added_tp"]), "lost_tp": len(changes["lost_tp"]),
+                               "added_fp": len(changes["added_fp"]), "removed_fp": len(changes["removed_fp"]),
+                               "added_segment_hits": len(added_segments), "lost_segment_hits": len(lost_segments),
+                               "change_cases": json.dumps(cases, separators=(",", ":"))})
 
     repeat_rows = []
     if len(plan["seeds"]) > 1:
@@ -309,13 +686,24 @@ def summarize(plan_path):
                 available = [evals[(task, combo, seed)] for seed in plan["seeds"] if (task, combo, seed) in evals]
                 for metric in ("average_precision", "auc_roc", "point_f1", "normal_fpr", "recall"):
                     values = [item[metric] for item in available if item[metric] is not None]
+                    present_metric_seeds = [int(seed) for seed in requested_seeds
+                                            if (task, combo, int(seed)) in evals
+                                            and evals[(task, combo, int(seed))].get(metric) is not None]
                     repeat_rows.append({"dataset": task, "combination": combo, "metric": metric,
                                         "n_complete": len(values), "mean": float(np.mean(values)) if values else None,
                                         "std": float(np.std(values, ddof=1)) if len(values) > 1 else None,
+                                        "n_requested": len(requested_seeds),
+                                        "n_pairs": len(values),
+                                        "participating_seeds": json.dumps(present_metric_seeds),
+                                        "missing_seeds": json.dumps([int(seed) for seed in requested_seeds
+                                            if int(seed) not in present_metric_seeds]),
                                         "per_seed": json.dumps({str(seed): evals[(task, combo, seed)].get(metric)
                                             for seed in plan["seeds"] if (task, combo, seed) in evals})})
 
-    return rows, contributions, paired, repeat_rows, bundles
+    contribution_repeats = (paired_seed_contribution_rows(requested_tasks, requested_seeds, evals)
+                            if len(requested_seeds) > 1 else [])
+
+    return rows, contributions, paired, repeat_rows, contribution_repeats, bundles
 
 
 def _write_bundle(path, bundles):
@@ -332,36 +720,52 @@ def main():
     parser.add_argument("--plan", required=True, help="plan.json from run_mnrf_branch_ablation.py")
     args = parser.parse_args()
     plan_path = Path(args.plan).resolve()
-    rows, contributions, paired, repeats, bundles = summarize(plan_path)
+    rows, contributions, paired, repeats, contribution_repeats, bundles = summarize(plan_path)
     batch_dir = plan_path.parent
+    plan = _json(plan_path)
     _atomic_csv(batch_dir / "long_table.csv", rows)
     _atomic_csv(batch_dir / "branch_contributions.csv", contributions)
     _atomic_csv(batch_dir / "paired_changes.csv", paired)
     if repeats:
         _atomic_csv(batch_dir / "repeat_summary.csv", repeats)
+    else:
+        (batch_dir / "repeat_summary.csv").unlink(missing_ok=True)
+    if contribution_repeats:
+        _atomic_csv(batch_dir / "contribution_repeat_summary.csv", contribution_repeats)
+    else:
+        (batch_dir / "contribution_repeat_summary.csv").unlink(missing_ok=True)
+    _atomic_json(batch_dir / "change_cases.json", {
+        "case_limit_per_category": 8,
+        "ordering": "increasing global coordinate / source segment key",
+        "pairs": [{"dataset": row["dataset"], "head_seed": row["head_seed"],
+                   "base": row["base"], "changed": row["changed"],
+                   "counts": {key: row[key] for key in ("added_tp", "lost_tp", "added_fp", "removed_fp",
+                               "added_segment_hits", "lost_segment_hits")},
+                   "cases": json.loads(row["change_cases"])} for row in paired]})
     point_path = batch_dir / "paired_point_scores.npz"
     if bundles:
         _write_bundle(point_path, bundles)
-    complete = sum(row["status"] in {"complete", "reused"} for row in rows)
-    report = {"batch_id": _json(plan_path).get("batch_id"), "positions": len(rows),
-              "complete_or_reused": complete, "blocked": sum(row["status"] == "blocked" for row in rows),
-              "pending": sum(row["status"] == "planned/pending" for row in rows),
-              "conflict": sum(row["status"] == "conflict" for row in rows),
-              "datasets_complete": len({row["dataset"] for row in rows if row["status"] in {"complete", "reused"}}),
+    else:
+        point_path.unlink(missing_ok=True)
+    report = completion_counts(plan["tasks"], plan["seeds"], rows)
+    report.update({"batch_id": plan.get("batch_id"),
+              "positions_present": len(plan.get("rows", [])),
               "interpretation": "Frozen encoder representations with independently refit GMM heads; not encoder-seed variance or causal proof.",
-              "contribution_sign": "added = AP(S+branch)-AP(S); deleted = AP(FULL)-AP(FULL-minus-branch); positive deletion means removal hurts."}
+              "contribution_sign": "added = AP(S+branch)-AP(S); deleted = AP(FULL)-AP(FULL-minus-branch); positive deletion means removal hurts."})
     _atomic_json(batch_dir / "summary.json", report)
     _atomic_json(batch_dir / "status.json", report)
     _atomic_text(batch_dir / "README.md", """# MNRF Frozen-View Ablation Summary
 
 Batch: `{batch}`
 
-This package keeps one row for every planned dataset/view/head-seed cell. Missing combinations are not filled with zero. `long_table.csv` is independently recalculated from each saved score vector and matched source labels. `paired_changes.csv` contains same-task, same-seed point and anomaly-segment deltas. `paired_point_scores.npz` contains scored vectors, labels, global/local coordinates, validity masks and thresholds for complete or reused cells only.
+Batch status: `{status}`. Coverage: {datasets_complete}/{datasets_requested} complete datasets, {complete_or_reused}/{positions_expected} validated cells. Missing combinations are not filled with zero. `long_table.csv` is independently recalculated from each saved NLL and matched source labels. `paired_changes.csv` contains same-task, same-seed point and anomaly-segment additions/losses; bounded examples are in `change_cases.json`. `paired_point_scores.npz` contains only cells validated in this summary invocation.
 
 For E/P/R, addition is `metric(S+branch)-metric(S)` and deletion is `metric(FULL)-metric(FULL-minus-branch)`. Positive deletion means removal hurt. S has deletion only. AP is average precision, not Aff-F. Segment hits mean at least one predicted point and are diagnostic only.
 
 Head seeds vary GMM initialization on frozen features; they are not encoder seeds. These results do not prove causal representation contribution, paper-protocol equivalence, or superiority to CATCH. Full caches, encoders and GMM files stay in their server source runs.
-""".format(batch=report["batch_id"]))
+""".format(batch=report["batch_id"], status=report["batch_status"],
+           datasets_complete=report["datasets_complete"], datasets_requested=report["datasets_requested"],
+           complete_or_reused=report["complete_or_reused"], positions_expected=report["positions_expected"]))
     review_root = ROOT / "result/review/MNRF-ViewProbe"
     review_root.mkdir(parents=True, exist_ok=True)
     archive = review_root / ("MNRF_BRANCH_ABLATION_{}.zip".format(report["batch_id"]))
@@ -369,6 +773,7 @@ Head seeds vary GMM initialization on frozen features; they are not encoder seed
     with zipfile.ZipFile(str(temporary_archive), "w", compression=zipfile.ZIP_DEFLATED) as output:
         for name in ("plan.json", "matrix.csv", "long_table.csv", "branch_contributions.csv",
                      "paired_changes.csv", "cross_dataset_summary.csv", "repeat_summary.csv",
+                     "contribution_repeat_summary.csv", "change_cases.json",
                      "summary.json", "README.md", "paired_point_scores.npz"):
             candidate = batch_dir / name
             if candidate.is_file():
@@ -385,12 +790,15 @@ Head seeds vary GMM initialization on frozen features; they are not encoder seed
     os.replace(str(temporary_archive), str(archive))
     print("summary_dir={}".format(batch_dir))
     print("review_package={}".format(archive))
-    print("positions={} complete_or_reused={} blocked={} pending={} conflict={}".format(
-        report["positions"], report["complete_or_reused"], report["blocked"], report["pending"], report["conflict"]))
+    print("batch_status={} datasets_complete={}/{} datasets_with_results={} positions={}/{} complete={} reused={} pending={} running={} failed={} blocked={} conflict={} invalid={}".format(
+        report["batch_status"], report["datasets_complete"], report["datasets_requested"],
+        report["datasets_with_results"], report["positions_present"], report["positions_expected"],
+        report["complete"], report["reused"], report["pending"], report["running"],
+        report["failed"], report["blocked"], report["conflict"], report["invalid"]))
     # A plan with pending cells is an intentional, usable partial inventory;
     # blocked/conflicting cells remain non-success so callers cannot mistake
     # an invalid source for a merely unrun combination.
-    return 1 if report["blocked"] or report["conflict"] else 0
+    return 1 if report["batch_status"] == "failed" else 0
 
 
 if __name__ == "__main__":
