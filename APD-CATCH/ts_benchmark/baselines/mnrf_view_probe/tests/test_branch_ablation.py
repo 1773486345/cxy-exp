@@ -71,6 +71,7 @@ def test_real_tiny_select_gmm_uses_frozen_cache_for_four_widths(tmp_path, monkey
     frame = pd.DataFrame(rng.normal(size=(total, 2)).astype(np.float32), columns=("x", "y"),
                          index=pd.date_range("2026-01-01", periods=total, freq="min"))
     labels = np.zeros(total - train_length, dtype=np.int64)
+    labels[31:36] = 1
     frame["label"] = np.r_[np.zeros(train_length, dtype=np.int64), labels]
     common = dict(seq_len=32, pattern_len=32, batch_size=64, encoding_batch_size=64,
                   stage1_epochs=1, stage2_epochs=1, patience=1, device="cpu",
@@ -102,7 +103,8 @@ def test_real_tiny_select_gmm_uses_frozen_cache_for_four_widths(tmp_path, monkey
         assert manifest["source_feature_fingerprint"] == source_manifest["feature_fingerprint"]
         assert hashlib.sha256((output / "heads/gmm_fit_endpoints.npy").read_bytes()).hexdigest() == source_hashes["heads/gmm_fit_endpoints.npy"]
         assert np.array_equal(np.load(output / "heads/fixed_noise.npy"), np.load(source_dir / "heads/fixed_noise.npy"))
-        assert validate(output)["status"] == "complete"
+        validation = validate(output)
+        assert validation["status"] == "complete", validation
         loaded = load_probe(output, device="cpu")
         cached = loaded.score_cached_test()
         with np.load(output / "results/aligned_scores.npz", allow_pickle=False) as aligned:
