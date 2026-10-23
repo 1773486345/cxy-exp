@@ -43,6 +43,13 @@ def _atomic_csv(path, rows):
     temp.replace(path)
 
 
+def _atomic_text(path, value):
+    path = Path(path)
+    temp = path.with_name(path.name + ".tmp-{}".format(os.getpid()))
+    temp.write_text(value, encoding="utf-8")
+    temp.replace(path)
+
+
 def _npz(path):
     return np.load(path, allow_pickle=False)
 
@@ -345,28 +352,37 @@ def main():
               "contribution_sign": "added = AP(S+branch)-AP(S); deleted = AP(FULL)-AP(FULL-minus-branch); positive deletion means removal hurts."}
     _atomic_json(batch_dir / "summary.json", report)
     _atomic_json(batch_dir / "status.json", report)
+    _atomic_text(batch_dir / "README.md", """# MNRF Frozen-View Ablation Summary
+
+Batch: `{batch}`
+
+This package keeps one row for every planned dataset/view/head-seed cell. Missing combinations are not filled with zero. `long_table.csv` is independently recalculated from each saved score vector and matched source labels. `paired_changes.csv` contains same-task, same-seed point and anomaly-segment deltas. `paired_point_scores.npz` contains scored vectors, labels, global/local coordinates, validity masks and thresholds for complete or reused cells only.
+
+For E/P/R, addition is `metric(S+branch)-metric(S)` and deletion is `metric(FULL)-metric(FULL-minus-branch)`. Positive deletion means removal hurt. S has deletion only. AP is average precision, not Aff-F. Segment hits mean at least one predicted point and are diagnostic only.
+
+Head seeds vary GMM initialization on frozen features; they are not encoder seeds. These results do not prove causal representation contribution, paper-protocol equivalence, or superiority to CATCH. Full caches, encoders and GMM files stay in their server source runs.
+""".format(batch=report["batch_id"]))
     review_root = ROOT / "result/review/MNRF-ViewProbe"
     review_root.mkdir(parents=True, exist_ok=True)
     archive = review_root / ("MNRF_BRANCH_ABLATION_{}.zip".format(report["batch_id"]))
-    temp_archive = archive.with_name(archive.name + ".tmp-{}".format(os.getpid()))
-    with zipfile.ZipFile(str(temp_archive), "w", compression=zipfile.ZIP_DEFLATED) as output:
+    temporary_archive = archive.with_name(archive.name + ".tmp-{}".format(os.getpid()))
+    with zipfile.ZipFile(str(temporary_archive), "w", compression=zipfile.ZIP_DEFLATED) as output:
         for name in ("plan.json", "matrix.csv", "long_table.csv", "branch_contributions.csv",
-                     "paired_changes.csv", "repeat_summary.csv", "summary.json"):
+                     "paired_changes.csv", "cross_dataset_summary.csv", "repeat_summary.csv",
+                     "summary.json", "README.md", "paired_point_scores.npz"):
             candidate = batch_dir / name
             if candidate.is_file():
                 output.write(str(candidate), arcname=name)
-        if point_path.is_file():
-            output.write(str(point_path), arcname=point_path.name)
     if archive.exists():
         try:
-            with zipfile.ZipFile(str(archive), "r") as existing:
-                prior = json.loads(existing.read("plan.json").decode("utf-8"))
+            with zipfile.ZipFile(str(archive), "r") as old:
+                prior = json.loads(old.read("plan.json").decode("utf-8"))
             if prior.get("batch_id") != report["batch_id"]:
-                raise ValueError("refusing to replace a review archive from another batch")
+                raise ValueError("archive belongs to another batch")
         except Exception as error:
-            temp_archive.unlink(missing_ok=True)
-            raise ValueError("existing review archive is not this batch's generated package: {}".format(error))
-    os.replace(str(temp_archive), str(archive))
+            temporary_archive.unlink(missing_ok=True)
+            raise ValueError("refusing to replace unrecognized review archive: {}".format(error))
+    os.replace(str(temporary_archive), str(archive))
     print("summary_dir={}".format(batch_dir))
     print("review_package={}".format(archive))
     print("positions={} complete_or_reused={} blocked={} pending={} conflict={}".format(

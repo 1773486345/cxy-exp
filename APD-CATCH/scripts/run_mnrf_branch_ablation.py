@@ -107,7 +107,8 @@ def _scan_candidates(task):
         root = ROOT / root_name
         if root.is_dir():
             paths.update(p.parent.resolve() for p in root.rglob("probe_manifest.json"))
-    for root_name in ("result/analysis/MNRF-ViewProbe", "result/review/MNRF-ViewProbe"):
+    for root_name in ("result/analysis/MNRF-ViewProbe", "result/review/MNRF-ViewProbe",
+                      "result/review/MNRF-ViewProbe-SOnly"):
         root = ROOT / root_name
         if root.is_dir():
             paths.update(p.parent.resolve() for p in root.rglob("probe_manifest.json"))
