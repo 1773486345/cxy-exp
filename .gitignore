@@ -12,7 +12,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 APD-CATCH/dataset/
-APD-CATCH/result/
 
 
 # Tool and package caches

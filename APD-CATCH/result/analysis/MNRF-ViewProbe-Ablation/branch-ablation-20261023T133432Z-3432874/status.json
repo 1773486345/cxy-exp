@@ -1,0 +1,9 @@
+{
+  "batch_id": "branch-ablation-20261023T133432Z-3432874",
+  "blocked": 54,
+  "conflict": 0,
+  "notice": "Plan only; no encoder, GMM fit, calibration or training was run.",
+  "pending": 156,
+  "positions": 216,
+  "reused": 6
+}

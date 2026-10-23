@@ -1,0 +1,12 @@
+{
+  "batch_id": "branch-ablation-20261023T140233Z-3612049",
+  "blocked": 108,
+  "complete_or_reused": 4,
+  "conflict": 0,
+  "contribution_sign": "added = AP(S+branch)-AP(S); deleted = AP(FULL)-AP(FULL-minus-branch); positive deletion means removal hurts.",
+  "datasets_with_complete_matrix": 0,
+  "datasets_with_valid_results": 4,
+  "interpretation": "Frozen encoder representations with independently refit GMM heads; not encoder-seed variance or causal proof.",
+  "pending": 104,
+  "positions": 216
+}
