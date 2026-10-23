@@ -194,6 +194,8 @@ def _source_record(task, validate_cache):
                                                                 manifest.get("input_statistics_sha256")),
                        "normalized_cache_sha256": manifest.get("normalized_cache_sha256"),
                        "fixed_noise_sha256": manifest.get("fixed_noise_sha256"),
+                       "gmm_fit_endpoints_path": str(fit_path.resolve()),
+                       "fixed_noise_path": str(noise_path.resolve()),
                        "layout": manifest.get("layout"), "config": config,
                        "metrics": checked["metrics"], "source_manifest_sha256": _sha256_file(path / "probe_manifest.json"),
                        "validated_status": checked["validation"].get("status")})
@@ -223,6 +225,26 @@ def _same_conditions(candidate, source, combination, seed):
             return False, "{} differs".format(field)
     if manifest.get("gmm_fit_endpoints_sha256") != source["gmm_fit_endpoints_sha256"]:
         return False, "GMM fitting endpoints differ from source"
+    candidate_path = Path(candidate["path"])
+    candidate_fit = candidate_path / "heads/gmm_fit_endpoints.npy"
+    candidate_noise = candidate_path / "heads/fixed_noise.npy"
+    if not candidate_fit.is_file() or _sha256_file(candidate_fit) != source["gmm_fit_endpoints_sha256"]:
+        return False, "saved fitting endpoint bytes differ from pinned source"
+    if (not candidate_noise.is_file() or not source.get("fixed_noise_sha256")
+            or manifest.get("fixed_noise_sha256") != source["fixed_noise_sha256"]
+            or _sha256_file(candidate_noise) != source["fixed_noise_sha256"]):
+        return False, "saved full-layout fixed noise differs from pinned source"
+    import numpy as np
+    source_noise = np.load(source["fixed_noise_path"], mmap_mode="r", allow_pickle=False)
+    candidate_noise_array = np.load(candidate_noise, mmap_mode="r", allow_pickle=False)
+    if source_noise.shape != candidate_noise_array.shape or source_noise.dtype != candidate_noise_array.dtype:
+        return False, "fixed noise shape/dtype differs from pinned source"
+    if not np.array_equal(source_noise, candidate_noise_array):
+        return False, "fixed noise values differ from pinned source"
+    source_fit = np.load(source["gmm_fit_endpoints_path"], mmap_mode="r", allow_pickle=False)
+    candidate_fit_array = np.load(candidate_fit, mmap_mode="r", allow_pickle=False)
+    if source_fit.shape != candidate_fit_array.shape or not np.array_equal(source_fit, candidate_fit_array):
+        return False, "fitting endpoint values differ from pinned source"
     if manifest.get("raw_input_statistics_sha256") != source["input_statistics_sha256"]:
         return False, "input normalization identity differs"
     if manifest.get("fixed_noise_sha256") is None:
@@ -311,6 +333,8 @@ def _row(task, combo, views, seed, source, status, candidate=None, output_path="
         "gmm_max_iter": config.get("gmm_max_iter"), "gmm_fit_max_windows": config.get("gmm_fit_max_windows"),
         "fit_endpoint_hash": source.get("gmm_fit_endpoints_sha256"),
         "candidate_or_output_path": (candidate or {}).get("path") or output_path,
+        "candidate_audit": json.dumps((candidate or {}).get("excluded_candidates", []),
+                                       sort_keys=True, separators=(",", ":")),
         "status": status, "reason": (candidate or {}).get("reason", source.get("reason")),
         "auc_roc": None, "average_precision": None, "precision": None, "recall": None,
         "point_f1": None, "fp": None, "fn": None, "tp": None, "tn": None,

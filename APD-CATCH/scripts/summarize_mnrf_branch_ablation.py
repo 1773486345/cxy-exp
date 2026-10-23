@@ -5,6 +5,7 @@ import argparse
 import csv
 import json
 import math
+import os
 from pathlib import Path
 import sys
 import zipfile
@@ -89,12 +90,14 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed):
 
     with _npz(pinned_source / "analysis_inputs.npz") as inputs:
         all_labels = np.asarray(inputs["all_labels"])
+        all_times = np.asarray(inputs["all_time_values_ns"])
         all_global = np.asarray(inputs["all_global_indices"])
         all_segments = np.asarray(inputs["all_segment_ids"])
         test_labels = np.asarray(inputs["test_labels"])
         test_global = np.asarray(inputs["test_global_indices"])
         test_segments = np.asarray(inputs["test_segment_ids"])
-    if (all_labels.ndim != 1 or all_global.shape != all_labels.shape or all_segments.shape != all_labels.shape
+    if (all_labels.ndim != 1 or all_times.shape != all_labels.shape
+            or all_global.shape != all_labels.shape or all_segments.shape != all_labels.shape
             or test_labels.ndim != 1 or test_global.shape != test_labels.shape or test_segments.shape != test_labels.shape):
         raise ValueError("pinned source full-axis label/coordinate inputs are invalid")
     if not np.array_equal(test_global, all_global[len(all_labels) - len(test_labels):]):
@@ -122,8 +125,12 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed):
     f1 = 2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
     auc = float(roc_auc_score(actual, scores)) if np.unique(actual).size == 2 else None
     ap = float(average_precision_score(actual, scores)) if len(actual) else None
+    input_metadata = _json(pinned_source / "analysis_inputs.json")
+    segment_identity = {int(item["segment_id"]): item.get("boundary_value")
+                        for item in input_metadata.get("test_segment_identity", [])}
     segment = segment_counts_from_axis(all_labels, all_global, all_segments, test_global,
-                                       global_indices, predictions)
+                                       global_indices, predictions, all_times,
+                                       segment_identity)
     result = {
         "dataset": dataset, "combination": combination, "head_seed": int(seed),
         "candidate_or_output_path": str(run_dir.resolve()), "status": "complete",
@@ -147,7 +154,8 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed):
     return result, bundle
 
 
-def segment_counts_from_axis(all_labels, all_global, all_segments, test_global, scored_global, predictions):
+def segment_counts_from_axis(all_labels, all_global, all_segments, test_global, scored_global, predictions,
+                             all_times=None, segment_identity=None):
     """Count complete test-axis anomaly intervals without joining gaps/entities."""
     test_start = int(test_global[0]) if len(test_global) else int(all_global[-1]) + 1
     test_end = int(test_global[-1]) + 1 if len(test_global) else test_start
@@ -155,6 +163,7 @@ def segment_counts_from_axis(all_labels, all_global, all_segments, test_global, 
     segment_by_global = {int(g): int(s) for g, s in zip(all_global, all_segments)}
     prediction_by_global = {int(g): int(p) for g, p in zip(scored_global, predictions)}
     test_positions = [int(g) for g in test_global]
+    time_by_global = {} if all_times is None else {int(g): int(t) for g, t in zip(all_global, all_times)}
     details = []
     i = 0
     while i < len(test_positions):
@@ -174,11 +183,28 @@ def segment_counts_from_axis(all_labels, all_global, all_segments, test_global, 
         points = test_positions[start_i:i]
         predicted = [(point, prediction_by_global[point]) for point in points if point in prediction_by_global]
         hit_points = sum(pred for _, pred in predicted)
-        details.append({"segment_id": segid, "start_global": points[0], "end_global": points[-1],
+        details.append({"segment_id": segid, "boundary_value": (segment_identity or {}).get(segid),
+                        "start_global": points[0], "end_global": points[-1],
+                        "start_time_ns": time_by_global.get(points[0]),
+                        "end_time_ns": time_by_global.get(points[-1]),
                         "points": len(points), "valid_points": len(predicted), "hit_points": int(hit_points),
                         "hit": bool(hit_points), "no_valid_scores": len(predicted) == 0})
     return {"total": len(details), "scored": sum(d["valid_points"] > 0 for d in details),
             "hit": sum(d["hit"] for d in details), "details": details}
+
+
+def segment_counts(source_path, scored_global, predictions):
+    """Small adapter shared by execution-time result recording and summaries."""
+    source_path = Path(source_path)
+    with _npz(source_path / "analysis_inputs.npz") as inputs:
+        all_labels = np.asarray(inputs["all_labels"])
+        all_times = np.asarray(inputs["all_time_values_ns"])
+        all_global = np.asarray(inputs["all_global_indices"])
+        all_segments = np.asarray(inputs["all_segment_ids"])
+        test_global = np.asarray(inputs["test_global_indices"])
+    result = segment_counts_from_axis(all_labels, all_global, all_segments, test_global,
+                                      np.asarray(scored_global), np.asarray(predictions), all_times)
+    return result
 
 
 def contribution_deltas(metrics_by_combo):
@@ -322,7 +348,8 @@ def main():
     review_root = ROOT / "result/review/MNRF-ViewProbe"
     review_root.mkdir(parents=True, exist_ok=True)
     archive = review_root / ("MNRF_BRANCH_ABLATION_{}.zip".format(report["batch_id"]))
-    with zipfile.ZipFile(str(archive), "x", compression=zipfile.ZIP_DEFLATED) as output:
+    temp_archive = archive.with_name(archive.name + ".tmp-{}".format(os.getpid()))
+    with zipfile.ZipFile(str(temp_archive), "w", compression=zipfile.ZIP_DEFLATED) as output:
         for name in ("plan.json", "matrix.csv", "long_table.csv", "branch_contributions.csv",
                      "paired_changes.csv", "repeat_summary.csv", "summary.json"):
             candidate = batch_dir / name
@@ -330,6 +357,16 @@ def main():
                 output.write(str(candidate), arcname=name)
         if point_path.is_file():
             output.write(str(point_path), arcname=point_path.name)
+    if archive.exists():
+        try:
+            with zipfile.ZipFile(str(archive), "r") as existing:
+                prior = json.loads(existing.read("plan.json").decode("utf-8"))
+            if prior.get("batch_id") != report["batch_id"]:
+                raise ValueError("refusing to replace a review archive from another batch")
+        except Exception as error:
+            temp_archive.unlink(missing_ok=True)
+            raise ValueError("existing review archive is not this batch's generated package: {}".format(error))
+    os.replace(str(temp_archive), str(archive))
     print("summary_dir={}".format(batch_dir))
     print("review_package={}".format(archive))
     print("positions={} complete_or_reused={} blocked={} pending={} conflict={}".format(
