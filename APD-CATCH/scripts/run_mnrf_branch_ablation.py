@@ -6,9 +6,11 @@ import csv
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -16,17 +18,18 @@ if str(ROOT) not in sys.path:
 
 from ts_benchmark.baselines.mnrf_view_probe.probe import _sha256_file
 from scripts.validate_mnrf_view_probe import validate
+from scripts.mnrf_branch_source_registry import RETRAINED_TASKS, selected_source
 
 
 TASKS = {
-    "PSM": ("full_gmm-full-20261021T112121Z-2466820", 192, 128),
+    "PSM": (None, 192, 128),
     "MSL": ("full_gmm-full-20261021T112147Z-2470335", 192, 128),
     "GECCO": ("full_gmm-full-20261020T204951Z-1642355", 96, 128),
     "Genesis": ("full_gmm-full-20261020T205005Z-1645522", 192, 4),
     "NYC": ("full_gmm-full-20261020T211341Z-1931786", 192, 128),
     "CalIt2": ("full_gmm-full-20261021T112212Z-2474004", 192, 128),
-    "Creditcard": ("full_gmm-full-20261021T112159Z-2472093", 192, 128),
-    "CICIDS": ("full_gmm-full-20261021T112642Z-2510633", 192, 128),
+    "Creditcard": (None, 192, 128),
+    "CICIDS": (None, 192, 128),
 }
 COMBINATIONS = (
     ("S", ("S",)), ("SE", ("S", "E")), ("SP", ("S", "P")),
@@ -76,6 +79,44 @@ def _write_csv(path, rows):
         writer.writeheader()
         writer.writerows(rows)
     os.replace(temporary, path)
+
+
+def _inventory_only(plan):
+    allowed = {"reused", "planned/pending", "blocked", "conflict"}
+    rows = plan.get("rows")
+    return (plan.get("mode") == "first_round" and isinstance(rows, list)
+            and all(row.get("status") in allowed for row in rows))
+
+
+def _prune_superseded_inventories(current_batch_id, analysis_root=None, review_root=None):
+    analysis_root = Path(analysis_root or ROOT / "result/analysis/MNRF-ViewProbe-Ablation")
+    review_root = Path(review_root or ROOT / "result/review/MNRF-ViewProbe")
+    removed = []
+    for batch_dir in sorted(analysis_root.glob("branch-ablation-*")):
+        if batch_dir.name == current_batch_id or batch_dir.is_symlink() or not batch_dir.is_dir():
+            continue
+        plan_path = batch_dir / "plan.json"
+        try:
+            old_plan = _json(plan_path)
+            if old_plan.get("batch_id") != batch_dir.name or not _inventory_only(old_plan):
+                continue
+        except Exception:
+            continue
+        archive = review_root / ("MNRF_BRANCH_ABLATION_{}.zip".format(batch_dir.name))
+        remove_archive = False
+        if archive.exists() and not archive.is_symlink():
+            try:
+                with zipfile.ZipFile(str(archive), "r") as handle:
+                    archived_plan = json.loads(handle.read("plan.json").decode("utf-8"))
+                remove_archive = (archived_plan.get("batch_id") == batch_dir.name
+                                  and _inventory_only(archived_plan))
+            except Exception:
+                remove_archive = False
+        shutil.rmtree(batch_dir)
+        if remove_archive:
+            archive.unlink()
+        removed.append(batch_dir.name)
+    return removed
 
 
 def _views(manifest):
@@ -138,10 +179,26 @@ def _validate_run(path, validate_cache=None):
 
 def _source_record(task, validate_cache):
     run_id, seq_len, batch_size = TASKS[task]
-    path = ROOT / "result/score/MNRF-ViewProbe" / task / run_id
+    try:
+        selected, registration = selected_source(task, run_id)
+    except Exception as error:
+        selected, registration = None, None
+        selection_error = "{}: {}".format(type(error).__name__, error)
+    else:
+        selection_error = None
+    path = selected if selected is not None else ROOT / "result/score/MNRF-ViewProbe" / task / (run_id or "UNREGISTERED")
     record = {"task": task, "run_id": run_id, "path": str(path.resolve()),
               "seq_len_expected": seq_len, "batch_size_reference": batch_size,
               "status": "blocked", "reason": None}
+    if task in RETRAINED_TASKS:
+        record["registration"] = registration
+        if selection_error:
+            record["reason"] = selection_error
+            return record
+        if registration is None:
+            record["reason"] = "no verified replacement Full source is registered; run the task Full script first"
+            return record
+        record["run_id"] = path.name
     if not path.is_dir():
         record["reason"] = "pinned source directory is missing"
         return record
@@ -151,6 +208,13 @@ def _source_record(task, validate_cache):
             checked = _validate_run(path)
             validate_cache[path.resolve()] = checked
         manifest = checked["manifest"]
+        if registration is not None:
+            if manifest.get("source_identity_sha256") != registration.get("source_identity_sha256"):
+                raise ValueError("registered source identity changed after registration")
+            if manifest.get("feature_fingerprint") != registration.get("feature_fingerprint"):
+                raise ValueError("registered feature fingerprint changed after registration")
+            if _sha256_file(path / "probe_manifest.json") != registration.get("manifest_sha256"):
+                raise ValueError("registered source manifest changed after registration")
         config = manifest.get("config", {})
         identity = manifest.get("source_identity") or {}
         if manifest.get("artifact_type") != "probe_head" or manifest.get("head_type") != "gmm":
@@ -352,7 +416,7 @@ def build_plan(tasks, batch_id=None, validate_sources=True):
     validate_cache = {}
     inventory = {}
     source_records = {task: _source_record(task, validate_cache) if validate_sources else {
-        "task": task, "run_id": TASKS[task][0], "path": str((ROOT / "result/score/MNRF-ViewProbe" / task / TASKS[task][0]).resolve()),
+        "task": task, "run_id": TASKS[task][0], "path": str((ROOT / "result/score/MNRF-ViewProbe" / task / (TASKS[task][0] or "UNREGISTERED")).resolve()),
         "status": "unverified", "reason": "plan metadata only"} for task in tasks}
     rows = []
     for task in tasks:
@@ -392,6 +456,9 @@ def _save_batch(plan, summary_root=None):
         "notice": "Plan only; no encoder, GMM fit, calibration or training was run.",
     }
     _write_json(batch_dir / "status.json", note)
+    pruned = _prune_superseded_inventories(plan["batch_id"]) if len(plan.get("tasks", ())) == len(TASKS) else []
+    plan["superseded_inventory_batches_pruned"] = pruned
+    _write_json(batch_dir / "plan.json", plan)
     return batch_dir
 
 

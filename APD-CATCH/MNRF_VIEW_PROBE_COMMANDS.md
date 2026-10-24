@@ -244,43 +244,31 @@ error reports the recovery directory instead of claiming success.
 
 ## Frozen-cache recovery
 
-The four pinned Full sources are repaired only at missing cache paths. The
-tool first searches scoped project result/source/backup/review roots for exact
-scattered or ZIP/TAR members, streaming candidate bytes and requiring the
-manifest SHA256. Only if an exact backup is absent may it run the saved best
-encoder in `eval()`/`no_grad()` mode. Installation uses an atomic no-replace
-link; a concurrent equal file is reused, while a different file or dangling
-symlink is a conflict. Existing artifacts and the manifest are never rewritten.
+The former PSM/Creditcard/CICIDS cache-recovery campaign is closed. Do not run
+another recovery/forward audit for those old Run IDs; their mismatched missing
+caches will not be used. The recovery utility remains available for other
+explicitly authorized operations, but these three tasks now use new Full runs.
 
-`already_complete` means all four split caches and endpoints plus the complete
-GMM/source artifacts pass both the read-only native validator and the actual
-source loader used by `select_gmm`. A split-limited repair cannot claim a
-complete source. Missing or mismatched validation/calibration caches,
-statistics, checkpoint, normalized values, GMM, calibration, or results leave
-the task `blocked`/partial and return nonzero. No GMM fit or recalibration is
-performed.
-
-Before any new frozen forward after an earlier hash mismatch, run the bounded
-diagnostic below. It replays beginning, middle, last-full and tail batches on
-the existing validation/calibration caches and reports exact/non-equal counts
-for S/E/P/R, along with runtime math/thread and `.npy` layout details. It does
-not compare missing historical files or infer a cause from unknown training
-settings.
+After each new Full run and analysis export succeed, the task script performs a
+separate source-registration step. That step reruns native validation and the
+actual read-only `select_gmm` source loader before recording the exact output
+path, manifest digest, source identity, feature fingerprint, cache and endpoint
+bindings under `result/analysis/MNRF-ViewProbe-Ablation/current_sources/`.
+Planning, execution, and summary all consume this same explicit per-task
+registration. No source is chosen by latest timestamp or score. Until a new
+source is registered, PSM, Creditcard, and CICIDS remain blocked in ablation
+plans. Only after registration is atomically written does the helper remove
+that task's one fixed retired residual Run ID; it refuses symlink paths and
+never removes the newly registered run.
 
 ```bash
-python scripts/recover_mnrf_view_probe_cache.py --diagnose-forward \
-  --task PSM --task Creditcard --task CICIDS --device cuda:0
+bash scripts/multivariate_detection/detect_score/PSM_script/MNRFViewProbe.sh
+bash scripts/multivariate_detection/detect_score/Creditcard_script/MNRFViewProbe.sh
+bash scripts/multivariate_detection/detect_score/CICIDS_script/MNRFViewProbe.sh
 ```
 
-```bash
-python scripts/recover_mnrf_view_probe_cache.py --all --device cuda:0
-```
-
-Recovery reports and temporary files are kept below
-`result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-<UTC>-<PID>/`.
-Existing source files are read-only except for absent cache files whose exact
-manifest bytes are restored. Re-running is read-only for complete sources.
-Use `--backup-only` to search/install exact backups without loading data or a
-checkpoint; any unresolved source remains blocked and exits nonzero. Reports
-include the search roots, archive/member provenance, per-file status and the
-native completion check. This command does not start the 72-cell ablation matrix.
+Create a fresh 72-cell plan after the desired Full runs have registered; do
+not reuse the historical inventory batch for these three tasks. A newly
+saved all-dataset plan removes older plan-only inventory folders and matching
+review ZIPs only when their rows contain no executed `complete`, `failed`, or
+`running` cells; executed batches are retained.

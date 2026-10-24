@@ -40,5 +40,6 @@ if [[ "${EXPORT_STATUS}" -ne 0 ]]; then
   printf 'output_dir=%s\nanalysis_dir=%s\nfull_artifact_validation=not_confirmed\nanalysis_export=failed\n' "${OUTPUT_DIR}" "${ANALYSIS_DIR}" >&2
   exit "${EXPORT_STATUS}"
 fi
+python "${ROOT}/scripts/register_mnrf_branch_source.py" --task "${TASK}" --run-dir "${OUTPUT_DIR}"
 printf 'output_dir=%s\nanalysis_dir=%s\nfull_artifact_validation=passed\nanalysis_export=complete\n' "${OUTPUT_DIR}" "${ANALYSIS_DIR}"
 

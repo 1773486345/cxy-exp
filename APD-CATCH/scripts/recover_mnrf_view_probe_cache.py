@@ -114,8 +114,10 @@ def _validate_existing_feature(path: Path, name: str, manifest):
 def _copy_and_hash(stream, destination):
     digest = __import__("hashlib").sha256()
     destination = Path(destination)
+    created = False
     try:
         with destination.open("xb") as output:
+            created = True
             while True:
                 block = stream.read(1024 * 1024)
                 if not block:
@@ -125,7 +127,8 @@ def _copy_and_hash(stream, destination):
             output.flush()
             os.fsync(output.fileno())
     except Exception:
-        destination.unlink(missing_ok=True)
+        if created:
+            destination.unlink(missing_ok=True)
         raise
     return digest.hexdigest()
 
@@ -753,10 +756,17 @@ def recover_task(task: str, report_dir: Path, device_name: str, requested_splits
                    if item.get("status") == "missing"]
     result["missing_before"] = list(all_missing)
     if requested_splits:
+        invalid_splits = sorted(set(requested_splits).difference({"train", "validation", "calibration", "test"}))
+        if invalid_splits:
+            raise ValueError("unsupported --split value(s): " + ", ".join(invalid_splits))
+    if requested_splits:
         missing_allowed = [name for name in all_missing if name in requested_splits]
     else:
         missing_allowed = list(all_missing)
     result["requested_missing_splits"] = missing_allowed
+    result["requested_split_status_before"] = {
+        name: result["files"][name]["status"] for name in (requested_splits or ())
+    }
     private = task_report / f"temporary-cache-{os.getpid()}-{uuid.uuid4().hex}"
     private.mkdir(exist_ok=False)
     try:
@@ -811,25 +821,24 @@ def recover_task(task: str, report_dir: Path, device_name: str, requested_splits
         endpoint_missing = [name for name, item in result["files"].items()
                             if item.get("endpoint", {}).get("status") != "present"]
         result["missing_after_exact_backup"] = remaining
-        if requested_splits:
-            unrequested = [name for name in remaining if name not in requested_splits]
-        else:
-            unrequested = []
-        if unrequested:
-            result["status"] = "partial_unrequested_split"
-            result["missing"] = remaining
-            result["reason"] = "split restriction left required cache missing"
-        elif remaining and endpoint_missing:
+        result["requested_split_status_after_backup"] = {
+            name: result["files"][name]["status"] for name in (requested_splits or ())
+        }
+        work_remaining = ([name for name in remaining if name in requested_splits]
+                          if requested_splits else list(remaining))
+        unrequested_before_forward = [name for name in remaining if name not in work_remaining]
+        result["forward_requested_splits"] = list(work_remaining)
+        if work_remaining and set(work_remaining).intersection(endpoint_missing):
             result["status"] = "blocked"
-            result["missing"] = remaining
+            result["missing"] = work_remaining
             result["missing_endpoints"] = endpoint_missing
             result["reason"] = "cannot forward missing cache because frozen endpoint files are incomplete"
-        elif remaining and not allow_forward:
+        elif work_remaining and not allow_forward:
             result["status"] = "blocked"
-            result["missing"] = remaining
+            result["missing"] = work_remaining
             result["reason"] = "backup-only run found no exact archive/scattered copy"
             result["backup_search_complete"] = True
-        elif remaining:
+        elif work_remaining:
             selected_device = device_name
             if selected_device == "auto":
                 selected_device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -861,7 +870,7 @@ def recover_task(task: str, report_dir: Path, device_name: str, requested_splits
                     "windows_per_second": float(bench_n / max(elapsed, 1e-12)),
                     "max_abs_vs_validation": float(np.max(np.abs(bench_features - validation_cache[:bench_n]))),
                 }
-            for name in remaining:
+            for name in work_remaining:
                 shape, digest = _expected_cache(manifest, name)
                 staged, elapsed = _forward_split(
                     probe, trainer, normalized, name, result["batch_size"],
@@ -886,10 +895,17 @@ def recover_task(task: str, report_dir: Path, device_name: str, requested_splits
                     result["files"][name].update({"status": "recovery_failed",
                                                    "error": "installed hash differs from manifest"})
             result["files"] = _feature_inventory(source, manifest)
+        elif unrequested_before_forward:
+            result["status"] = "partial_unrequested_split"
+            result["missing"] = remaining
+            result["reason"] = "requested split is present; other required splits were not requested"
         # Complete means every original artifact is present, the native
         # validator accepts it, and the real select_gmm source loader accepts
         # all frozen caches/checkpoints/statistics. No fit is invoked.
         required, missing_required = _required_artifacts(source, manifest)
+        result["requested_split_status_final"] = {
+            name: result["files"][name]["status"] for name in (requested_splits or ())
+        }
         result["required_artifacts"] = {"count": len(required), "missing": missing_required}
         if not missing_required and not any(item.get("status") == "missing"
                                             or item.get("endpoint", {}).get("status") != "present"

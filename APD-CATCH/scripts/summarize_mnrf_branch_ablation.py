@@ -19,8 +19,9 @@ if str(ROOT) not in sys.path:
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from scripts.run_mnrf_branch_ablation import (
-    COMBINATIONS, TASKS, _json, _same_conditions, _validate_run, _views, selected_indices,
+    COMBINATIONS, TASKS, _json, _same_conditions, _sha256_file, _validate_run, _views, selected_indices,
 )
+from scripts.mnrf_branch_source_registry import selected_source
 
 
 def _atomic_json(path, value):
@@ -72,11 +73,20 @@ def _evaluation(run_dir, pinned_source, dataset, combination, seed, checked_runs
     source_config = source_manifest.get("config", {})
     if dataset in TASKS:
         expected_run_id, expected_seq_len, _ = TASKS[dataset]
-        expected_source = (ROOT / "result/score/MNRF-ViewProbe" / dataset / expected_run_id).resolve()
+        expected_source, registration = selected_source(dataset, expected_run_id)
+        if expected_source is None:
+            raise ValueError("no verified replacement Full source is registered for {}".format(dataset))
+        expected_source = expected_source.resolve()
         if pinned_source.resolve() != expected_source:
             raise ValueError("summary source path is not the pinned Full run for {}".format(dataset))
-        if pinned_source.name != expected_run_id or source_config.get("seq_len") != expected_seq_len:
+        if (pinned_source.name != expected_source.name
+                or source_config.get("seq_len") != expected_seq_len):
             raise ValueError("pinned source Run ID or window length differs from the ablation contract")
+        if registration is not None:
+            if (source_manifest.get("source_identity_sha256") != registration.get("source_identity_sha256")
+                    or source_manifest.get("feature_fingerprint") != registration.get("feature_fingerprint")
+                    or _sha256_file(pinned_source / "probe_manifest.json") != registration.get("manifest_sha256")):
+                raise ValueError("registered source identity/manifest changed before summary")
     if (source_manifest.get("artifact_policy") != "full" or source_manifest.get("stage_status") != "complete"
             or source_manifest.get("head_type") != "gmm" or source_manifest.get("head_status") != "complete"
             or source_manifest.get("layout") != {

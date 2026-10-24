@@ -28,5 +28,69 @@
     "branch-ablation-20261023T173741Z-2"
   ],
   "exceptions_retained": [],
-  "scope": "No Full source, cache, checkpoint, data, or seed=2021 ablation run was deleted."
+  "scope": "No Full source, cache, checkpoint, data, or seed=2021 ablation run was deleted.",
+  "cache_recovery_and_inventory_cleanup": {
+    "operation_date": "2026-10-24",
+    "pre_delete_du_sb_bytes": 1313996774,
+    "pre_delete_du_sb_mib": 1253.12,
+    "basis": "du -sb over the exact paths listed below; apparent file/directory bytes, not RAM/VRAM",
+    "deleted_recovery_directories": [
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T194332Z-1467743",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T194557Z-1479524",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T194804Z-1488482",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T195044Z-1500638",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T195539Z-1523216",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T195952Z-1542785",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T201202Z-1613890",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T204645Z-1789118",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261024-final",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-backup-20261024-a",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-diagnostic-20261024-01",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-diagnostic-20261024-02",
+      "result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-msl-20261024-final"
+    ],
+    "deleted_recovery_archives": [
+      "result/review/MNRF-ViewProbe/MNRF_CACHE_RECOVERY_AUDIT_20261024.zip",
+      "result/review/MNRF-ViewProbe/MNRF_CACHE_RECOVERY_cache-recovery-20261023T201202Z-1613890.zip"
+    ],
+    "deleted_zero_execution_inventory_batches": [
+      "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T132059Z-3358281",
+      "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T135838Z-3590307",
+      "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T173741Z-2",
+      "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T185511Z-1181216",
+      "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261023T203206Z-1704916",
+      "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261024T054610Z-1900565"
+    ],
+    "deleted_zero_execution_review_packages": [
+      "result/review/MNRF-ViewProbe/MNRF_BRANCH_ABLATION_branch-ablation-20261023T135838Z-3590307.zip",
+      "result/review/MNRF-ViewProbe/MNRF_BRANCH_ABLATION_branch-ablation-20261023T173741Z-2.zip",
+      "result/review/MNRF-ViewProbe/MNRF_BRANCH_ABLATION_branch-ablation-20261023T185511Z-1181216.zip",
+      "result/review/MNRF-ViewProbe/MNRF_BRANCH_ABLATION_branch-ablation-20261023T203206Z-1704916.zip",
+      "result/review/MNRF-ViewProbe/MNRF_BRANCH_ABLATION_branch-ablation-20261024T054610Z-1900565.zip"
+    ],
+    "deleted_duplicate_analysis_directories": [
+      "result/analysis/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820",
+      "result/analysis/MNRF-ViewProbe/Creditcard/full_gmm-full-20261021T112159Z-2472093",
+      "result/analysis/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633"
+    ],
+    "deleted_residual_source_cache_files": [
+      "result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820/cache/normalized_values.npy",
+      "result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820/cache/calibration_features.npy",
+      "result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820/cache/test_features.npy",
+      "result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820/cache/validation_features.npy",
+      "result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261021T112159Z-2472093/cache/normalized_values.npy",
+      "result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261021T112159Z-2472093/cache/calibration_features.npy",
+      "result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261021T112159Z-2472093/cache/validation_features.npy",
+      "result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633/cache/normalized_values.npy",
+      "result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633/cache/calibration_features.npy",
+      "result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633/cache/test_features.npy",
+      "result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633/cache/validation_features.npy"
+    ],
+    "retained_in_old_residual_sources": "checkpoints, manifests, run status/request/logs, GMM/calibration, metrics, aligned scores, NLL and endpoint indices",
+    "retained_valid_full_sources": ["MSL", "GECCO", "Genesis", "NYC", "CalIt2"],
+    "replacement_source_registration": "only after new Full export, native validator and select_gmm source-loader preflight succeed",
+    "current_single_seed_plan": "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261024T105051Z-3690087",
+    "current_plan_status": {"positions": 72, "reused": 5, "pending": 40, "blocked": 27, "conflict": 0, "complete_datasets": 0},
+    "current_plan_note": "Freshly validated after cleanup; no ablation fit was launched. The three replacement Full tasks stay blocked until explicit source registration."
+  }
 }

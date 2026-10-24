@@ -229,6 +229,46 @@ def test_archive_search_streams_exact_zip_and_tar_members(tmp_path, monkeypatch)
     assert _sha(found_tar["staged_path"]) == digest
 
 
+def test_copy_and_hash_failure_never_removes_preexisting_target(tmp_path):
+    target = tmp_path / "existing.tmp"
+    original = b"owned by caller before recovery"
+    target.write_bytes(original)
+
+    class BrokenStream:
+        def read(self, size):
+            raise OSError("injected source read failure")
+
+    try:
+        recovery._copy_and_hash(BrokenStream(), target)
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("exclusive creation must reject a caller-owned target")
+    assert target.read_bytes() == original
+
+
+def test_copy_and_hash_cleans_only_its_partially_created_file(tmp_path):
+    target = tmp_path / "owned.tmp"
+
+    class BrokenStream:
+        def __init__(self):
+            self.calls = 0
+
+        def read(self, size):
+            self.calls += 1
+            if self.calls == 1:
+                return b"partial"
+            raise OSError("injected source read failure")
+
+    try:
+        recovery._copy_and_hash(BrokenStream(), target)
+    except OSError as error:
+        assert "injected" in str(error)
+    else:
+        raise AssertionError("source read failure should propagate")
+    assert not target.exists()
+
+
 def test_full_source_inventory_requires_all_four_splits_and_core_artifacts(tmp_path):
     manifest = {
         "cache_shapes": {name: [2, 1, 25] for name in
@@ -288,3 +328,41 @@ def test_train_and_test_alone_never_count_as_a_complete_source(tmp_path, monkeyp
         "cache/validation_features.npy", "cache/calibration_features.npy",
         "validation", "calibration",
     }
+
+
+def test_requested_split_is_processed_but_overall_source_stays_blocked(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    source = project / "result" / "score" / "MNRF-ViewProbe" / "PSM" / "run"
+    source.mkdir(parents=True)
+    (source / "cache").mkdir()
+    manifest = {
+        "artifact_policy": "full", "head_type": "gmm",
+        "cache_shapes": {name: [2, 1, 25] for name in
+                         ("train", "validation", "calibration", "test")},
+        "cache_sha256": {}, "endpoint_sha256": {},
+    }
+    for name in ("train", "validation", "calibration", "test"):
+        endpoint = source / "cache" / f"{name}_window_end_indices.npy"
+        np.save(endpoint, np.asarray([31, 32], dtype=np.int64))
+        manifest["endpoint_sha256"][name] = _sha(endpoint)
+        manifest["cache_sha256"][name] = "a" * 64
+    train_cache = source / "cache" / "train_features.npy"
+    test_cache = project / "result" / "backup" / "test_features.npy"
+    train_cache.parent.mkdir(parents=True, exist_ok=True)
+    test_cache.parent.mkdir(parents=True, exist_ok=True)
+    np.save(train_cache, np.zeros((2, 1, 25), dtype=np.float32))
+    np.save(test_cache, np.ones((2, 1, 25), dtype=np.float32))
+    manifest["cache_sha256"]["train"] = _sha(source / "cache" / "train_features.npy")
+    manifest["cache_sha256"]["test"] = _sha(test_cache)
+    (source / "probe_manifest.json").write_text(__import__("json").dumps(manifest))
+    monkeypatch.setattr(recovery, "ROOT", project)
+    monkeypatch.setattr(recovery, "_source_path", lambda task: source)
+    result = recovery.recover_task("PSM", tmp_path / "report", "cpu",
+                                   requested_splits=["test"], allow_forward=False)
+    assert result["requested_split_status_before"] == {"test": "missing"}
+    assert result["requested_split_status_final"] == {"test": "present"}
+    assert result["status"] == "blocked"
+    assert result["recovery_actions"]["test"]["method"] == "exact_backup"
+    assert _sha(source / "cache" / "test_features.npy") == _sha(test_cache)
+    assert {"cache/validation_features.npy", "cache/calibration_features.npy"}.issubset(
+        set(result["missing"]))

@@ -18,6 +18,9 @@ from scripts.summarize_mnrf_branch_ablation import (
     _evaluation, _point_and_segment_changes, completion_counts,
     contribution_deltas, segment_counts_from_axis, summarize,
 )
+import scripts.mnrf_branch_source_registry as source_registry
+import scripts.register_mnrf_branch_source as source_registration
+from scripts.run_mnrf_branch_ablation import TASKS, _prune_superseded_inventories
 
 
 def test_matrix_has_all_nine_combinations_and_dimensions():
@@ -34,6 +37,67 @@ def test_plan_keeps_blocked_dataset_matrix_without_starting_work():
     assert len(plan["rows"]) == 9
     assert all(row["status"] == "blocked" for row in plan["rows"])
     assert all(row["selected_dim"] in {1, 9, 17, 24, 25} for row in plan["rows"])
+
+
+@pytest.mark.parametrize("task", ["PSM", "Creditcard", "CICIDS"])
+def test_retrained_full_tasks_require_explicit_source_registration(task, tmp_path, monkeypatch):
+    monkeypatch.setattr(source_registry, "REGISTRY_DIR", tmp_path / "registry")
+    assert TASKS[task][0] is None
+    path, registration = source_registry.selected_source(task, TASKS[task][0])
+    assert path is None and registration is None
+    target = tmp_path / task / "new-full-run"
+    record = {"path": str(target), "run_id": target.name,
+              "source_identity_sha256": "identity", "feature_fingerprint": "features",
+              "manifest_sha256": "manifest"}
+    source_registry.write_registry(task, record)
+    path, loaded = source_registry.selected_source(task, None)
+    assert path == target.resolve()
+    assert loaded == record
+
+
+@pytest.mark.parametrize("task,old_id", [
+    ("PSM", "full_gmm-full-20261021T112121Z-2466820"),
+    ("Creditcard", "full_gmm-full-20261021T112159Z-2472093"),
+    ("CICIDS", "full_gmm-full-20261021T112642Z-2510633"),
+])
+def test_retired_residual_removed_only_after_explicit_replacement(task, old_id, tmp_path, monkeypatch):
+    monkeypatch.setattr(source_registration, "ROOT", tmp_path)
+    task_root = tmp_path / "result/score/MNRF-ViewProbe" / task
+    old = task_root / old_id
+    new = task_root / "new-full-run"
+    old.mkdir(parents=True)
+    new.mkdir(parents=True)
+    (old / "retained-until-replacement.txt").write_text("residual")
+    (new / "probe_manifest.json").write_text("new")
+    outcome = source_registration.retire_old_residual(task, new)
+    assert outcome["status"] == "removed_after_new_source_registered"
+    assert not old.exists()
+    assert (new / "probe_manifest.json").read_text() == "new"
+
+
+def test_refresh_prunes_only_old_inventory_batches_and_matching_review_zip(tmp_path):
+    analysis = tmp_path / "analysis"
+    review = tmp_path / "review"
+    current = analysis / "branch-ablation-current"
+    stale = analysis / "branch-ablation-stale"
+    executed = analysis / "branch-ablation-executed"
+    for path in (current, stale, executed):
+        path.mkdir(parents=True)
+    current_plan = {"batch_id": current.name, "mode": "first_round", "rows": []}
+    stale_plan = {"batch_id": stale.name, "mode": "first_round",
+                  "rows": [{"status": "reused"}, {"status": "planned/pending"}]}
+    executed_plan = {"batch_id": executed.name, "mode": "first_round",
+                     "rows": [{"status": "complete"}]}
+    for path, plan in ((current, current_plan), (stale, stale_plan), (executed, executed_plan)):
+        (path / "plan.json").write_text(json.dumps(plan))
+    review.mkdir()
+    archive = review / "MNRF_BRANCH_ABLATION_{}.zip".format(stale.name)
+    with __import__("zipfile").ZipFile(archive, "w") as handle:
+        handle.writestr("plan.json", json.dumps(stale_plan))
+    removed = _prune_superseded_inventories(current.name, analysis, review)
+    assert removed == [stale.name]
+    assert current.is_dir() and executed.is_dir()
+    assert not stale.exists() and not archive.exists()
 
 
 def test_contribution_signs_match_removal_definition():

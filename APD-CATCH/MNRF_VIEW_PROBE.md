@@ -382,29 +382,16 @@ segments.
 
 ## Frozen-cache recovery
 
-Missing split caches in the four pinned Full sources can first be searched in
-scoped project result/source/backup/review roots, including ZIP and TAR
-members. Archive contents are streamed rather than extracted; candidates must
-match the source manifest byte SHA256 and expected float32 shape. Installation
-uses an atomic no-replace link. A concurrently-created equal target is reused;
-a different target or dangling symlink is preserved and reported as conflict.
-
-The saved best encoder may be used for a bounded frozen forward only when an
-exact backup is absent. It runs in evaluation/no-gradient mode and installs a
-cache only if its complete `.npy` SHA256 matches the immutable source manifest.
-It never invokes Stage 1, backward, an optimizer, GMM fitting, Flow, or
-recalibration. Full success additionally requires all four split caches and
-endpoints, all native full-GMM artifacts, successful `validate_mnrf_view_probe`
-validation, and the same read-only source loader used by `select_gmm`. A
-split-limited repair or missing validation/calibration/statistics/checkpoint/
-GMM/calibration/result artifact stays partial/blocked and exits nonzero.
-
-After a prior forward hash mismatch, a bounded diagnostic is available:
-`python scripts/recover_mnrf_view_probe_cache.py --diagnose-forward --task PSM
---task Creditcard --task CICIDS --device cuda:0`. It replays the beginning,
-middle, last full batch and true tail of cached validation/calibration splits,
-reports per-view exact equality/error counts, runtime precision/thread state,
-and `.npy` header details. Unknown historical runtime settings remain unknown;
-the diagnostic does not invent a cause or compare unavailable historical
-train/test bytes. Reports live under
-`result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-<UTC>-<PID>/`.
+The previous cache-recovery effort for PSM, Creditcard and CICIDS is closed.
+Their old incomplete Full runs will not be used as ablation sources. The three
+task scripts create unique new Full runs and, after normal export succeeds,
+register the exact run only after native artifact validation and the actual
+read-only `select_gmm` source loader pass. Explicit per-task records live under
+`result/analysis/MNRF-ViewProbe-Ablation/current_sources/`; the planner,
+executor and summarizer share these records and never choose by mtime or score.
+Until registration succeeds, each task remains blocked for ablation planning.
+After the verified registration is written, the helper removes only that
+task's fixed retired residual Run ID; it never removes the new source or any
+other historical run. Refreshing the all-dataset 72-cell plan also prunes
+older plan-only inventory batches and their matching review ZIPs, but preserves
+any batch containing executed, failed, or running cells.
