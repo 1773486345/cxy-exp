@@ -75,6 +75,35 @@ def test_retired_residual_removed_only_after_explicit_replacement(task, old_id, 
     assert (new / "probe_manifest.json").read_text() == "new"
 
 
+@pytest.mark.parametrize("task", ["PSM", "Creditcard", "CICIDS"])
+def test_source_registration_passes_dataset_named_task_report(task, tmp_path, monkeypatch):
+    monkeypatch.setattr(source_registration, "ROOT", tmp_path)
+    monkeypatch.setattr(source_registry, "REGISTRY_DIR", tmp_path / "registry")
+    task_root = tmp_path / "result/score/MNRF-ViewProbe" / task
+    run_dir = task_root / "new-full-run"
+    run_dir.mkdir(parents=True)
+    expected_seq_len = TASKS[task][1]
+    manifest = {
+        "artifact_policy": "full", "mode": "pretrained", "stage_status": "complete",
+        "head_type": "gmm", "selected_views": ["S", "E", "P", "R"],
+        "config": {"seq_len": expected_seq_len, "seed": 2021},
+        "source_identity_sha256": "identity", "feature_fingerprint": "features",
+        "cache_sha256": {}, "endpoint_sha256": {},
+    }
+    (run_dir / "probe_manifest.json").write_text(json.dumps(manifest))
+    (run_dir / "run_status.json").write_text(json.dumps({"status": "complete"}))
+    observed = []
+
+    def fake_validate(source, loaded_manifest, task_report, device):
+        observed.append((source, task_report.name, device))
+        return {"native_validation": {"status": "complete"}, "source_preflight_device": device}
+
+    import scripts.recover_mnrf_view_probe_cache as recovery
+    monkeypatch.setattr(recovery, "_validate_complete_source", fake_validate)
+    source_registration.register(task, run_dir)
+    assert observed == [(run_dir, task, "cpu")]
+
+
 def test_refresh_prunes_only_old_inventory_batches_and_matching_review_zip(tmp_path):
     analysis = tmp_path / "analysis"
     review = tmp_path / "review"

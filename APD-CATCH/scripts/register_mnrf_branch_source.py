@@ -63,7 +63,9 @@ def register(task, run_dir):
     # used when deciding whether a frozen source can be consumed.
     from scripts.recover_mnrf_view_probe_cache import _validate_complete_source
     with tempfile.TemporaryDirectory(prefix="mnrf-source-registration-") as temporary:
-        validation = _validate_complete_source(run_dir, manifest, Path(temporary), "cpu")
+        task_report = Path(temporary) / task
+        task_report.mkdir()
+        validation = _validate_complete_source(run_dir, manifest, task_report, "cpu")
     record = {
         "task": task, "path": str(run_dir), "run_id": run_dir.name,
         "manifest_sha256": _sha256_file(manifest_path),
