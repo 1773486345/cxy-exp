@@ -241,3 +241,22 @@ publish the known manifest/provenance/analysis files. Rollback never globs
 `.tmp` names in the run tree, so pre-existing temporary evidence, ordinary
 directories and symlinks are preserved. If restoration itself fails, the
 error reports the recovery directory instead of claiming success.
+
+## Frozen-cache recovery
+
+The four pinned Full sources can be checked and repaired without Stage 1,
+backward, GMM fitting, Flow, or recalibration. The recovery entry point first
+looks for an exact manifest-hash backup and otherwise runs the saved best
+encoder in `eval()`/`no_grad()` mode with the source batch size. It installs a
+missing cache file only after shape, dtype, finite-value, endpoint, and byte
+SHA256 checks pass. A mismatch is reported and the source file is left absent;
+the manifest is never rewritten.
+
+```bash
+python scripts/recover_mnrf_view_probe_cache.py --all --device cuda:0
+```
+
+Recovery reports and temporary files are kept below
+`result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-<UTC>-<PID>/`.
+Existing source files are read-only. Re-running is idempotent for already
+verified files. This command does not start the 72-cell ablation matrix.

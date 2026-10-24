@@ -1,0 +1,80 @@
+{
+  "batch_size": 128,
+  "benchmark": {
+    "max_abs_vs_validation": 0.0,
+    "seconds": 0.2419495889917016,
+    "windows": 128,
+    "windows_per_second": 529.0358232614735
+  },
+  "data_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/Creditcard.csv",
+  "device": "cuda:0",
+  "device_requested": "cuda:0",
+  "files": {
+    "calibration": {
+      "bytes": 40634928,
+      "sha256": "bfb033ba7973676ce633961e2ab8122813ebc9c13d43e7a7ff44c462f457e72d",
+      "shape": [
+        14012,
+        29,
+        25
+      ],
+      "status": "present"
+    },
+    "test": {
+      "expected_sha256": "140e96a782ea714a855a1893986550696140352362562af7ba5f300c38b3b9ad",
+      "expected_shape": [
+        142213,
+        29,
+        25
+      ],
+      "status": "missing"
+    },
+    "train": {
+      "elapsed_seconds": 161.02190606016666,
+      "error": "generated train_features.npy hash mismatch: expected=ec4efcc16cd920cfd64943a08d5ece976baeba8ef4b6398a16f4be4b5c6b1cf1 actual=20623fc50c014ceb29886a64ed247f25ec15ffb7d5c40a513cf14b63be306e83",
+      "expected_sha256": "ec4efcc16cd920cfd64943a08d5ece976baeba8ef4b6398a16f4be4b5c6b1cf1",
+      "expected_shape": [
+        113425,
+        29,
+        25
+      ],
+      "generated_sha256": "20623fc50c014ceb29886a64ed247f25ec15ffb7d5c40a513cf14b63be306e83",
+      "status": "recovery_failed"
+    },
+    "validation": {
+      "bytes": 40632028,
+      "sha256": "c3231f95674493ac0afc6ddf2e3451bde993ce7bd5edca19ea22fc312576ab0f",
+      "shape": [
+        14011,
+        29,
+        25
+      ],
+      "status": "present"
+    }
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_row": {
+    "anomaly_rate": "0.001727486",
+    "dataset_name": "Creditcard",
+    "file_name": "Creditcard.csv",
+    "if_univariate": "False",
+    "pattern": null,
+    "seasonal": null,
+    "shifting": null,
+    "size": "large",
+    "stationary": null,
+    "test_lens": "142404",
+    "time_steps": "284807",
+    "train_lens": "142403",
+    "trend": null,
+    "type_value": null
+  },
+  "missing": [
+    "train"
+  ],
+  "run_id": "full_gmm-full-20261021T112159Z-2472093",
+  "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261021T112159Z-2472093",
+  "status": "partial_or_failed",
+  "task": "Creditcard",
+  "train_length": 142403
+}

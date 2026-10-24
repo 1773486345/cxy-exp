@@ -379,3 +379,18 @@ point bundle is retained from a failed verification. The current ablation
 matrix is fixed to head seed 2021 (72 positions across eight datasets); paired
 reports separate added/lost TP, added/removed FP, and gained/lost anomaly
 segments.
+
+## Frozen-cache recovery
+
+Missing `train_features.npy` or `test_features.npy` files in the four pinned
+Full sources can be recovered with
+`python scripts/recover_mnrf_view_probe_cache.py --all --device cuda:0`.
+The tool validates the original data identity, normalized cache, input
+statistics, checkpoint, endpoints and feature fingerprint, then performs only
+the frozen encoder forward in evaluation/no-gradient mode. It never invokes
+Stage 1, backward, an optimizer, GMM fitting, Flow, or recalibration. A cache
+is installed only when its actual `.npy` bytes have the exact SHA256 recorded in
+the source manifest. Shape-compatible or finite-but-different output is
+rejected and the source remains unchanged. Recovery reports live under
+`result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-<UTC>-<PID>/`; large
+temporary arrays are removed after each split.

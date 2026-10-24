@@ -1,0 +1,299 @@
+{
+  "device_requested": "cuda:0",
+  "report_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T195952Z-1542785",
+  "results": [
+    {
+      "device_requested": "cuda:0",
+      "files": {
+        "calibration": {
+          "bytes": 32550128,
+          "sha256": "e65209ff51e3bd4975203c0868724cd461944afc9265f99647a559c9a32059ac",
+          "shape": [
+            13020,
+            25,
+            25
+          ],
+          "status": "present"
+        },
+        "test": {
+          "bytes": 219125128,
+          "sha256": "b8acea919ab60e4a86c64917e87636a7f450bdd7704130e998e8014f05afc77f",
+          "shape": [
+            87650,
+            25,
+            25
+          ],
+          "status": "present"
+        },
+        "train": {
+          "expected_sha256": "f39088d0a014b3a081c07b2c66b9707f9c7b483559f980c22aef8767fe9f35b7",
+          "expected_shape": [
+            105488,
+            25,
+            25
+          ],
+          "status": "missing"
+        },
+        "validation": {
+          "bytes": 32545128,
+          "sha256": "4cd17ccc9bd4581ed825561804b6f5ef0612269bd5a71ba2515374baf9ec14ce",
+          "shape": [
+            13018,
+            25,
+            25
+          ],
+          "status": "present"
+        }
+      },
+      "run_id": "full_gmm-full-20261021T112121Z-2466820",
+      "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820",
+      "status": "already_complete",
+      "task": "PSM"
+    },
+    {
+      "batch_size": 128,
+      "benchmark": {
+        "max_abs_vs_validation": 0.0,
+        "seconds": 1.1646117297932506,
+        "windows": 128,
+        "windows_per_second": 109.9078746379477
+      },
+      "data_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/MSL.csv",
+      "device": "cuda:0",
+      "device_requested": "cuda:0",
+      "files": {
+        "calibration": {
+          "bytes": 30816628,
+          "sha256": "150acc577953b41002f1e7777780e8e3b0439fb16df66f5f629a33f2c5920e7b",
+          "shape": [
+            5603,
+            55,
+            25
+          ],
+          "status": "present"
+        },
+        "test": {
+          "bytes": 404459128,
+          "elapsed_seconds": 186.31860420387238,
+          "expected_sha256": "d69b7397eefcacbec35284e22945135192cb7c839de93a5a004efc096f051b9a",
+          "expected_shape": [
+            73538,
+            55,
+            25
+          ],
+          "generated_sha256": "d69b7397eefcacbec35284e22945135192cb7c839de93a5a004efc096f051b9a",
+          "install": "installed",
+          "sha256": "d69b7397eefcacbec35284e22945135192cb7c839de93a5a004efc096f051b9a",
+          "status": "missing"
+        },
+        "train": {
+          "expected_sha256": "16899408ae92ff869646cf2706f62d579a66557a5dfa9d84f9194f926abb5325",
+          "expected_shape": [
+            46157,
+            55,
+            25
+          ],
+          "status": "missing"
+        },
+        "validation": {
+          "bytes": 30811128,
+          "sha256": "d44586987840a9ccf31fba95a92c3280cabb21997f7bb9e42476d59180094e89",
+          "shape": [
+            5602,
+            55,
+            25
+          ],
+          "status": "present"
+        }
+      },
+      "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+      "metadata_row": {
+        "anomaly_rate": "0.058812838",
+        "dataset_name": "MSL",
+        "file_name": "MSL.csv",
+        "if_univariate": "False",
+        "pattern": null,
+        "seasonal": null,
+        "shifting": null,
+        "size": "large",
+        "stationary": null,
+        "test_lens": "73729",
+        "time_steps": "132046",
+        "train_lens": "58317",
+        "trend": null,
+        "type_value": null
+      },
+      "missing": [
+        "test"
+      ],
+      "run_id": "full_gmm-full-20261021T112147Z-2470335",
+      "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/MSL/full_gmm-full-20261021T112147Z-2470335",
+      "status": "partial_or_failed",
+      "task": "MSL",
+      "train_length": 58317
+    },
+    {
+      "batch_size": 128,
+      "benchmark": {
+        "max_abs_vs_validation": 0.0,
+        "seconds": 0.19308826327323914,
+        "windows": 128,
+        "windows_per_second": 662.9092718021252
+      },
+      "data_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/Creditcard.csv",
+      "device": "cuda:0",
+      "device_requested": "cuda:0",
+      "files": {
+        "calibration": {
+          "bytes": 40634928,
+          "sha256": "bfb033ba7973676ce633961e2ab8122813ebc9c13d43e7a7ff44c462f457e72d",
+          "shape": [
+            14012,
+            29,
+            25
+          ],
+          "status": "present"
+        },
+        "test": {
+          "elapsed_seconds": 202.70285216812044,
+          "error": "generated test_features.npy hash mismatch: expected=140e96a782ea714a855a1893986550696140352362562af7ba5f300c38b3b9ad actual=0f9d6f30a14c5fa12ea1d90275803b4281050e92c827207c00b52010bf70cb6e",
+          "expected_sha256": "140e96a782ea714a855a1893986550696140352362562af7ba5f300c38b3b9ad",
+          "expected_shape": [
+            142213,
+            29,
+            25
+          ],
+          "generated_sha256": "0f9d6f30a14c5fa12ea1d90275803b4281050e92c827207c00b52010bf70cb6e",
+          "status": "recovery_failed"
+        },
+        "train": {
+          "expected_sha256": "ec4efcc16cd920cfd64943a08d5ece976baeba8ef4b6398a16f4be4b5c6b1cf1",
+          "expected_shape": [
+            113425,
+            29,
+            25
+          ],
+          "status": "missing"
+        },
+        "validation": {
+          "bytes": 40632028,
+          "sha256": "c3231f95674493ac0afc6ddf2e3451bde993ce7bd5edca19ea22fc312576ab0f",
+          "shape": [
+            14011,
+            29,
+            25
+          ],
+          "status": "present"
+        }
+      },
+      "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+      "metadata_row": {
+        "anomaly_rate": "0.001727486",
+        "dataset_name": "Creditcard",
+        "file_name": "Creditcard.csv",
+        "if_univariate": "False",
+        "pattern": null,
+        "seasonal": null,
+        "shifting": null,
+        "size": "large",
+        "stationary": null,
+        "test_lens": "142404",
+        "time_steps": "284807",
+        "train_lens": "142403",
+        "trend": null,
+        "type_value": null
+      },
+      "missing": [
+        "test"
+      ],
+      "run_id": "full_gmm-full-20261021T112159Z-2472093",
+      "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261021T112159Z-2472093",
+      "status": "partial_or_failed",
+      "task": "Creditcard",
+      "train_length": 142403
+    },
+    {
+      "batch_size": 128,
+      "benchmark": {
+        "max_abs_vs_validation": 0.0,
+        "seconds": 0.4605917762964964,
+        "windows": 128,
+        "windows_per_second": 277.90335517758496
+      },
+      "data_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/CICIDS.csv",
+      "device": "cuda:0",
+      "device_requested": "cuda:0",
+      "files": {
+        "calibration": {
+          "bytes": 59637728,
+          "sha256": "bf5920468c6dc0f4fcacf2ed7e5f508591cbb99dca70796b9f27d8752e0b7843",
+          "shape": [
+            8283,
+            72,
+            25
+          ],
+          "status": "present"
+        },
+        "test": {
+          "bytes": 611460128,
+          "elapsed_seconds": 278.41226754616946,
+          "expected_sha256": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+          "expected_shape": [
+            84925,
+            72,
+            25
+          ],
+          "generated_sha256": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+          "install": "installed",
+          "sha256": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+          "status": "missing"
+        },
+        "train": {
+          "expected_sha256": "d30847baabd796e7ae613c51fa4f69d9dcf1e61bbaddd9c2c5b15f331f508b41",
+          "expected_shape": [
+            67595,
+            72,
+            25
+          ],
+          "status": "missing"
+        },
+        "validation": {
+          "bytes": 59630528,
+          "sha256": "a318687388da3791131ff133c8f3088866b35f763f766ffd97b838215cd5e790",
+          "shape": [
+            8282,
+            72,
+            25
+          ],
+          "status": "present"
+        }
+      },
+      "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+      "metadata_row": {
+        "anomaly_rate": "0.012806128",
+        "dataset_name": "CICIDS",
+        "file_name": "CICIDS.csv",
+        "if_univariate": "False",
+        "pattern": null,
+        "seasonal": null,
+        "shifting": null,
+        "size": "large",
+        "stationary": null,
+        "test_lens": "85116",
+        "time_steps": "170231",
+        "train_lens": "85115",
+        "trend": null,
+        "type_value": null
+      },
+      "missing": [
+        "test"
+      ],
+      "run_id": "full_gmm-full-20261021T112642Z-2510633",
+      "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633",
+      "status": "partial_or_failed",
+      "task": "CICIDS",
+      "train_length": 85115
+    }
+  ],
+  "schema": "mnrf-view-probe-cache-recovery-v1"
+}

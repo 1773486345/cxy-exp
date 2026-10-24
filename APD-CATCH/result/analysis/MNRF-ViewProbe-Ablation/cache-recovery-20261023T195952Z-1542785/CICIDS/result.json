@@ -1,0 +1,82 @@
+{
+  "batch_size": 128,
+  "benchmark": {
+    "max_abs_vs_validation": 0.0,
+    "seconds": 0.4605917762964964,
+    "windows": 128,
+    "windows_per_second": 277.90335517758496
+  },
+  "data_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/CICIDS.csv",
+  "device": "cuda:0",
+  "device_requested": "cuda:0",
+  "files": {
+    "calibration": {
+      "bytes": 59637728,
+      "sha256": "bf5920468c6dc0f4fcacf2ed7e5f508591cbb99dca70796b9f27d8752e0b7843",
+      "shape": [
+        8283,
+        72,
+        25
+      ],
+      "status": "present"
+    },
+    "test": {
+      "bytes": 611460128,
+      "elapsed_seconds": 278.41226754616946,
+      "expected_sha256": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+      "expected_shape": [
+        84925,
+        72,
+        25
+      ],
+      "generated_sha256": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+      "install": "installed",
+      "sha256": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+      "status": "missing"
+    },
+    "train": {
+      "expected_sha256": "d30847baabd796e7ae613c51fa4f69d9dcf1e61bbaddd9c2c5b15f331f508b41",
+      "expected_shape": [
+        67595,
+        72,
+        25
+      ],
+      "status": "missing"
+    },
+    "validation": {
+      "bytes": 59630528,
+      "sha256": "a318687388da3791131ff133c8f3088866b35f763f766ffd97b838215cd5e790",
+      "shape": [
+        8282,
+        72,
+        25
+      ],
+      "status": "present"
+    }
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_row": {
+    "anomaly_rate": "0.012806128",
+    "dataset_name": "CICIDS",
+    "file_name": "CICIDS.csv",
+    "if_univariate": "False",
+    "pattern": null,
+    "seasonal": null,
+    "shifting": null,
+    "size": "large",
+    "stationary": null,
+    "test_lens": "85116",
+    "time_steps": "170231",
+    "train_lens": "85115",
+    "trend": null,
+    "type_value": null
+  },
+  "missing": [
+    "test"
+  ],
+  "run_id": "full_gmm-full-20261021T112642Z-2510633",
+  "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633",
+  "status": "partial_or_failed",
+  "task": "CICIDS",
+  "train_length": 85115
+}

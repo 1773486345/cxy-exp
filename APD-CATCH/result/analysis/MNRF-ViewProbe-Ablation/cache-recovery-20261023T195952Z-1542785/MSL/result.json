@@ -1,0 +1,82 @@
+{
+  "batch_size": 128,
+  "benchmark": {
+    "max_abs_vs_validation": 0.0,
+    "seconds": 1.1646117297932506,
+    "windows": 128,
+    "windows_per_second": 109.9078746379477
+  },
+  "data_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/MSL.csv",
+  "device": "cuda:0",
+  "device_requested": "cuda:0",
+  "files": {
+    "calibration": {
+      "bytes": 30816628,
+      "sha256": "150acc577953b41002f1e7777780e8e3b0439fb16df66f5f629a33f2c5920e7b",
+      "shape": [
+        5603,
+        55,
+        25
+      ],
+      "status": "present"
+    },
+    "test": {
+      "bytes": 404459128,
+      "elapsed_seconds": 186.31860420387238,
+      "expected_sha256": "d69b7397eefcacbec35284e22945135192cb7c839de93a5a004efc096f051b9a",
+      "expected_shape": [
+        73538,
+        55,
+        25
+      ],
+      "generated_sha256": "d69b7397eefcacbec35284e22945135192cb7c839de93a5a004efc096f051b9a",
+      "install": "installed",
+      "sha256": "d69b7397eefcacbec35284e22945135192cb7c839de93a5a004efc096f051b9a",
+      "status": "missing"
+    },
+    "train": {
+      "expected_sha256": "16899408ae92ff869646cf2706f62d579a66557a5dfa9d84f9194f926abb5325",
+      "expected_shape": [
+        46157,
+        55,
+        25
+      ],
+      "status": "missing"
+    },
+    "validation": {
+      "bytes": 30811128,
+      "sha256": "d44586987840a9ccf31fba95a92c3280cabb21997f7bb9e42476d59180094e89",
+      "shape": [
+        5602,
+        55,
+        25
+      ],
+      "status": "present"
+    }
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_row": {
+    "anomaly_rate": "0.058812838",
+    "dataset_name": "MSL",
+    "file_name": "MSL.csv",
+    "if_univariate": "False",
+    "pattern": null,
+    "seasonal": null,
+    "shifting": null,
+    "size": "large",
+    "stationary": null,
+    "test_lens": "73729",
+    "time_steps": "132046",
+    "train_lens": "58317",
+    "trend": null,
+    "type_value": null
+  },
+  "missing": [
+    "test"
+  ],
+  "run_id": "full_gmm-full-20261021T112147Z-2470335",
+  "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/MSL/full_gmm-full-20261021T112147Z-2470335",
+  "status": "partial_or_failed",
+  "task": "MSL",
+  "train_length": 58317
+}

@@ -1,0 +1,14 @@
+{
+  "device_requested": "cuda:0",
+  "report_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T195044Z-1500638",
+  "results": [
+    {
+      "error": "generated train_features.npy hash mismatch: expected=f39088d0a014b3a081c07b2c66b9707f9c7b483559f980c22aef8767fe9f35b7 actual=d3e3d2faea278c41e0a85945c01a41ae5efcb721cb70e72a88e350f8ccc84f76",
+      "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820",
+      "status": "failed",
+      "task": "PSM",
+      "traceback": "Traceback (most recent call last):\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 287, in main\n    results.append(recover_task(task, report_dir, args.device))\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 256, in recover_task\n    status, installed_hash = _install_exact(\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 181, in _install_exact\n    raise ValueError(f\"generated {target.name} hash mismatch: expected={expected_hash} actual={actual}\")\nValueError: generated train_features.npy hash mismatch: expected=f39088d0a014b3a081c07b2c66b9707f9c7b483559f980c22aef8767fe9f35b7 actual=d3e3d2faea278c41e0a85945c01a41ae5efcb721cb70e72a88e350f8ccc84f76\n"
+    }
+  ],
+  "schema": "mnrf-view-probe-cache-recovery-v1"
+}

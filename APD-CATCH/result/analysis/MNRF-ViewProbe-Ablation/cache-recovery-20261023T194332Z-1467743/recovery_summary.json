@@ -1,0 +1,14 @@
+{
+  "device_requested": "cuda:0",
+  "report_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-20261023T194332Z-1467743",
+  "results": [
+    {
+      "error": "test endpoint hash mismatch: expected=9f5600c48142c568d2bd7b0772b64304c5ec06e1ffedd5dbcd8c826ea113cb9f actual=25215e6895960e3605605963ecfbf98a10a41406b4bbd59b2bfea6216bb9e4cf",
+      "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261021T112121Z-2466820",
+      "status": "failed",
+      "task": "PSM",
+      "traceback": "Traceback (most recent call last):\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 281, in main\n    results.append(recover_task(task, report_dir, args.device))\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 208, in recover_task\n    probe, trainer, normalized, test_endpoints, values, source_meta = _load_frozen(\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 130, in _load_frozen\n    expected_test = _validate_endpoint(\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 80, in _validate_endpoint\n    raise ValueError(f\"{name} endpoint hash mismatch: expected={expected_hash} actual={actual}\")\nValueError: test endpoint hash mismatch: expected=9f5600c48142c568d2bd7b0772b64304c5ec06e1ffedd5dbcd8c826ea113cb9f actual=25215e6895960e3605605963ecfbf98a10a41406b4bbd59b2bfea6216bb9e4cf\n"
+    }
+  ],
+  "schema": "mnrf-view-probe-cache-recovery-v1"
+}
