@@ -1,0 +1,20 @@
+[
+  {
+    "error": "Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.",
+    "status": "diagnostic_failed",
+    "task": "PSM",
+    "traceback": "Traceback (most recent call last):\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 871, in main\n    diagnostics.append(diagnose_cached_batches(task, report_dir / task, args.device))\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 513, in diagnose_cached_batches\n    features = trainer.encoder.encode_views(\nRuntimeError: Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.\n"
+  },
+  {
+    "error": "Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.",
+    "status": "diagnostic_failed",
+    "task": "Creditcard",
+    "traceback": "Traceback (most recent call last):\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 871, in main\n    diagnostics.append(diagnose_cached_batches(task, report_dir / task, args.device))\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 513, in diagnose_cached_batches\n    features = trainer.encoder.encode_views(\nRuntimeError: Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.\n"
+  },
+  {
+    "error": "Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.",
+    "status": "diagnostic_failed",
+    "task": "CICIDS",
+    "traceback": "Traceback (most recent call last):\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 871, in main\n    diagnostics.append(diagnose_cached_batches(task, report_dir / task, args.device))\n  File \"scripts/recover_mnrf_view_probe_cache.py\", line 513, in diagnose_cached_batches\n    features = trainer.encoder.encode_views(\nRuntimeError: Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.\n"
+  }
+]

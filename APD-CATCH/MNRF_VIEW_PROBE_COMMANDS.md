@@ -244,13 +244,33 @@ error reports the recovery directory instead of claiming success.
 
 ## Frozen-cache recovery
 
-The four pinned Full sources can be checked and repaired without Stage 1,
-backward, GMM fitting, Flow, or recalibration. The recovery entry point first
-looks for an exact manifest-hash backup and otherwise runs the saved best
-encoder in `eval()`/`no_grad()` mode with the source batch size. It installs a
-missing cache file only after shape, dtype, finite-value, endpoint, and byte
-SHA256 checks pass. A mismatch is reported and the source file is left absent;
-the manifest is never rewritten.
+The four pinned Full sources are repaired only at missing cache paths. The
+tool first searches scoped project result/source/backup/review roots for exact
+scattered or ZIP/TAR members, streaming candidate bytes and requiring the
+manifest SHA256. Only if an exact backup is absent may it run the saved best
+encoder in `eval()`/`no_grad()` mode. Installation uses an atomic no-replace
+link; a concurrent equal file is reused, while a different file or dangling
+symlink is a conflict. Existing artifacts and the manifest are never rewritten.
+
+`already_complete` means all four split caches and endpoints plus the complete
+GMM/source artifacts pass both the read-only native validator and the actual
+source loader used by `select_gmm`. A split-limited repair cannot claim a
+complete source. Missing or mismatched validation/calibration caches,
+statistics, checkpoint, normalized values, GMM, calibration, or results leave
+the task `blocked`/partial and return nonzero. No GMM fit or recalibration is
+performed.
+
+Before any new frozen forward after an earlier hash mismatch, run the bounded
+diagnostic below. It replays beginning, middle, last-full and tail batches on
+the existing validation/calibration caches and reports exact/non-equal counts
+for S/E/P/R, along with runtime math/thread and `.npy` layout details. It does
+not compare missing historical files or infer a cause from unknown training
+settings.
+
+```bash
+python scripts/recover_mnrf_view_probe_cache.py --diagnose-forward \
+  --task PSM --task Creditcard --task CICIDS --device cuda:0
+```
 
 ```bash
 python scripts/recover_mnrf_view_probe_cache.py --all --device cuda:0
@@ -258,5 +278,9 @@ python scripts/recover_mnrf_view_probe_cache.py --all --device cuda:0
 
 Recovery reports and temporary files are kept below
 `result/analysis/MNRF-ViewProbe-Ablation/cache-recovery-<UTC>-<PID>/`.
-Existing source files are read-only. Re-running is idempotent for already
-verified files. This command does not start the 72-cell ablation matrix.
+Existing source files are read-only except for absent cache files whose exact
+manifest bytes are restored. Re-running is read-only for complete sources.
+Use `--backup-only` to search/install exact backups without loading data or a
+checkpoint; any unresolved source remains blocked and exits nonzero. Reports
+include the search roots, archive/member provenance, per-file status and the
+native completion check. This command does not start the 72-cell ablation matrix.

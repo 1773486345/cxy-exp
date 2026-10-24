@@ -1,0 +1,121 @@
+{
+  "backup_search_complete": true,
+  "backup_searches": {
+    "train": {
+      "archive_count": 5,
+      "candidate_count": 5,
+      "checked_files": 5,
+      "checked_members": 0,
+      "roots": [
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Ablation",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/review/MNRF-ViewProbe"
+      ],
+      "unsupported_archives": []
+    }
+  },
+  "device_requested": "cpu",
+  "files": {
+    "calibration": {
+      "bytes": 59637728,
+      "endpoint": {
+        "count": 8283,
+        "sha256": "6fbd9dce7726dc83ae26551e44ff085a5438b612e9eb8c52498882c46e4ec4d8",
+        "status": "present"
+      },
+      "sha256": "bf5920468c6dc0f4fcacf2ed7e5f508591cbb99dca70796b9f27d8752e0b7843",
+      "shape": [
+        8283,
+        72,
+        25
+      ],
+      "status": "present"
+    },
+    "test": {
+      "bytes": 611460128,
+      "endpoint": {
+        "count": 84925,
+        "sha256": "1465492587cb083b0facd93dc93d21c9ebf378bab04f527feb9a48bb369538d6",
+        "status": "present"
+      },
+      "sha256": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+      "shape": [
+        84925,
+        72,
+        25
+      ],
+      "status": "present"
+    },
+    "train": {
+      "endpoint": {
+        "count": 67595,
+        "sha256": "cb8683fd7663c6a1172aa954d4fed92344c3efd7c5423e1ef092d8af68fb8872",
+        "status": "present"
+      },
+      "expected_sha256": "d30847baabd796e7ae613c51fa4f69d9dcf1e61bbaddd9c2c5b15f331f508b41",
+      "expected_shape": [
+        67595,
+        72,
+        25
+      ],
+      "status": "missing"
+    },
+    "validation": {
+      "bytes": 59630528,
+      "endpoint": {
+        "count": 8282,
+        "sha256": "672d78f4c301be091a0dad4c8e8ef4ef1de8a4e0bcae6dc4fd38beb635d6d023",
+        "status": "present"
+      },
+      "sha256": "a318687388da3791131ff133c8f3088866b35f763f766ffd97b838215cd5e790",
+      "shape": [
+        8282,
+        72,
+        25
+      ],
+      "status": "present"
+    }
+  },
+  "manifest_sha256_after": "e4d2b84af7847fafd8660366987bdbcf5cd1f8799d4a11d6a2e15abf36c28b05",
+  "manifest_sha256_before": "e4d2b84af7847fafd8660366987bdbcf5cd1f8799d4a11d6a2e15abf36c28b05",
+  "missing": [
+    "cache/train_features.npy"
+  ],
+  "missing_after_exact_backup": [
+    "train"
+  ],
+  "missing_before": [
+    "train"
+  ],
+  "preserved_existing_cache_hashes": {
+    "calibration": {
+      "after": "bf5920468c6dc0f4fcacf2ed7e5f508591cbb99dca70796b9f27d8752e0b7843",
+      "before": "bf5920468c6dc0f4fcacf2ed7e5f508591cbb99dca70796b9f27d8752e0b7843"
+    },
+    "test": {
+      "after": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+      "before": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e"
+    },
+    "validation": {
+      "after": "a318687388da3791131ff133c8f3088866b35f763f766ffd97b838215cd5e790",
+      "before": "a318687388da3791131ff133c8f3088866b35f763f766ffd97b838215cd5e790"
+    }
+  },
+  "reason": "source remains incomplete after exact restoration/forward attempt",
+  "recovery_actions": {},
+  "recovery_scope": "exact-cache-files-only; no training/gmm/calibration",
+  "requested_missing_splits": [
+    "train"
+  ],
+  "required_artifacts": {
+    "count": 27,
+    "missing": [
+      "cache/train_features.npy"
+    ]
+  },
+  "run_id": "full_gmm-full-20261021T112642Z-2510633",
+  "source": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261021T112642Z-2510633",
+  "status": "blocked",
+  "task": "CICIDS"
+}
