@@ -20,7 +20,9 @@ from scripts.summarize_mnrf_branch_ablation import (
 )
 import scripts.mnrf_branch_source_registry as source_registry
 import scripts.register_mnrf_branch_source as source_registration
-from scripts.run_mnrf_branch_ablation import TASKS, _prune_superseded_inventories
+from scripts.run_mnrf_branch_ablation import (
+    TASKS, _manifest_may_match, _manifest_task, _prune_superseded_inventories,
+)
 
 
 def test_matrix_has_all_nine_combinations_and_dimensions():
@@ -29,6 +31,49 @@ def test_matrix_has_all_nine_combinations_and_dimensions():
     ]
     assert [len(selected_indices(views)) for _, views in COMBINATIONS] == [1, 9, 9, 9, 25, 24, 17, 17, 17]
     assert EXPECTED_LAYOUT["slices"] == {"S": [0, 1], "E": [1, 9], "P": [9, 17], "R": [17, 25]}
+
+
+@pytest.mark.parametrize("manifest,task", [
+    ({"config": {"task_name": "PSM.csv"}}, "PSM"),
+    ({"task_name": "MSL.csv"}, "MSL"),
+    ({"config": {"task_name": "detect_score/CICIDS_script/CICIDS.csv"}}, "CICIDS"),
+])
+def test_candidate_manifest_task_supports_current_and_legacy_locations(manifest, task):
+    assert _manifest_task(manifest) == task
+
+
+def test_candidate_manifest_prefilter_only_allows_exact_source_contract(tmp_path):
+    source_path = tmp_path / "source"
+    candidate_path = tmp_path / "candidate"
+    source = {
+        "path": str(source_path), "source_identity": {"id": "source"},
+        "feature_fingerprint": "feature", "cache_sha256": {"train": "cache"},
+        "endpoint_sha256": {"train": "endpoint"}, "gmm_fit_endpoints_sha256": "fit",
+        "input_statistics_sha256": "stats", "fixed_noise_sha256": "noise",
+        "config": {"seq_len": 192, "pattern_len": 32, "hidden_dim": 32,
+                   "evolution_dim": 8, "pattern_dim": 8, "relation_dim": 8,
+                   "view_dim": 8, "gmm_components": 4, "gmm_covariance_type": "full",
+                   "gmm_reg_covar": 0.001, "gmm_n_init": 1, "gmm_max_iter": 100,
+                   "gmm_fit_max_windows": 20000, "train_noise_std": 0.01,
+                   "noise_seed": 20261013, "feature_std_floor": 0.05,
+                   "score_mad_floor": 0.001, "calibration_quantile": 0.995},
+    }
+    manifest = {
+        "selected_views": ["S"], "selected_indices": [0], "config": {**source["config"], "seed": 2021},
+        "source_identity": source["source_identity"], "source_feature_fingerprint": "feature",
+        "source_dir": str(source_path), "source_cache_sha256": source["cache_sha256"],
+        "source_endpoint_sha256": source["endpoint_sha256"], "gmm_fit_endpoints_sha256": "fit",
+        "raw_input_statistics_sha256": "stats", "fixed_noise_sha256": "noise",
+        "head_type": "gmm", "head_status": "complete",
+    }
+    assert _manifest_may_match(manifest, candidate_path, source, "S", 2021)
+    manifest["head_status"] = "in_progress"
+    assert _manifest_may_match(manifest, candidate_path, source, "S", 2021,
+                               require_complete=False)
+    assert not _manifest_may_match(manifest, candidate_path, source, "S", 2021)
+    manifest["head_status"] = "complete"
+    manifest["source_identity"] = {"id": "other"}
+    assert not _manifest_may_match(manifest, candidate_path, source, "S", 2021)
 
 
 def test_plan_keeps_blocked_dataset_matrix_without_starting_work():

@@ -142,6 +142,13 @@ def _manifest_run(path):
         return None
 
 
+def _manifest_task(manifest):
+    # Probe manifests store the dataset in config.task_name; some older
+    # artifacts also expose a top-level task_name.
+    task_name = manifest.get("task_name") or manifest.get("config", {}).get("task_name", "")
+    return str(task_name).split("/")[-1].rsplit(".", 1)[0]
+
+
 def _scan_candidates(task):
     paths = set()
     for root_name in SEARCH_ROOTS:
@@ -154,7 +161,7 @@ def _scan_candidates(task):
         if root.is_dir():
             paths.update(p.parent.resolve() for p in root.rglob("probe_manifest.json"))
     return sorted((path for path in paths if _manifest_run(path) is not None
-                   and str(_manifest_run(path).get("task_name", "")).split("/")[-1].rsplit(".", 1)[0] == task),
+                   and _manifest_task(_manifest_run(path)) == task),
                   key=lambda item: item.as_posix())
 
 
@@ -326,6 +333,44 @@ def _same_conditions(candidate, source, combination, seed):
     return True, ""
 
 
+def _manifest_may_match(manifest, path, source, combination, seed, require_complete=True):
+    """Cheaply discard candidates that cannot satisfy the frozen-source contract.
+
+    This is only a search filter. A possible match still goes through the full
+    native validator and _same_conditions before it can be reused.
+    """
+    config = manifest.get("config", {})
+    expected_views = dict(COMBINATIONS)[combination]
+    if (_views(manifest) != expected_views
+            or _indices(manifest) != selected_indices(expected_views)
+            or int(config.get("seed", -1)) != seed
+            or manifest.get("source_identity") != source["source_identity"]
+            or manifest.get("source_feature_fingerprint", manifest.get("feature_fingerprint"))
+            != source["feature_fingerprint"]):
+        return False
+    try:
+        if Path(manifest.get("source_dir", "")).resolve() != Path(source["path"]).resolve():
+            return False
+    except (TypeError, OSError, ValueError):
+        return False
+    if (manifest.get("source_cache_sha256") != source["cache_sha256"]
+            or manifest.get("source_endpoint_sha256") != source["endpoint_sha256"]
+            or manifest.get("gmm_fit_endpoints_sha256") != source["gmm_fit_endpoints_sha256"]
+            or manifest.get("raw_input_statistics_sha256") != source["input_statistics_sha256"]
+            or manifest.get("fixed_noise_sha256") != source.get("fixed_noise_sha256")):
+        return False
+    numeric = source["config"]
+    for key in ("seq_len", "pattern_len", "hidden_dim", "evolution_dim", "pattern_dim",
+                "relation_dim", "view_dim", "gmm_components", "gmm_covariance_type",
+                "gmm_reg_covar", "gmm_n_init", "gmm_max_iter", "gmm_fit_max_windows",
+                "train_noise_std", "noise_seed", "feature_std_floor", "score_mad_floor",
+                "calibration_quantile"):
+        if config.get(key) != numeric.get(key):
+            return False
+    return (manifest.get("head_type") == "gmm"
+            and (not require_complete or manifest.get("head_status") == "complete"))
+
+
 def selected_indices(views):
     slices = EXPECTED_LAYOUT["slices"]
     return [i for view in views for i in range(*slices[view])]
@@ -335,6 +380,7 @@ def _candidate_for(task, source, combination, seed, validate_cache, inventory):
     paths = inventory.setdefault(task, _scan_candidates(task))
     valid = []
     rejected = []
+    failed = []
     expected_views = dict(COMBINATIONS)[combination]
     pinned = Path(source["path"]).resolve()
     if combination == "FULL" and seed == 2021:
@@ -344,6 +390,19 @@ def _candidate_for(task, source, combination, seed, validate_cache, inventory):
             continue
         manifest = _manifest_run(path)
         if not manifest or _views(manifest) != expected_views:
+            continue
+        if not _manifest_may_match(manifest, path, source, combination, seed,
+                                   require_complete=False):
+            continue
+        if manifest.get("head_status") != "complete":
+            status_path = Path(path) / "run_status.json"
+            try:
+                run_status = _json(status_path) if status_path.is_file() else {}
+            except Exception as error:
+                run_status = {"status": "unreadable", "reason": str(error)}
+            if run_status.get("status") == "failed":
+                failed.append({"path": str(path), "reason": run_status.get("reason") or
+                               run_status.get("error") or "run status is failed"})
             continue
         try:
             checked = validate_cache.get(path.resolve())
@@ -358,6 +417,12 @@ def _candidate_for(task, source, combination, seed, validate_cache, inventory):
         except Exception as error:
             rejected.append({"path": str(path), "reason": "{}: {}".format(type(error).__name__, error)})
     if not valid:
+        if failed:
+            failed.sort(key=lambda item: item["path"])
+            selected_failure = failed[0]
+            return {"status": "failed", "path": selected_failure["path"],
+                    "reason": selected_failure["reason"], "failed_candidates": failed,
+                    "excluded_candidates": rejected}, None
         return {"status": "planned/pending", "path": "", "reason": "no validated same-source candidate",
                 "excluded_candidates": rejected}, None
     valid.sort(key=lambda item: item["path"])

@@ -1,0 +1,92 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": {
+    "columns": [],
+    "test_segment_identity": [
+      {
+        "boundary_value": null,
+        "segment_id": 0
+      }
+    ],
+    "values": []
+  },
+  "data_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/Creditcard.csv",
+  "data_file_sha256": "fd94e2d9b12c47ee32127dcbb524c3de582d87c725c8a2a110eeb4406cafa2cd",
+  "full_rows": 284807,
+  "full_segments": [
+    [
+      0,
+      284807
+    ]
+  ],
+  "labels_sha256": "b1d98a9083046d6da0888f4665812190cb84d7e0d9fbbfa3b100cb8a4d766acf",
+  "metadata_file": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_file_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "provenance_file": "training_provenance.json",
+  "provenance_sha256": "4a148238e0c1cafc3e1063de54090889d0b686b3f0d53106e1b7f6a44f59e998",
+  "schema": "mnrf-view-probe-analysis-inputs-v1",
+  "selected_metadata_row": {
+    "anomaly_rate": "0.001727486",
+    "dataset_name": "Creditcard",
+    "file_name": "Creditcard.csv",
+    "if_univariate": "False",
+    "pattern": "nan",
+    "seasonal": "nan",
+    "shifting": "nan",
+    "size": "large",
+    "stationary": "nan",
+    "test_lens": "142404",
+    "time_steps": "284807",
+    "train_lens": "142403",
+    "trend": "nan",
+    "type_value": "nan"
+  },
+  "source_identity_sha256": "4cb154b889ac7ad98df849b3c05dd4a9ae084b2f771d1ad69135bfcdeeef2f90",
+  "source_manifest_sha256": "67077eca148b7489e5113365e69fb29ded7e0f3e6f03f80f8967421d763ae834",
+  "test_length": 142404,
+  "test_segment_identity": [
+    {
+      "boundary_value": null,
+      "segment_id": 0
+    }
+  ],
+  "test_segments": [
+    [
+      142403,
+      284807
+    ]
+  ],
+  "time_kind": "timestamp_naive_ns",
+  "train_length": 142403,
+  "variable_names": [
+    "V1",
+    "V2",
+    "V3",
+    "V4",
+    "V5",
+    "V6",
+    "V7",
+    "V8",
+    "V9",
+    "V10",
+    "V11",
+    "V12",
+    "V13",
+    "V14",
+    "V15",
+    "V16",
+    "V17",
+    "V18",
+    "V19",
+    "V20",
+    "V21",
+    "V22",
+    "V23",
+    "V24",
+    "V25",
+    "V26",
+    "V27",
+    "V28",
+    "Amount"
+  ]
+}

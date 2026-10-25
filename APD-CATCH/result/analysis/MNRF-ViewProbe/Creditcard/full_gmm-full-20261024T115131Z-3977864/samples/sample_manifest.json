@@ -1,0 +1,97 @@
+{
+  "budgets": {
+    "calibration": 128,
+    "test": 512,
+    "train": 256,
+    "validation": 128
+  },
+  "diagnostic_only": true,
+  "seed": 20261013,
+  "selection": "deterministic bounded sampling; test stratifies available confusion classes and anomalies",
+  "source_manifest_sha256": "67077eca148b7489e5113365e69fb29ded7e0f3e6f03f80f8967421d763ae834",
+  "splits": {
+    "calibration": {
+      "candidate_counts": {
+        "deterministic_uniform": 14012
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        29,
+        25
+      ],
+      "total_windows": 14012
+    },
+    "test": {
+      "candidate_counts": {
+        "fn": 167,
+        "fp": 1480,
+        "tn": 140512,
+        "tp": 54
+      },
+      "count": 512,
+      "reason_counts": {
+        "deterministic_uniform": 289,
+        "fn": 167,
+        "fp": 1,
+        "tn": 1,
+        "tp": 54
+      },
+      "selected_counts": {
+        "deterministic_uniform": 289,
+        "fn": 167,
+        "fp": 1,
+        "tn": 1,
+        "tp": 54
+      },
+      "shape": [
+        512,
+        29,
+        25
+      ],
+      "total_windows": 142213
+    },
+    "train": {
+      "candidate_counts": {
+        "deterministic_uniform": 113425
+      },
+      "count": 256,
+      "reason_counts": {
+        "deterministic_uniform": 256
+      },
+      "selected_counts": {
+        "deterministic_uniform": 256
+      },
+      "shape": [
+        256,
+        29,
+        25
+      ],
+      "total_windows": 113425
+    },
+    "validation": {
+      "candidate_counts": {
+        "deterministic_uniform": 14011
+      },
+      "count": 128,
+      "reason_counts": {
+        "deterministic_uniform": 128
+      },
+      "selected_counts": {
+        "deterministic_uniform": 128
+      },
+      "shape": [
+        128,
+        29,
+        25
+      ],
+      "total_windows": 14011
+    }
+  }
+}

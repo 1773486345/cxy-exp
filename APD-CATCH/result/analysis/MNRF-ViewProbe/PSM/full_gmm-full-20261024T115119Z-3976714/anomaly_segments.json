@@ -1,0 +1,1452 @@
+{
+  "diagnostic_only": true,
+  "note": "anomaly hit means at least one fixed-threshold alarm; this is not Aff-F or point adjustment",
+  "segment_summary": {
+    "raw_anomaly_segments": 72,
+    "segments_with_any_alarm": 48,
+    "segments_with_valid_scores": 71,
+    "segments_without_valid_scores": 1
+  },
+  "segments": [
+    {
+      "end_original": 132572,
+      "end_time_ns": 132573,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": null,
+      "median_score": null,
+      "no_valid_scores": true,
+      "peak_original": null,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 132570,
+      "start_time_ns": 132571,
+      "valid_points": 0
+    },
+    {
+      "end_original": 135090,
+      "end_time_ns": 135091,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 0.9866454005241394,
+      "median_score": 0.9866454005241394,
+      "no_valid_scores": false,
+      "peak_original": 135090,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 135090,
+      "start_time_ns": 135091,
+      "valid_points": 1
+    },
+    {
+      "end_original": 135483,
+      "end_time_ns": 135484,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 1.9067294597625732,
+      "median_score": 1.8484841585159302,
+      "no_valid_scores": false,
+      "peak_original": 135482,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 135481,
+      "start_time_ns": 135482,
+      "valid_points": 3
+    },
+    {
+      "end_original": 135919,
+      "end_time_ns": 135920,
+      "first_hit_original": 135824,
+      "hit": true,
+      "hit_points": 66,
+      "max_score": 65.20655822753906,
+      "median_score": 8.205160140991211,
+      "no_valid_scores": false,
+      "peak_original": 135824,
+      "point_count": 191,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 135729,
+      "start_time_ns": 135730,
+      "valid_points": 191
+    },
+    {
+      "end_original": 136276,
+      "end_time_ns": 136277,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 1.623561978340149,
+      "median_score": 1.482996940612793,
+      "no_valid_scores": false,
+      "peak_original": 136275,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 136274,
+      "start_time_ns": 136275,
+      "valid_points": 3
+    },
+    {
+      "end_original": 136924,
+      "end_time_ns": 136925,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 0.9505158066749573,
+      "median_score": 0.722655862569809,
+      "no_valid_scores": false,
+      "peak_original": 136923,
+      "point_count": 4,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 136921,
+      "start_time_ns": 136922,
+      "valid_points": 4
+    },
+    {
+      "end_original": 137636,
+      "end_time_ns": 137637,
+      "first_hit_original": 137451,
+      "hit": true,
+      "hit_points": 17,
+      "max_score": 78.25389099121094,
+      "median_score": 3.7137839794158936,
+      "no_valid_scores": false,
+      "peak_original": 137532,
+      "point_count": 281,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 137356,
+      "start_time_ns": 137357,
+      "valid_points": 281
+    },
+    {
+      "end_original": 137648,
+      "end_time_ns": 137649,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 4.30003547668457,
+      "median_score": 4.30003547668457,
+      "no_valid_scores": false,
+      "peak_original": 137648,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 137648,
+      "start_time_ns": 137649,
+      "valid_points": 1
+    },
+    {
+      "end_original": 137794,
+      "end_time_ns": 137795,
+      "first_hit_original": 137793,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 75.23381042480469,
+      "median_score": 11.810016632080078,
+      "no_valid_scores": false,
+      "peak_original": 137793,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 137792,
+      "start_time_ns": 137793,
+      "valid_points": 3
+    },
+    {
+      "end_original": 139873,
+      "end_time_ns": 139874,
+      "first_hit_original": 139564,
+      "hit": true,
+      "hit_points": 50,
+      "max_score": 144.6660919189453,
+      "median_score": 13.300261497497559,
+      "no_valid_scores": false,
+      "peak_original": 139564,
+      "point_count": 331,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 139543,
+      "start_time_ns": 139544,
+      "valid_points": 331
+    },
+    {
+      "end_original": 139879,
+      "end_time_ns": 139880,
+      "first_hit_original": 139878,
+      "hit": true,
+      "hit_points": 2,
+      "max_score": 19.73943519592285,
+      "median_score": 18.470504760742188,
+      "no_valid_scores": false,
+      "peak_original": 139879,
+      "point_count": 2,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 139878,
+      "start_time_ns": 139879,
+      "valid_points": 2
+    },
+    {
+      "end_original": 140629,
+      "end_time_ns": 140630,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 15.410018920898438,
+      "median_score": 5.697980165481567,
+      "no_valid_scores": false,
+      "peak_original": 140614,
+      "point_count": 350,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 140280,
+      "start_time_ns": 140281,
+      "valid_points": 350
+    },
+    {
+      "end_original": 142925,
+      "end_time_ns": 142926,
+      "first_hit_original": 142923,
+      "hit": true,
+      "hit_points": 3,
+      "max_score": 717.0135498046875,
+      "median_score": 53.46318817138672,
+      "no_valid_scores": false,
+      "peak_original": 142923,
+      "point_count": 5,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 142921,
+      "start_time_ns": 142922,
+      "valid_points": 5
+    },
+    {
+      "end_original": 142944,
+      "end_time_ns": 142945,
+      "first_hit_original": 142935,
+      "hit": true,
+      "hit_points": 7,
+      "max_score": 811.2911376953125,
+      "median_score": 30.291356086730957,
+      "no_valid_scores": false,
+      "peak_original": 142938,
+      "point_count": 12,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 142933,
+      "start_time_ns": 142934,
+      "valid_points": 12
+    },
+    {
+      "end_original": 143004,
+      "end_time_ns": 143005,
+      "first_hit_original": 143004,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 125.79656219482422,
+      "median_score": 125.79656219482422,
+      "no_valid_scores": false,
+      "peak_original": 143004,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 143004,
+      "start_time_ns": 143005,
+      "valid_points": 1
+    },
+    {
+      "end_original": 145049,
+      "end_time_ns": 145050,
+      "first_hit_original": 145049,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 146.73123168945312,
+      "median_score": 146.73123168945312,
+      "no_valid_scores": false,
+      "peak_original": 145049,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 145049,
+      "start_time_ns": 145050,
+      "valid_points": 1
+    },
+    {
+      "end_original": 147694,
+      "end_time_ns": 147695,
+      "first_hit_original": 147694,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 18.75851821899414,
+      "median_score": 18.75851821899414,
+      "no_valid_scores": false,
+      "peak_original": 147694,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 147694,
+      "start_time_ns": 147695,
+      "valid_points": 1
+    },
+    {
+      "end_original": 147732,
+      "end_time_ns": 147733,
+      "first_hit_original": 147730,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 79.19127655029297,
+      "median_score": 13.89490556716919,
+      "no_valid_scores": false,
+      "peak_original": 147730,
+      "point_count": 4,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 147729,
+      "start_time_ns": 147730,
+      "valid_points": 4
+    },
+    {
+      "end_original": 148468,
+      "end_time_ns": 148469,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 8.429143905639648,
+      "median_score": 5.297506332397461,
+      "no_valid_scores": false,
+      "peak_original": 148379,
+      "point_count": 358,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 148111,
+      "start_time_ns": 148112,
+      "valid_points": 358
+    },
+    {
+      "end_original": 150001,
+      "end_time_ns": 150002,
+      "first_hit_original": 149745,
+      "hit": true,
+      "hit_points": 178,
+      "max_score": 91.06822967529297,
+      "median_score": 24.062057495117188,
+      "no_valid_scores": false,
+      "peak_original": 149971,
+      "point_count": 284,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 149718,
+      "start_time_ns": 149719,
+      "valid_points": 284
+    },
+    {
+      "end_original": 150013,
+      "end_time_ns": 150014,
+      "first_hit_original": 150012,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 18.25579261779785,
+      "median_score": 5.699100971221924,
+      "no_valid_scores": false,
+      "peak_original": 150012,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 150011,
+      "start_time_ns": 150012,
+      "valid_points": 3
+    },
+    {
+      "end_original": 150048,
+      "end_time_ns": 150049,
+      "first_hit_original": 150047,
+      "hit": true,
+      "hit_points": 2,
+      "max_score": 17.22990608215332,
+      "median_score": 13.931983470916748,
+      "no_valid_scores": false,
+      "peak_original": 150047,
+      "point_count": 4,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 150045,
+      "start_time_ns": 150046,
+      "valid_points": 4
+    },
+    {
+      "end_original": 159332,
+      "end_time_ns": 159333,
+      "first_hit_original": 150549,
+      "hit": true,
+      "hit_points": 6664,
+      "max_score": 8023.61181640625,
+      "median_score": 34.31681442260742,
+      "no_valid_scores": false,
+      "peak_original": 155945,
+      "point_count": 8861,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 150472,
+      "start_time_ns": 150473,
+      "valid_points": 8861
+    },
+    {
+      "end_original": 159340,
+      "end_time_ns": 159341,
+      "first_hit_original": 159334,
+      "hit": true,
+      "hit_points": 7,
+      "max_score": 111.94843292236328,
+      "median_score": 111.88276672363281,
+      "no_valid_scores": false,
+      "peak_original": 159339,
+      "point_count": 7,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 159334,
+      "start_time_ns": 159335,
+      "valid_points": 7
+    },
+    {
+      "end_original": 162143,
+      "end_time_ns": 162144,
+      "first_hit_original": 162141,
+      "hit": true,
+      "hit_points": 3,
+      "max_score": 342.2454528808594,
+      "median_score": 341.23602294921875,
+      "no_valid_scores": false,
+      "peak_original": 162142,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 162141,
+      "start_time_ns": 162142,
+      "valid_points": 3
+    },
+    {
+      "end_original": 162171,
+      "end_time_ns": 162172,
+      "first_hit_original": 162162,
+      "hit": true,
+      "hit_points": 10,
+      "max_score": 5394.94384765625,
+      "median_score": 343.02740478515625,
+      "no_valid_scores": false,
+      "peak_original": 162168,
+      "point_count": 10,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 162162,
+      "start_time_ns": 162163,
+      "valid_points": 10
+    },
+    {
+      "end_original": 162630,
+      "end_time_ns": 162631,
+      "first_hit_original": 162630,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 367.6680603027344,
+      "median_score": 367.6680603027344,
+      "no_valid_scores": false,
+      "peak_original": 162630,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 162630,
+      "start_time_ns": 162631,
+      "valid_points": 1
+    },
+    {
+      "end_original": 162646,
+      "end_time_ns": 162647,
+      "first_hit_original": 162636,
+      "hit": true,
+      "hit_points": 11,
+      "max_score": 368.9004211425781,
+      "median_score": 368.4158630371094,
+      "no_valid_scores": false,
+      "peak_original": 162646,
+      "point_count": 11,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 162636,
+      "start_time_ns": 162637,
+      "valid_points": 11
+    },
+    {
+      "end_original": 164489,
+      "end_time_ns": 164490,
+      "first_hit_original": 164489,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 428.65618896484375,
+      "median_score": 428.65618896484375,
+      "no_valid_scores": false,
+      "peak_original": 164489,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 164489,
+      "start_time_ns": 164490,
+      "valid_points": 1
+    },
+    {
+      "end_original": 164987,
+      "end_time_ns": 164988,
+      "first_hit_original": 164983,
+      "hit": true,
+      "hit_points": 5,
+      "max_score": 1172.363037109375,
+      "median_score": 461.089599609375,
+      "no_valid_scores": false,
+      "peak_original": 164985,
+      "point_count": 5,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 164983,
+      "start_time_ns": 164984,
+      "valid_points": 5
+    },
+    {
+      "end_original": 165029,
+      "end_time_ns": 165030,
+      "first_hit_original": 165000,
+      "hit": true,
+      "hit_points": 30,
+      "max_score": 4524.572265625,
+      "median_score": 468.79258728027344,
+      "no_valid_scores": false,
+      "peak_original": 165016,
+      "point_count": 30,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 165000,
+      "start_time_ns": 165001,
+      "valid_points": 30
+    },
+    {
+      "end_original": 166379,
+      "end_time_ns": 166380,
+      "first_hit_original": 166365,
+      "hit": true,
+      "hit_points": 15,
+      "max_score": 497.4079284667969,
+      "median_score": 206.31434631347656,
+      "no_valid_scores": false,
+      "peak_original": 166365,
+      "point_count": 15,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 166365,
+      "start_time_ns": 166366,
+      "valid_points": 15
+    },
+    {
+      "end_original": 166400,
+      "end_time_ns": 166401,
+      "first_hit_original": 166400,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 28.27324867248535,
+      "median_score": 28.27324867248535,
+      "no_valid_scores": false,
+      "peak_original": 166400,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 166400,
+      "start_time_ns": 166401,
+      "valid_points": 1
+    },
+    {
+      "end_original": 166450,
+      "end_time_ns": 166451,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 4.040729522705078,
+      "median_score": 3.859534502029419,
+      "no_valid_scores": false,
+      "peak_original": 166449,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 166448,
+      "start_time_ns": 166449,
+      "valid_points": 3
+    },
+    {
+      "end_original": 166470,
+      "end_time_ns": 166471,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 4.906260013580322,
+      "median_score": 4.107182025909424,
+      "no_valid_scores": false,
+      "peak_original": 166470,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 166468,
+      "start_time_ns": 166469,
+      "valid_points": 3
+    },
+    {
+      "end_original": 167680,
+      "end_time_ns": 167681,
+      "first_hit_original": 167680,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 674.7454223632812,
+      "median_score": 674.7454223632812,
+      "no_valid_scores": false,
+      "peak_original": 167680,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 167680,
+      "start_time_ns": 167681,
+      "valid_points": 1
+    },
+    {
+      "end_original": 168183,
+      "end_time_ns": 168184,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 10.304950714111328,
+      "median_score": 4.153955459594727,
+      "no_valid_scores": false,
+      "peak_original": 168121,
+      "point_count": 80,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 168104,
+      "start_time_ns": 168105,
+      "valid_points": 80
+    },
+    {
+      "end_original": 168886,
+      "end_time_ns": 168887,
+      "first_hit_original": 168886,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 772.8675537109375,
+      "median_score": 772.8675537109375,
+      "no_valid_scores": false,
+      "peak_original": 168886,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 168886,
+      "start_time_ns": 168887,
+      "valid_points": 1
+    },
+    {
+      "end_original": 168891,
+      "end_time_ns": 168892,
+      "first_hit_original": 168891,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 1151.249267578125,
+      "median_score": 1151.249267578125,
+      "no_valid_scores": false,
+      "peak_original": 168891,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 168891,
+      "start_time_ns": 168892,
+      "valid_points": 1
+    },
+    {
+      "end_original": 168899,
+      "end_time_ns": 168900,
+      "first_hit_original": 168899,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 94.26066589355469,
+      "median_score": 94.26066589355469,
+      "no_valid_scores": false,
+      "peak_original": 168899,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 168899,
+      "start_time_ns": 168900,
+      "valid_points": 1
+    },
+    {
+      "end_original": 168988,
+      "end_time_ns": 168989,
+      "first_hit_original": 168987,
+      "hit": true,
+      "hit_points": 2,
+      "max_score": 85.93643951416016,
+      "median_score": 18.645309448242188,
+      "no_valid_scores": false,
+      "peak_original": 168987,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 168986,
+      "start_time_ns": 168987,
+      "valid_points": 3
+    },
+    {
+      "end_original": 170947,
+      "end_time_ns": 170948,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 11.360588073730469,
+      "median_score": 2.869500160217285,
+      "no_valid_scores": false,
+      "peak_original": 170909,
+      "point_count": 43,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 170905,
+      "start_time_ns": 170906,
+      "valid_points": 43
+    },
+    {
+      "end_original": 174439,
+      "end_time_ns": 174440,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 5.422273635864258,
+      "median_score": 4.786787271499634,
+      "no_valid_scores": false,
+      "peak_original": 174438,
+      "point_count": 2,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 174438,
+      "start_time_ns": 174439,
+      "valid_points": 2
+    },
+    {
+      "end_original": 177634,
+      "end_time_ns": 177635,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 4.183115005493164,
+      "median_score": 0.3725895285606384,
+      "no_valid_scores": false,
+      "peak_original": 177377,
+      "point_count": 397,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 177238,
+      "start_time_ns": 177239,
+      "valid_points": 397
+    },
+    {
+      "end_original": 179729,
+      "end_time_ns": 179730,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 9.679178237915039,
+      "median_score": 9.308320999145508,
+      "no_valid_scores": false,
+      "peak_original": 179707,
+      "point_count": 24,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 179706,
+      "start_time_ns": 179707,
+      "valid_points": 24
+    },
+    {
+      "end_original": 179799,
+      "end_time_ns": 179800,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 10.019563674926758,
+      "median_score": 9.724328994750977,
+      "no_valid_scores": false,
+      "peak_original": 179772,
+      "point_count": 40,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 179760,
+      "start_time_ns": 179761,
+      "valid_points": 40
+    },
+    {
+      "end_original": 181421,
+      "end_time_ns": 181422,
+      "first_hit_original": 180607,
+      "hit": true,
+      "hit_points": 813,
+      "max_score": 505.6422119140625,
+      "median_score": 375.4858093261719,
+      "no_valid_scores": false,
+      "peak_original": 180922,
+      "point_count": 817,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 180605,
+      "start_time_ns": 180606,
+      "valid_points": 817
+    },
+    {
+      "end_original": 186600,
+      "end_time_ns": 186601,
+      "first_hit_original": 185788,
+      "hit": true,
+      "hit_points": 813,
+      "max_score": 651.0267333984375,
+      "median_score": 627.6747436523438,
+      "no_valid_scores": false,
+      "peak_original": 186586,
+      "point_count": 813,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 185788,
+      "start_time_ns": 185789,
+      "valid_points": 813
+    },
+    {
+      "end_original": 186820,
+      "end_time_ns": 186821,
+      "first_hit_original": 186818,
+      "hit": true,
+      "hit_points": 3,
+      "max_score": 637.3238525390625,
+      "median_score": 637.205810546875,
+      "no_valid_scores": false,
+      "peak_original": 186820,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 186818,
+      "start_time_ns": 186819,
+      "valid_points": 3
+    },
+    {
+      "end_original": 189005,
+      "end_time_ns": 189006,
+      "first_hit_original": 188006,
+      "hit": true,
+      "hit_points": 1000,
+      "max_score": 640.0136108398438,
+      "median_score": 636.5034484863281,
+      "no_valid_scores": false,
+      "peak_original": 188989,
+      "point_count": 1000,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 188006,
+      "start_time_ns": 188007,
+      "valid_points": 1000
+    },
+    {
+      "end_original": 189984,
+      "end_time_ns": 189985,
+      "first_hit_original": 189982,
+      "hit": true,
+      "hit_points": 3,
+      "max_score": 630.164306640625,
+      "median_score": 629.2384033203125,
+      "no_valid_scores": false,
+      "peak_original": 189984,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 189982,
+      "start_time_ns": 189983,
+      "valid_points": 3
+    },
+    {
+      "end_original": 197355,
+      "end_time_ns": 197356,
+      "first_hit_original": 192504,
+      "hit": true,
+      "hit_points": 4852,
+      "max_score": 645.9287109375,
+      "median_score": 638.5507507324219,
+      "no_valid_scores": false,
+      "peak_original": 196716,
+      "point_count": 4852,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 192504,
+      "start_time_ns": 192505,
+      "valid_points": 4852
+    },
+    {
+      "end_original": 198123,
+      "end_time_ns": 198124,
+      "first_hit_original": 198122,
+      "hit": true,
+      "hit_points": 2,
+      "max_score": 590.1972045898438,
+      "median_score": 590.0364379882812,
+      "no_valid_scores": false,
+      "peak_original": 198122,
+      "point_count": 2,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 198122,
+      "start_time_ns": 198123,
+      "valid_points": 2
+    },
+    {
+      "end_original": 198223,
+      "end_time_ns": 198224,
+      "first_hit_original": 198222,
+      "hit": true,
+      "hit_points": 2,
+      "max_score": 599.0408935546875,
+      "median_score": 598.8678283691406,
+      "no_valid_scores": false,
+      "peak_original": 198223,
+      "point_count": 2,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 198222,
+      "start_time_ns": 198223,
+      "valid_points": 2
+    },
+    {
+      "end_original": 198261,
+      "end_time_ns": 198262,
+      "first_hit_original": 198246,
+      "hit": true,
+      "hit_points": 16,
+      "max_score": 600.1832885742188,
+      "median_score": 90.1022834777832,
+      "no_valid_scores": false,
+      "peak_original": 198246,
+      "point_count": 16,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 198246,
+      "start_time_ns": 198247,
+      "valid_points": 16
+    },
+    {
+      "end_original": 198312,
+      "end_time_ns": 198313,
+      "first_hit_original": 198298,
+      "hit": true,
+      "hit_points": 13,
+      "max_score": 114.75709533691406,
+      "median_score": 31.31063938140869,
+      "no_valid_scores": false,
+      "peak_original": 198298,
+      "point_count": 20,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 198293,
+      "start_time_ns": 198294,
+      "valid_points": 20
+    },
+    {
+      "end_original": 198415,
+      "end_time_ns": 198416,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 8.63988971710205,
+      "median_score": 3.5524394512176514,
+      "no_valid_scores": false,
+      "peak_original": 198383,
+      "point_count": 41,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 198375,
+      "start_time_ns": 198376,
+      "valid_points": 41
+    },
+    {
+      "end_original": 201309,
+      "end_time_ns": 201310,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 9.125397682189941,
+      "median_score": 4.898830890655518,
+      "no_valid_scores": false,
+      "peak_original": 201293,
+      "point_count": 24,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 201286,
+      "start_time_ns": 201287,
+      "valid_points": 24
+    },
+    {
+      "end_original": 201378,
+      "end_time_ns": 201379,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 6.350534439086914,
+      "median_score": 2.3686110973358154,
+      "no_valid_scores": false,
+      "peak_original": 201342,
+      "point_count": 38,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 201341,
+      "start_time_ns": 201342,
+      "valid_points": 38
+    },
+    {
+      "end_original": 201434,
+      "end_time_ns": 201435,
+      "first_hit_original": 201392,
+      "hit": true,
+      "hit_points": 18,
+      "max_score": 37.460811614990234,
+      "median_score": 10.237006187438965,
+      "no_valid_scores": false,
+      "peak_original": 201405,
+      "point_count": 50,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 201385,
+      "start_time_ns": 201386,
+      "valid_points": 50
+    },
+    {
+      "end_original": 205014,
+      "end_time_ns": 205015,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 5.934034824371338,
+      "median_score": 0.6711828708648682,
+      "no_valid_scores": false,
+      "peak_original": 204908,
+      "point_count": 111,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 204904,
+      "start_time_ns": 204905,
+      "valid_points": 111
+    },
+    {
+      "end_original": 206266,
+      "end_time_ns": 206267,
+      "first_hit_original": 206266,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 1423.6629638671875,
+      "median_score": 1423.6629638671875,
+      "no_valid_scores": false,
+      "peak_original": 206266,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 206266,
+      "start_time_ns": 206267,
+      "valid_points": 1
+    },
+    {
+      "end_original": 206928,
+      "end_time_ns": 206929,
+      "first_hit_original": 206927,
+      "hit": true,
+      "hit_points": 2,
+      "max_score": 1102.0965576171875,
+      "median_score": 106.42020416259766,
+      "no_valid_scores": false,
+      "peak_original": 206927,
+      "point_count": 3,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 206926,
+      "start_time_ns": 206927,
+      "valid_points": 3
+    },
+    {
+      "end_original": 206958,
+      "end_time_ns": 206959,
+      "first_hit_original": 206958,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 16.034915924072266,
+      "median_score": 16.034915924072266,
+      "no_valid_scores": false,
+      "peak_original": 206958,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 206958,
+      "start_time_ns": 206959,
+      "valid_points": 1
+    },
+    {
+      "end_original": 208475,
+      "end_time_ns": 208476,
+      "first_hit_original": 208460,
+      "hit": true,
+      "hit_points": 15,
+      "max_score": 91.374267578125,
+      "median_score": 26.392767906188965,
+      "no_valid_scores": false,
+      "peak_original": 208474,
+      "point_count": 18,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 208458,
+      "start_time_ns": 208459,
+      "valid_points": 18
+    },
+    {
+      "end_original": 209018,
+      "end_time_ns": 209019,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 6.427274227142334,
+      "median_score": 6.427274227142334,
+      "no_valid_scores": false,
+      "peak_original": 209018,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 209018,
+      "start_time_ns": 209019,
+      "valid_points": 1
+    },
+    {
+      "end_original": 209546,
+      "end_time_ns": 209547,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 14.221635818481445,
+      "median_score": 7.48149299621582,
+      "no_valid_scores": false,
+      "peak_original": 209416,
+      "point_count": 157,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 209390,
+      "start_time_ns": 209391,
+      "valid_points": 157
+    },
+    {
+      "end_original": 211244,
+      "end_time_ns": 211245,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 4.490609645843506,
+      "median_score": 1.311087965965271,
+      "no_valid_scores": false,
+      "peak_original": 211214,
+      "point_count": 399,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 210846,
+      "start_time_ns": 210847,
+      "valid_points": 399
+    },
+    {
+      "end_original": 214307,
+      "end_time_ns": 214308,
+      "first_hit_original": 213084,
+      "hit": true,
+      "hit_points": 39,
+      "max_score": 89.17059326171875,
+      "median_score": 7.453374862670898,
+      "no_valid_scores": false,
+      "peak_original": 213096,
+      "point_count": 1228,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 213080,
+      "start_time_ns": 213081,
+      "valid_points": 1228
+    },
+    {
+      "end_original": 215331,
+      "end_time_ns": 215332,
+      "first_hit_original": null,
+      "hit": false,
+      "hit_points": 0,
+      "max_score": 12.420120239257812,
+      "median_score": 1.6023643612861633,
+      "no_valid_scores": false,
+      "peak_original": 215068,
+      "point_count": 270,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 215062,
+      "start_time_ns": 215063,
+      "valid_points": 270
+    },
+    {
+      "end_original": 215342,
+      "end_time_ns": 215343,
+      "first_hit_original": 215342,
+      "hit": true,
+      "hit_points": 1,
+      "max_score": 332.9947814941406,
+      "median_score": 332.9947814941406,
+      "no_valid_scores": false,
+      "peak_original": 215342,
+      "point_count": 1,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 215342,
+      "start_time_ns": 215343,
+      "valid_points": 1
+    },
+    {
+      "end_original": 220315,
+      "end_time_ns": 220316,
+      "first_hit_original": 217246,
+      "hit": true,
+      "hit_points": 15,
+      "max_score": 687.8063354492188,
+      "median_score": 2.084968686103821,
+      "no_valid_scores": false,
+      "peak_original": 218357,
+      "point_count": 3120,
+      "segment_id": 0,
+      "segment_identity": {
+        "boundary_value": null,
+        "segment_id": 0
+      },
+      "start_original": 217196,
+      "start_time_ns": 217197,
+      "valid_points": 3120
+    }
+  ]
+}

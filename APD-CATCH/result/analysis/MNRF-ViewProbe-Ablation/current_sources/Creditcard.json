@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "source": {
+    "cache_sha256": {
+      "calibration": "bfb033ba7973676ce633961e2ab8122813ebc9c13d43e7a7ff44c462f457e72d",
+      "test": "140e96a782ea714a855a1893986550696140352362562af7ba5f300c38b3b9ad",
+      "train": "ec4efcc16cd920cfd64943a08d5ece976baeba8ef4b6398a16f4be4b5c6b1cf1",
+      "validation": "c3231f95674493ac0afc6ddf2e3451bde993ce7bd5edca19ea22fc312576ab0f"
+    },
+    "endpoint_sha256": {
+      "calibration": "172c5cae7af04897cc98aa1a3142ead072276010dfff080a2c37f3f8a79ac77a",
+      "test": "c1cd53cf7da65c3d89a1011f63ddf38bd3f6d04dbabdc95db163db9b32e30d69",
+      "train": "e2f051f99819fcbf5488f5a75806c680d479271b2b6d9895656e1ff2b1e330f3",
+      "validation": "b0bd12d1e3cfa363bb5a0473df885c778875ad137ad153e406ed7a30d5f7a574"
+    },
+    "feature_fingerprint": "9e30484ba13240f715d4353794781140a82aa01a160432292e3b8bbffd6f15a9",
+    "gmm_fit_endpoints_sha256": "f0d6a9e31c66412d23178abfef617fc17c27a6b814f674dac41e708356737877",
+    "manifest_sha256": "67077eca148b7489e5113365e69fb29ded7e0f3e6f03f80f8967421d763ae834",
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864",
+    "registered_at_utc": "2026-10-24T17:26:43Z",
+    "run_id": "full_gmm-full-20261024T115131Z-3977864",
+    "source_identity_sha256": "4cb154b889ac7ad98df849b3c05dd4a9ae084b2f771d1ad69135bfcdeeef2f90",
+    "task": "Creditcard",
+    "validation": {
+      "device": "cpu",
+      "native_status": "complete",
+      "select_gmm_source_preflight": "passed"
+    }
+  },
+  "task": "Creditcard"
+}

@@ -81,8 +81,9 @@ def test_scripts_capture_literal_configuration_without_environment_override(tmp_
     for task, script in SCRIPTS.items():
         result, lines = _capture_script(tmp_path / task, script)
         assert result.returncode == 0, result.stderr
-        assert len(lines) == 3
-        preflight, run, export = lines
+        has_registration = task in {"PSM", "Creditcard", "CICIDS"}
+        assert len(lines) == (4 if has_registration else 3)
+        preflight, run, export = lines[:3]
         seq_len, batch_size = REFERENCE[task]
         assert f"CUDA_VISIBLE_DEVICES=9 <{ROOT}/scripts/mnrf_lite_v2_preflight.py>" in preflight
         assert f"<--task> <{task}>" in preflight
@@ -113,6 +114,11 @@ def test_scripts_capture_literal_configuration_without_environment_override(tmp_
         assert "/old/source" not in run and "/old/resume" not in run and "/old/output" not in run
         assert f"MNRF-ViewProbe/{task}/full_gmm-" in run
         assert "export_mnrf_view_probe_analysis.py" in export
+        if has_registration:
+            registration = lines[3]
+            assert "register_mnrf_branch_source.py" in registration
+            assert f"<--task> <{task}>" in registration
+            assert "--run-dir" in registration and "MNRF-ViewProbe/" in registration
 
 
 def test_preflight_failure_stops_before_training(tmp_path):

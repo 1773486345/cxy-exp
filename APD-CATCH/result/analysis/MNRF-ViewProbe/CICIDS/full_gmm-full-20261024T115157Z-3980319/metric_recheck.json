@@ -1,0 +1,17 @@
+{
+  "alarm_points": 1411,
+  "anomaly_points": 74,
+  "auc_roc": 0.5388251328959158,
+  "auc_roc_undefined_reason": null,
+  "average_precision": 0.0009173981247266992,
+  "coverage": 0.9977560035715964,
+  "f1": 0.0,
+  "fn": 74,
+  "fp": 1411,
+  "precision": 0.0,
+  "recall": 0.0,
+  "status": "complete",
+  "threshold": 74.09978164672852,
+  "tn": 83440,
+  "tp": 0
+}

@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "source": {
+    "cache_sha256": {
+      "calibration": "e65209ff51e3bd4975203c0868724cd461944afc9265f99647a559c9a32059ac",
+      "test": "b8acea919ab60e4a86c64917e87636a7f450bdd7704130e998e8014f05afc77f",
+      "train": "f39088d0a014b3a081c07b2c66b9707f9c7b483559f980c22aef8767fe9f35b7",
+      "validation": "4cd17ccc9bd4581ed825561804b6f5ef0612269bd5a71ba2515374baf9ec14ce"
+    },
+    "endpoint_sha256": {
+      "calibration": "0dfea2d1bad91c6e09b709fb45cac7c461c1a46e9fd46b3979677221cb774d6c",
+      "test": "25215e6895960e3605605963ecfbf98a10a41406b4bbd59b2bfea6216bb9e4cf",
+      "train": "c6aaabb91268ad8eab23387bbf9541af5b9739af69603170d2d2d1a2183d7d59",
+      "validation": "302e63ba819b1ea3192abf43cadef84366bee2d79332c6a6fb3ad370c5388c51"
+    },
+    "feature_fingerprint": "13e2ad46057f0d38cfc6031c5276fb375533ce5ab724817257bc7610bc0c3063",
+    "gmm_fit_endpoints_sha256": "661d38ca675d94dbea623536bce4f7fd783d1897ea6b668dd81bdecfe24a5e35",
+    "manifest_sha256": "9bb6b1c45bc3ee4c8710e7d36fecbacf1d5d706094c296178862652f15884cb1",
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+    "registered_at_utc": "2026-10-24T13:51:07Z",
+    "run_id": "full_gmm-full-20261024T115119Z-3976714",
+    "source_identity_sha256": "8711277a408942ac1ee53b0a6e1bdc92a82d16dfbed328b82c3e6a2f86a6ba1e",
+    "task": "PSM",
+    "validation": {
+      "device": "cpu",
+      "native_status": "complete",
+      "select_gmm_source_preflight": "passed"
+    }
+  },
+  "task": "PSM"
+}

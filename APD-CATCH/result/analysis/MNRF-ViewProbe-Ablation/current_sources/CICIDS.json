@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "source": {
+    "cache_sha256": {
+      "calibration": "bf5920468c6dc0f4fcacf2ed7e5f508591cbb99dca70796b9f27d8752e0b7843",
+      "test": "84ae5cf40ef7f13aafa7889e1bed71efe9cd081a07d81b5a2dc039fb6eb9be9e",
+      "train": "d30847baabd796e7ae613c51fa4f69d9dcf1e61bbaddd9c2c5b15f331f508b41",
+      "validation": "a318687388da3791131ff133c8f3088866b35f763f766ffd97b838215cd5e790"
+    },
+    "endpoint_sha256": {
+      "calibration": "6fbd9dce7726dc83ae26551e44ff085a5438b612e9eb8c52498882c46e4ec4d8",
+      "test": "1465492587cb083b0facd93dc93d21c9ebf378bab04f527feb9a48bb369538d6",
+      "train": "cb8683fd7663c6a1172aa954d4fed92344c3efd7c5423e1ef092d8af68fb8872",
+      "validation": "672d78f4c301be091a0dad4c8e8ef4ef1de8a4e0bcae6dc4fd38beb635d6d023"
+    },
+    "feature_fingerprint": "e023c9c7602438773d68aa52afa5359a769c29997581a2218a9f199a65fb7e47",
+    "gmm_fit_endpoints_sha256": "dcdf002ca3f9d6c69dbc4f84e71d636196d5d282cac79d98934bcaeabd085407",
+    "manifest_sha256": "8cdf4d090c6f3a73b454f49102edba0d8c8e028601ae55e86581d372adfc8d8a",
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319",
+    "registered_at_utc": "2026-10-24T14:39:30Z",
+    "run_id": "full_gmm-full-20261024T115157Z-3980319",
+    "source_identity_sha256": "8284f413fb18004e0ad338e3c3a6966821d8b0a40eb10ce24d3b8bad81d4522d",
+    "task": "CICIDS",
+    "validation": {
+      "device": "cpu",
+      "native_status": "complete",
+      "select_gmm_source_preflight": "passed"
+    }
+  },
+  "task": "CICIDS"
+}

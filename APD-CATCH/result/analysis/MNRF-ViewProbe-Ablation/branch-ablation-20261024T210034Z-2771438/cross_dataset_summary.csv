@@ -1,0 +1,16 @@
+branch,direction,metric,requested,observed,wins,ties,losses,mean,participating_datasets,missing_datasets,tie_tolerance,not_applicable
+S,added,not_applicable,8,0,0,0,0,,[],"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",1e-12,True
+S,deleted,average_precision,8,8,5,0,3,0.001998690592922916,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+S,deleted,auc_roc,8,8,7,0,1,0.012278666972944316,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+E,added,average_precision,8,8,0,0,8,-0.0692481651031697,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+E,added,auc_roc,8,8,0,0,8,-0.12237403744928663,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+E,deleted,average_precision,8,7,3,0,4,-0.006703407900689057,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard""]","[""CICIDS""]",1e-12,False
+E,deleted,auc_roc,8,7,3,0,4,-0.013264028985799037,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard""]","[""CICIDS""]",1e-12,False
+P,added,average_precision,8,8,1,0,7,-0.05569691020322915,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+P,added,auc_roc,8,8,2,0,6,-0.07217803668254993,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+P,deleted,average_precision,8,8,2,0,6,-0.00704391635238612,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+P,deleted,auc_roc,8,8,2,0,6,-0.009062270334817477,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+R,added,average_precision,8,8,2,0,6,-0.04538569006159203,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+R,added,auc_roc,8,8,3,0,5,0.014561101245400832,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+R,deleted,average_precision,8,8,6,0,2,0.032213914156321265,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
+R,deleted,auc_roc,8,8,6,0,2,0.11594538264203105,"[""PSM"", ""MSL"", ""GECCO"", ""Genesis"", ""NYC"", ""CalIt2"", ""Creditcard"", ""CICIDS""]",[],1e-12,False
