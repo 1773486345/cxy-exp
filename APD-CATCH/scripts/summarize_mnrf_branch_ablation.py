@@ -698,6 +698,198 @@ def summarize(plan_path):
     return rows, contributions, paired, bundles
 
 
+def _binary_metrics(labels, scores, predictions):
+    labels = np.asarray(labels, dtype=np.int8)
+    scores = np.asarray(scores, dtype=np.float64)
+    predictions = np.asarray(predictions, dtype=bool)
+    tp = int(np.sum((labels == 1) & predictions))
+    fp = int(np.sum((labels == 0) & predictions))
+    fn = int(np.sum((labels == 1) & ~predictions))
+    tn = int(np.sum((labels == 0) & ~predictions))
+    precision = tp / float(tp + fp) if tp + fp else 0.0
+    recall = tp / float(tp + fn) if tp + fn else 0.0
+    f1 = 2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
+    auc = float(roc_auc_score(labels, scores)) if np.unique(labels).size == 2 else None
+    ap = float(average_precision_score(labels, scores)) if len(labels) else None
+    return {"ap": ap, "auc_roc": auc, "precision": precision, "recall": recall,
+            "f1": f1, "normal_fpr": fp / float(fp + tn) if fp + tn else None,
+            "tp": tp, "fp": fp, "fn": fn, "tn": tn}
+
+
+def _max_variable_summary(z, labels, max_predictions):
+    """Return tie-split variable shares for max-score FP and TP points."""
+    z = np.asarray(z, dtype=np.float64)
+    labels = np.asarray(labels, dtype=np.int8)
+    max_predictions = np.asarray(max_predictions, dtype=bool)
+    maxima = np.max(z, axis=1)
+    ties = np.isclose(z, maxima[:, None], rtol=0.0, atol=1e-7)
+    shares = ties / np.maximum(ties.sum(axis=1, keepdims=True), 1)
+    summaries = []
+    for name, selection in (
+            ("fp", (labels == 0) & max_predictions),
+            ("tp", (labels == 1) & max_predictions)):
+        counts = shares[selection].sum(axis=0)
+        total = float(counts.sum())
+        if not total:
+            summaries.append("none (n=0)")
+            continue
+        order = np.argsort(-counts, kind="stable")
+        summaries.append("{} (n={})".format(
+            name, int(selection.sum())) + "; " + ", ".join(
+                "v{}={:.3f}".format(int(index), float(counts[index] / total))
+                for index in order if counts[index] > 0))
+    return " | ".join(summaries)
+
+
+def aggregation_comparison(plan_path):
+    """Recompute max and an additive mean-variable aggregation read-only."""
+    plan_path = Path(plan_path).resolve()
+    plan = _json(plan_path)
+    rows = []
+    successful = 0
+    failed = 0
+    quantile_default = 0.995
+    for planned in plan.get("rows", []):
+        dataset = planned.get("dataset", "")
+        combination = planned.get("combination", "")
+        seed = int(planned.get("head_seed", 2021))
+        row = {"dataset": dataset, "combination": combination, "head_seed": seed,
+               "source_run_id": planned.get("source_run_id"),
+               "candidate_run_id": Path(planned.get("candidate_or_output_path", "")).name,
+               "status": planned.get("status"), "max_reproduced": False,
+               "mean_status": "not_attempted", "reason": planned.get("reason", "")}
+        if planned.get("status") not in {"complete", "reused"}:
+            failed += 1
+            row.update({"status": planned.get("status", "invalid"), "mean_status": "not_attempted"})
+            rows.append(row)
+            continue
+        try:
+            run_dir = Path(planned["candidate_or_output_path"]).resolve()
+            source_dir = Path(plan["source_records"][dataset]["path"]).resolve()
+            manifest = _json(run_dir / "probe_manifest.json")
+            for relative in ("results/test_nll.npy", "heads/calibration_nll.npy",
+                             "heads/calibration.npz", "results/aligned_scores.npz",
+                             "analysis_inputs.npz"):
+                if not (run_dir / relative).is_file() and relative != "analysis_inputs.npz":
+                    raise ValueError("missing {}".format(relative))
+            if manifest.get("head_type") != "gmm" or manifest.get("head_status") != "complete":
+                raise ValueError("candidate manifest is not a completed GMM head")
+            aligned = _npz(run_dir / "results/aligned_scores.npz")
+            source_aligned = _npz(source_dir / "results/aligned_scores.npz")
+            for key in ("time_indices", "time_values_ns", "local_indices", "valid_mask", "aligned_actual"):
+                if key not in aligned.files or key not in source_aligned.files:
+                    raise ValueError("missing aligned axis {}".format(key))
+                if not np.array_equal(np.asarray(aligned[key]), np.asarray(source_aligned[key])):
+                    raise ValueError("candidate/source {} differs".format(key))
+            scores = np.asarray(aligned["scores"])
+            labels = np.asarray(aligned["actual"], dtype=np.int8)
+            valid_mask = np.asarray(aligned["valid_mask"])
+            if valid_mask.dtype.kind != "b" or scores.ndim != 1 or labels.shape != scores.shape:
+                raise ValueError("invalid aligned score shapes")
+            nll = np.load(run_dir / "results/test_nll.npy", mmap_mode="r", allow_pickle=False)
+            calibration_nll = np.load(run_dir / "heads/calibration_nll.npy", mmap_mode="r", allow_pickle=False)
+            if nll.ndim != 2 or calibration_nll.ndim != 2 or nll.shape[1] != calibration_nll.shape[1]:
+                raise ValueError("test/calibration NLL dimensions differ")
+            with _npz(run_dir / "heads/calibration.npz") as calibration:
+                # Keep the saved float32 arithmetic used by the production
+                # max path; widening here changes threshold-boundary
+                # predictions for otherwise valid historical heads.
+                center = np.asarray(calibration["center"])
+                scale = np.asarray(calibration["scale"])
+                max_threshold = float(np.asarray(calibration["threshold"]))
+                quantile = float(np.asarray(calibration.get("quantile", quantile_default)))
+            if center.shape != (nll.shape[1],) or scale.shape != center.shape or np.any(scale <= 0):
+                raise ValueError("invalid center/scale")
+            if not np.isfinite(nll).all() or not np.isfinite(calibration_nll).all():
+                raise ValueError("NLL contains non-finite values")
+            z = (np.asarray(nll) - center) / scale
+            max_scores = np.max(z, axis=1)
+            if len(scores) != len(max_scores) or not np.allclose(scores, max_scores, rtol=1e-6, atol=1e-7):
+                raise ValueError("saved max scores do not reproduce from test_nll")
+            saved_predictions = np.asarray(aligned["predictions"], dtype=bool)
+            saved_threshold = float(np.asarray(aligned["threshold"]))
+            max_predictions = max_scores > max_threshold
+            if not np.isclose(saved_threshold, max_threshold, rtol=0.0, atol=1e-7):
+                raise ValueError("saved threshold differs from calibration")
+            if not np.array_equal(saved_predictions, max_predictions):
+                raise ValueError("saved max predictions do not reproduce")
+            # Calibration and test NLL use the same selected variable order.
+            calibration_z = (np.asarray(calibration_nll) - center) / scale
+            mean_calibration = np.mean(calibration_z, axis=1)
+            mean_threshold = float(np.quantile(mean_calibration, quantile, method="linear"))
+            mean_scores = np.mean(z, axis=1)
+            mean_predictions = mean_scores > mean_threshold
+            max_metrics = _binary_metrics(labels, max_scores, max_predictions)
+            mean_metrics = _binary_metrics(labels, mean_scores, mean_predictions)
+            max_segments = segment_counts(source_dir, np.asarray(aligned["time_indices"]), max_predictions.astype(np.int8))
+            mean_segments = segment_counts(source_dir, np.asarray(aligned["time_indices"]), mean_predictions.astype(np.int8))
+            max_var_summary = _max_variable_summary(z, labels, max_predictions)
+            row.update({"status": "passed", "mean_status": "passed", "max_reproduced": True,
+                        "max_threshold": max_threshold, "mean_threshold": mean_threshold,
+                        "quantile": quantile, "selected_dim": int(nll.shape[1]),
+                        "variable_count": int(nll.shape[1]),
+                        "single_variable_check": ("passed" if nll.shape[1] == 1 and
+                                                   np.array_equal(max_scores, mean_scores) and
+                                                   max_threshold == mean_threshold
+                                                   else ("not_applicable_actual_variable_count={}"
+                                                         .format(nll.shape[1]) if nll.shape[1] != 1
+                                                         else "failed")),
+                        "max_ap": max_metrics["ap"], "mean_ap": mean_metrics["ap"],
+                        "delta_ap_mean_minus_max": mean_metrics["ap"] - max_metrics["ap"] if mean_metrics["ap"] is not None else None,
+                        "max_auc_roc": max_metrics["auc_roc"], "mean_auc_roc": mean_metrics["auc_roc"],
+                        "delta_auc_roc_mean_minus_max": (mean_metrics["auc_roc"] - max_metrics["auc_roc"]
+                                                          if mean_metrics["auc_roc"] is not None and max_metrics["auc_roc"] is not None else None),
+                        "max_precision": max_metrics["precision"], "mean_precision": mean_metrics["precision"],
+                        "max_recall": max_metrics["recall"], "mean_recall": mean_metrics["recall"],
+                        "max_f1": max_metrics["f1"], "mean_f1": mean_metrics["f1"],
+                        "max_normal_fpr": max_metrics["normal_fpr"], "mean_normal_fpr": mean_metrics["normal_fpr"],
+                        "max_tp": max_metrics["tp"], "mean_tp": mean_metrics["tp"],
+                        "max_fp": max_metrics["fp"], "mean_fp": mean_metrics["fp"],
+                        "max_fn": max_metrics["fn"], "mean_fn": mean_metrics["fn"],
+                        "max_tn": max_metrics["tn"], "mean_tn": mean_metrics["tn"],
+                        "max_segments_hit": max_segments["hit"], "max_segments_scored": max_segments["scored"],
+                        "max_segments_total": max_segments["total"], "mean_segments_hit": mean_segments["hit"],
+                        "mean_segments_scored": mean_segments["scored"], "mean_segments_total": mean_segments["total"],
+                        "segment_delta_hit_mean_minus_max": mean_segments["hit"] - max_segments["hit"],
+                        "max_contributing_variables_fp_tp": max_var_summary})
+            successful += 1
+        except Exception as error:
+            failed += 1
+            row.update({"status": "invalid", "mean_status": "not_attempted",
+                        "reason": "aggregation comparison failed: {}: {}".format(type(error).__name__, error)})
+        rows.append(row)
+    return rows, successful, failed
+
+
+def _update_aggregation_readme(batch_dir, rows, successful, failed):
+    readme = Path(batch_dir) / "README.md"
+    existing = readme.read_text(encoding="utf-8") if readme.is_file() else ""
+    marker = "## 变量评分聚合对照"
+    prefix = existing.split(marker, 1)[0].rstrip()
+    passed = [row for row in rows if row.get("status") == "passed"]
+    lines = [marker, "", "本节由 `--aggregation-comparison` 只读生成；未改写原 max 分数、校准、manifest 或模型。",
+             "通过对照格：{}/{}；失败/未验证格：{}。mean 只使用各格保存的 `calibration_nll.npy`、原 center/scale 和原 quantile。".format(
+                 successful, len(rows), failed), "",
+             "max 复现要求保存 test NLL 聚合、原阈值、预测和指定 Full 的有效坐标轴全部一致。变量贡献按原 max 预测的 FP/TP 点统计，并列最大值按份额平分；该统计只描述变量评分聚合，不证明编码器分支因果贡献。", ""]
+    nyc_dims = sorted({int(row["variable_count"]) for row in passed
+                       if row.get("dataset") == "NYC" and row.get("variable_count")})
+    if nyc_dims:
+        lines.append("NYC 实际保存的逐变量 NLL 宽度为 {}；因此本批次不是单变量特例，max 与 mean 不要求相等。若变量数为 1，CSV 的 `single_variable_check` 要求分数、阈值和预测逐项一致。".format(
+            ",".join(str(value) for value in nyc_dims)))
+        lines.append("")
+    for dataset in TASKS:
+        subset = [row for row in passed if row.get("dataset") == dataset]
+        if not subset:
+            continue
+        full = next((row for row in subset if row.get("combination") == "FULL"), None)
+        only_s = next((row for row in subset if row.get("combination") == "S"), None)
+        if full and only_s:
+            lines.append("- {}：Full mean-max AP {:+.4f}，ROC-AUC {:+.4f}；S-only AP {:+.4f}，Full mean AP {:+.4f}.".format(
+                dataset, full["delta_ap_mean_minus_max"], full["delta_auc_roc_mean_minus_max"],
+                only_s["delta_ap_mean_minus_max"], full["mean_ap"]))
+    _atomic_text(readme, prefix + "\n\n" + "\n".join(lines) + "\n")
+
+
 def _write_bundle(path, bundles):
     temp = Path(path).with_name(Path(path).name + ".tmp")
     np.savez_compressed(temp, **{key + "_" + name: value for key, bundle in bundles.items()
@@ -710,8 +902,17 @@ def _write_bundle(path, bundles):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", required=True, help="plan.json from run_mnrf_branch_ablation.py")
+    parser.add_argument("--aggregation-comparison", action="store_true",
+                        help="read-only max versus mean variable-score aggregation")
     args = parser.parse_args()
     plan_path = Path(args.plan).resolve()
+    if args.aggregation_comparison:
+        rows, successful, failed = aggregation_comparison(plan_path)
+        _atomic_csv(plan_path.parent / "aggregation_comparison.csv", rows)
+        _update_aggregation_readme(plan_path.parent, rows, successful, failed)
+        print("aggregation_csv={}".format(plan_path.parent / "aggregation_comparison.csv"))
+        print("aggregation_passed={} aggregation_failed={} max_reproduction=checked".format(successful, failed))
+        return 0 if successful else 1
     rows, contributions, paired, bundles = summarize(plan_path)
     batch_dir = plan_path.parent
     plan = _json(plan_path)
