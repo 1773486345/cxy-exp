@@ -16,6 +16,7 @@ from scripts.validate_mnrf_view_probe import validate
 from scripts.run_mnrf_branch_ablation import COMBINATIONS, EXPECTED_LAYOUT, build_plan, selected_indices
 from scripts.summarize_mnrf_branch_ablation import (
     _evaluation, _point_and_segment_changes, completion_counts,
+    _replay_calibration_aggregations, _single_variable_consistent,
     contribution_deltas, segment_counts_from_axis, summarize,
 )
 import scripts.mnrf_branch_source_registry as source_registry
@@ -74,6 +75,43 @@ def test_candidate_manifest_prefilter_only_allows_exact_source_contract(tmp_path
     manifest["head_status"] = "complete"
     manifest["source_identity"] = {"id": "other"}
     assert not _manifest_may_match(manifest, candidate_path, source, "S", 2021)
+    manifest["source_identity"] = source["source_identity"]
+    manifest["source_dir"] = str(tmp_path / "other-source")
+    assert not _manifest_may_match(manifest, candidate_path, source, "S", 2021)
+    manifest["source_dir"] = str(source_path)
+    manifest["config"]["seed"] = 2022
+    assert not _manifest_may_match(manifest, candidate_path, source, "S", 2021)
+
+
+def test_aggregation_replays_max_calibration_and_rejects_changed_nll():
+    calibration_nll = np.asarray([[1.0, 2.0], [2.0, 1.0], [3.0, 2.0]], dtype=np.float32)
+    center = np.asarray([1.0, 1.0], dtype=np.float32)
+    scale = np.asarray([2.0, 4.0], dtype=np.float32)
+    raw_z = (calibration_nll - center) / scale
+    saved_max = float(np.quantile(np.max(raw_z, axis=1), 0.995, method="linear"))
+    z, max_threshold, mean_threshold = _replay_calibration_aggregations(
+        calibration_nll, center, scale, saved_max, 0.995, 0.995)
+    expected_max = float(np.quantile(np.max(z, axis=1), 0.995, method="linear"))
+    assert max_threshold == expected_max
+    assert np.isfinite(mean_threshold)
+    changed = calibration_nll.copy()
+    changed[0, 0] += 100
+    with pytest.raises(ValueError, match="replayed max calibration threshold"):
+        _replay_calibration_aggregations(changed, center, scale, saved_max, 0.995, 0.995)
+
+
+def test_aggregation_dimension_fields_and_single_variable_equivalence():
+    assert [len(selected_indices(views)) for _, views in COMBINATIONS] == [
+        1, 9, 9, 9, 25, 24, 17, 17, 17]
+    # Feature selection width is not the number of original variables in NLL.
+    selected_dim, variable_count = len(selected_indices(("S",))), 3
+    assert (selected_dim, variable_count) == (1, 3)
+    scores = np.asarray([1.0, 2.0], dtype=np.float32)
+    predictions = scores > 1.5
+    assert _single_variable_consistent(scores, scores.copy(), 1.5, 1.5,
+                                       predictions, predictions.copy())
+    assert not _single_variable_consistent(scores, scores + 1e-6, 1.5, 1.5,
+                                           predictions, predictions.copy())
 
 
 def test_plan_keeps_blocked_dataset_matrix_without_starting_work():

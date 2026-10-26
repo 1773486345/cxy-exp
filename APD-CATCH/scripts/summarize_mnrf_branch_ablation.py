@@ -31,7 +31,7 @@ def _atomic_json(path, value):
     temp.replace(path)
 
 
-def _atomic_csv(path, rows):
+def _atomic_csv(path, rows, lineterminator="\r\n"):
     path = Path(path)
     fields = []
     for row in rows:
@@ -40,7 +40,8 @@ def _atomic_csv(path, rows):
                 fields.append(key)
     temp = path.with_name(path.name + ".tmp-{}".format(__import__("os").getpid()))
     with temp.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore",
+                                lineterminator=lineterminator)
         writer.writeheader()
         writer.writerows(rows)
     temp.replace(path)
@@ -741,6 +742,41 @@ def _max_variable_summary(z, labels, max_predictions):
     return " | ".join(summaries)
 
 
+def _replay_calibration_aggregations(calibration_nll, center, scale, saved_max_threshold,
+                                    manifest_quantile, saved_quantile):
+    """Replay frozen max and mean calibration thresholds without fitting."""
+    calibration_nll = np.asarray(calibration_nll)
+    center = np.asarray(center)
+    scale = np.asarray(scale)
+    if calibration_nll.ndim != 2 or calibration_nll.shape[0] == 0:
+        raise ValueError("calibration NLL must be a non-empty 2D array")
+    if center.shape != (calibration_nll.shape[1],) or scale.shape != center.shape:
+        raise ValueError("calibration NLL columns differ from center/scale")
+    if (not np.isfinite(calibration_nll).all() or not np.isfinite(center).all()
+            or not np.isfinite(scale).all() or np.any(scale <= 0)
+            or not np.isfinite(saved_max_threshold)):
+        raise ValueError("calibration NLL/statistics/threshold must be finite and scales positive")
+    if (not np.isfinite(manifest_quantile) or manifest_quantile != saved_quantile
+            or saved_quantile != 0.995):
+        raise ValueError("calibration quantile differs from manifest or fixed 0.995")
+    # Preserve the persisted dtype arithmetic used by the original max score.
+    calibration_z = (calibration_nll - center) / scale
+    replayed_max = float(np.quantile(np.max(calibration_z, axis=1), saved_quantile,
+                                     method="linear"))
+    if not np.isclose(replayed_max, saved_max_threshold, rtol=1e-6, atol=1e-7):
+        raise ValueError("replayed max calibration threshold differs from saved threshold")
+    replayed_mean = float(np.quantile(np.mean(calibration_z, axis=1), saved_quantile,
+                                      method="linear"))
+    return calibration_z, replayed_max, replayed_mean
+
+
+def _single_variable_consistent(max_scores, mean_scores, max_threshold, mean_threshold,
+                                max_predictions, mean_predictions):
+    """A one-variable reduction must make max and mean exactly identical."""
+    return (np.array_equal(max_scores, mean_scores) and max_threshold == mean_threshold
+            and np.array_equal(max_predictions, mean_predictions))
+
+
 def aggregation_comparison(plan_path):
     """Recompute max and an additive mean-variable aggregation read-only."""
     plan_path = Path(plan_path).resolve()
@@ -749,6 +785,7 @@ def aggregation_comparison(plan_path):
     successful = 0
     failed = 0
     quantile_default = 0.995
+    checked_runs = {}
     for planned in plan.get("rows", []):
         dataset = planned.get("dataset", "")
         combination = planned.get("combination", "")
@@ -756,7 +793,8 @@ def aggregation_comparison(plan_path):
         row = {"dataset": dataset, "combination": combination, "head_seed": seed,
                "source_run_id": planned.get("source_run_id"),
                "candidate_run_id": Path(planned.get("candidate_or_output_path", "")).name,
-               "status": planned.get("status"), "max_reproduced": False,
+               "status": planned.get("status"), "original_status": planned.get("status"),
+               "max_reproduced": False,
                "mean_status": "not_attempted", "reason": planned.get("reason", "")}
         if planned.get("status") not in {"complete", "reused"}:
             failed += 1
@@ -767,29 +805,48 @@ def aggregation_comparison(plan_path):
             run_dir = Path(planned["candidate_or_output_path"]).resolve()
             source_dir = Path(plan["source_records"][dataset]["path"]).resolve()
             manifest = _json(run_dir / "probe_manifest.json")
+            # Re-enter the same native source/candidate contract used by the
+            # normal summary.  The cache is shared across cells so each source
+            # and candidate is fully checked at most once in this invocation.
+            evaluation, bundle = _evaluation(
+                run_dir, source_dir, dataset, combination, seed, checked_runs)
+            source_manifest = checked_runs[source_dir.resolve()]["manifest"]
+            candidate_names = tuple(manifest.get("variable_names") or
+                                    manifest.get("config", {}).get("variable_names", ()))
+            source_names = tuple(source_manifest.get("variable_names") or
+                                 source_manifest.get("config", {}).get("variable_names", ()))
+            if candidate_names != source_names:
+                raise ValueError("candidate/source variable order differs")
             for relative in ("results/test_nll.npy", "heads/calibration_nll.npy",
-                             "heads/calibration.npz", "results/aligned_scores.npz",
-                             "analysis_inputs.npz"):
-                if not (run_dir / relative).is_file() and relative != "analysis_inputs.npz":
+                             "heads/calibration.npz"):
+                if not (run_dir / relative).is_file():
                     raise ValueError("missing {}".format(relative))
-            if manifest.get("head_type") != "gmm" or manifest.get("head_status") != "complete":
-                raise ValueError("candidate manifest is not a completed GMM head")
-            aligned = _npz(run_dir / "results/aligned_scores.npz")
-            source_aligned = _npz(source_dir / "results/aligned_scores.npz")
-            for key in ("time_indices", "time_values_ns", "local_indices", "valid_mask", "aligned_actual"):
-                if key not in aligned.files or key not in source_aligned.files:
-                    raise ValueError("missing aligned axis {}".format(key))
-                if not np.array_equal(np.asarray(aligned[key]), np.asarray(source_aligned[key])):
-                    raise ValueError("candidate/source {} differs".format(key))
-            scores = np.asarray(aligned["scores"])
-            labels = np.asarray(aligned["actual"], dtype=np.int8)
-            valid_mask = np.asarray(aligned["valid_mask"])
-            if valid_mask.dtype.kind != "b" or scores.ndim != 1 or labels.shape != scores.shape:
-                raise ValueError("invalid aligned score shapes")
             nll = np.load(run_dir / "results/test_nll.npy", mmap_mode="r", allow_pickle=False)
             calibration_nll = np.load(run_dir / "heads/calibration_nll.npy", mmap_mode="r", allow_pickle=False)
             if nll.ndim != 2 or calibration_nll.ndim != 2 or nll.shape[1] != calibration_nll.shape[1]:
                 raise ValueError("test/calibration NLL dimensions differ")
+            selected_dim = len(selected_indices(dict(COMBINATIONS)[combination]))
+            variable_count = len(source_names) if source_names else int(nll.shape[1])
+            if nll.shape[1] != variable_count:
+                raise ValueError("NLL columns do not match frozen variable order")
+            # select_gmm heads intentionally reference the frozen source cache;
+            # self-contained Full runs carry their own endpoint file.  The
+            # endpoint identity is the same contract in either case.
+            endpoint_owner = run_dir if (run_dir / "cache/calibration_window_end_indices.npy").is_file() else source_dir
+            calibration_endpoint_path = endpoint_owner / "cache/calibration_window_end_indices.npy"
+            if not calibration_endpoint_path.is_file():
+                raise ValueError("missing cache/calibration_window_end_indices.npy in candidate or source")
+            calibration_endpoints = np.load(
+                calibration_endpoint_path, mmap_mode="r", allow_pickle=False)
+            source_calibration_endpoints = np.load(
+                source_dir / "cache/calibration_window_end_indices.npy",
+                mmap_mode="r", allow_pickle=False)
+            if (calibration_endpoints.ndim != 1 or
+                    calibration_endpoints.dtype.kind not in "iu" or
+                    calibration_nll.shape[0] != calibration_endpoints.shape[0]):
+                raise ValueError("calibration NLL rows do not match calibration endpoints")
+            if not np.array_equal(calibration_endpoints, source_calibration_endpoints):
+                raise ValueError("candidate calibration endpoints differ from pinned Full source")
             with _npz(run_dir / "heads/calibration.npz") as calibration:
                 # Keep the saved float32 arithmetic used by the production
                 # max path; widening here changes threshold-boundary
@@ -797,42 +854,60 @@ def aggregation_comparison(plan_path):
                 center = np.asarray(calibration["center"])
                 scale = np.asarray(calibration["scale"])
                 max_threshold = float(np.asarray(calibration["threshold"]))
-                quantile = float(np.asarray(calibration.get("quantile", quantile_default)))
-            if center.shape != (nll.shape[1],) or scale.shape != center.shape or np.any(scale <= 0):
-                raise ValueError("invalid center/scale")
-            if not np.isfinite(nll).all() or not np.isfinite(calibration_nll).all():
-                raise ValueError("NLL contains non-finite values")
-            z = (np.asarray(nll) - center) / scale
-            max_scores = np.max(z, axis=1)
-            if len(scores) != len(max_scores) or not np.allclose(scores, max_scores, rtol=1e-6, atol=1e-7):
-                raise ValueError("saved max scores do not reproduce from test_nll")
-            saved_predictions = np.asarray(aligned["predictions"], dtype=bool)
-            saved_threshold = float(np.asarray(aligned["threshold"]))
-            max_predictions = max_scores > max_threshold
-            if not np.isclose(saved_threshold, max_threshold, rtol=0.0, atol=1e-7):
-                raise ValueError("saved threshold differs from calibration")
-            if not np.array_equal(saved_predictions, max_predictions):
-                raise ValueError("saved max predictions do not reproduce")
+                if "quantile" not in calibration.files:
+                    raise ValueError("calibration quantile is missing")
+                quantile = float(np.asarray(calibration["quantile"]))
+            config = manifest.get("config", {})
+            manifest_quantile = float(config.get("calibration_quantile", float("nan")))
+            # Replay the original max calibration threshold from the saved
+            # calibration NLL. This is deliberately separate from the saved
+            # threshold comparison performed by _evaluation().
+            if not np.isfinite(nll).all():
+                raise ValueError("test NLL contains non-finite values")
+            calibration_z, replayed_max_threshold, mean_threshold = _replay_calibration_aggregations(
+                calibration_nll, center, scale, max_threshold, manifest_quantile, quantile)
+            bundle_scores = np.asarray(bundle["scores"])
+            bundle_predictions = np.asarray(bundle["predictions"], dtype=bool)
+            labels = np.asarray(bundle["labels"], dtype=np.int8)
+            global_indices = np.asarray(bundle["global_indices"])
+            max_scores = np.max((np.asarray(nll) - center) / scale, axis=1)
+            if len(bundle_scores) != len(max_scores) or not np.allclose(
+                    bundle_scores, max_scores, rtol=1e-6, atol=1e-7):
+                raise ValueError("native max scores do not reproduce from test_nll")
+            max_predictions = max_scores > replayed_max_threshold
+            if not np.array_equal(bundle_predictions, max_predictions):
+                raise ValueError("native max predictions do not reproduce")
             # Calibration and test NLL use the same selected variable order.
-            calibration_z = (np.asarray(calibration_nll) - center) / scale
-            mean_calibration = np.mean(calibration_z, axis=1)
-            mean_threshold = float(np.quantile(mean_calibration, quantile, method="linear"))
+            z = (np.asarray(nll) - center) / scale
             mean_scores = np.mean(z, axis=1)
             mean_predictions = mean_scores > mean_threshold
             max_metrics = _binary_metrics(labels, max_scores, max_predictions)
             mean_metrics = _binary_metrics(labels, mean_scores, mean_predictions)
-            max_segments = segment_counts(source_dir, np.asarray(aligned["time_indices"]), max_predictions.astype(np.int8))
-            mean_segments = segment_counts(source_dir, np.asarray(aligned["time_indices"]), mean_predictions.astype(np.int8))
+            native_ap = evaluation["average_precision"]
+            ap_matches = ((max_metrics["ap"] is None and native_ap is None) or
+                          (max_metrics["ap"] is not None and native_ap is not None and
+                           np.isclose(max_metrics["ap"], native_ap, rtol=1e-6, atol=1e-7)))
+            native_auc = evaluation["auc_roc"]
+            auc_matches = ((max_metrics["auc_roc"] is None and native_auc is None) or
+                           (max_metrics["auc_roc"] is not None and native_auc is not None and
+                            np.isclose(max_metrics["auc_roc"], native_auc, rtol=1e-6, atol=1e-7)))
+            if not ap_matches or not auc_matches:
+                raise ValueError("replayed max metrics differ from native evaluation")
+            max_segments = segment_counts(source_dir, global_indices, max_predictions.astype(np.int8))
+            mean_segments = segment_counts(source_dir, global_indices, mean_predictions.astype(np.int8))
             max_var_summary = _max_variable_summary(z, labels, max_predictions)
             row.update({"status": "passed", "mean_status": "passed", "max_reproduced": True,
-                        "max_threshold": max_threshold, "mean_threshold": mean_threshold,
-                        "quantile": quantile, "selected_dim": int(nll.shape[1]),
-                        "variable_count": int(nll.shape[1]),
-                        "single_variable_check": ("passed" if nll.shape[1] == 1 and
-                                                   np.array_equal(max_scores, mean_scores) and
-                                                   max_threshold == mean_threshold
+                        "max_threshold": replayed_max_threshold, "mean_threshold": mean_threshold,
+                        "replayed_max_threshold": replayed_max_threshold,
+                        "quantile": quantile, "selected_dim": selected_dim,
+                        "variable_count": variable_count,
+                        "single_variable_check": ("passed" if variable_count == 1 and
+                                                   _single_variable_consistent(
+                                                       max_scores, mean_scores,
+                                                       replayed_max_threshold, mean_threshold,
+                                                       max_predictions, mean_predictions)
                                                    else ("not_applicable_actual_variable_count={}"
-                                                         .format(nll.shape[1]) if nll.shape[1] != 1
+                                                         .format(variable_count) if variable_count != 1
                                                          else "failed")),
                         "max_ap": max_metrics["ap"], "mean_ap": mean_metrics["ap"],
                         "delta_ap_mean_minus_max": mean_metrics["ap"] - max_metrics["ap"] if mean_metrics["ap"] is not None else None,
@@ -852,6 +927,8 @@ def aggregation_comparison(plan_path):
                         "mean_segments_scored": mean_segments["scored"], "mean_segments_total": mean_segments["total"],
                         "segment_delta_hit_mean_minus_max": mean_segments["hit"] - max_segments["hit"],
                         "max_contributing_variables_fp_tp": max_var_summary})
+            if variable_count == 1 and row["single_variable_check"] != "passed":
+                raise ValueError("single-variable max/mean consistency check failed")
             successful += 1
         except Exception as error:
             failed += 1
@@ -877,16 +954,39 @@ def _update_aggregation_readme(batch_dir, rows, successful, failed):
         lines.append("NYC 实际保存的逐变量 NLL 宽度为 {}；因此本批次不是单变量特例，max 与 mean 不要求相等。若变量数为 1，CSV 的 `single_variable_check` 要求分数、阈值和预测逐项一致。".format(
             ",".join(str(value) for value in nyc_dims)))
         lines.append("")
+    def value(row, key):
+        value = row.get(key)
+        return None if value in (None, "") else float(value)
+
+    def fmt(value):
+        return "NA" if value is None else "{:+.4f}".format(value)
+
+    def delta(table, left, right, metric):
+        a, b = table.get(left), table.get(right)
+        if not a or not b:
+            return None
+        av, bv = value(a, metric), value(b, metric)
+        return None if av is None or bv is None else bv - av
+
     for dataset in TASKS:
         subset = [row for row in passed if row.get("dataset") == dataset]
         if not subset:
             continue
-        full = next((row for row in subset if row.get("combination") == "FULL"), None)
-        only_s = next((row for row in subset if row.get("combination") == "S"), None)
+        table = {row.get("combination"): row for row in subset}
+        full, only_s = table.get("FULL"), table.get("S")
         if full and only_s:
-            lines.append("- {}：Full mean-max AP {:+.4f}，ROC-AUC {:+.4f}；S-only AP {:+.4f}，Full mean AP {:+.4f}.".format(
-                dataset, full["delta_ap_mean_minus_max"], full["delta_auc_roc_mean_minus_max"],
-                only_s["delta_ap_mean_minus_max"], full["mean_ap"]))
+            lines.append("- {}（参与 {}/9 格）：Full AP max/mean {}/{}，S-only AP max/mean {}/{}；Full mean-max AP {}、ROC-AUC {}。".format(
+                dataset, len(subset), fmt(value(full, "max_ap")), fmt(value(full, "mean_ap")),
+                fmt(value(only_s, "max_ap")), fmt(value(only_s, "mean_ap")),
+                fmt(value(full, "delta_ap_mean_minus_max")), fmt(value(full, "delta_auc_roc_mean_minus_max"))))
+            lines.append("  添加 E AP max/mean {}/{}、AUC max/mean {}/{}；添加 P AP max/mean {}/{}、AUC max/mean {}/{}；删除 E AP max/mean {}/{}、删除 P {}/{}、删除 R {}/{}。".format(
+                fmt(delta(table, "S", "SE", "max_ap")), fmt(delta(table, "S", "SE", "mean_ap")),
+                fmt(delta(table, "S", "SE", "max_auc_roc")), fmt(delta(table, "S", "SE", "mean_auc_roc")),
+                fmt(delta(table, "S", "SP", "max_ap")), fmt(delta(table, "S", "SP", "mean_ap")),
+                fmt(delta(table, "S", "SP", "max_auc_roc")), fmt(delta(table, "S", "SP", "mean_auc_roc")),
+                fmt(delta(table, "FULL", "WITHOUT_E", "max_ap")), fmt(delta(table, "FULL", "WITHOUT_E", "mean_ap")),
+                fmt(delta(table, "FULL", "WITHOUT_P", "max_ap")), fmt(delta(table, "FULL", "WITHOUT_P", "mean_ap")),
+                fmt(delta(table, "FULL", "WITHOUT_R", "max_ap")), fmt(delta(table, "FULL", "WITHOUT_R", "mean_ap"))))
     _atomic_text(readme, prefix + "\n\n" + "\n".join(lines) + "\n")
 
 
@@ -908,11 +1008,19 @@ def main():
     plan_path = Path(args.plan).resolve()
     if args.aggregation_comparison:
         rows, successful, failed = aggregation_comparison(plan_path)
-        _atomic_csv(plan_path.parent / "aggregation_comparison.csv", rows)
+        _atomic_csv(plan_path.parent / "aggregation_comparison.csv", rows,
+                    lineterminator="\n")
         _update_aggregation_readme(plan_path.parent, rows, successful, failed)
         print("aggregation_csv={}".format(plan_path.parent / "aggregation_comparison.csv"))
-        print("aggregation_passed={} aggregation_failed={} max_reproduction=checked".format(successful, failed))
-        return 0 if successful else 1
+        original_skipped = sum(row.get("original_status") not in {"complete", "reused"}
+                               for row in rows)
+        invalid = sum(row.get("status") == "invalid" for row in rows)
+        print("aggregation_passed={} aggregation_original_skipped={} aggregation_invalid={} aggregation_failed={} max_reproduction=checked".format(
+            successful, original_skipped, invalid, failed))
+        # The input batch intentionally retains the pre-existing failed cell
+        # (CICIDS WITHOUT_E).  It is reported as an original skip; only a new
+        # invalid cell means this read-only comparison failed.
+        return 1 if invalid else 0
     rows, contributions, paired, bundles = summarize(plan_path)
     batch_dir = plan_path.parent
     plan = _json(plan_path)
