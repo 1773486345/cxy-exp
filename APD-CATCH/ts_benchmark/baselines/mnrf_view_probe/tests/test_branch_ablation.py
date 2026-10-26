@@ -17,6 +17,7 @@ from scripts.run_mnrf_branch_ablation import COMBINATIONS, EXPECTED_LAYOUT, buil
 from scripts.summarize_mnrf_branch_ablation import (
     _evaluation, _point_and_segment_changes, completion_counts,
     _replay_calibration_aggregations, _single_variable_consistent,
+    _update_aggregation_readme,
     contribution_deltas, segment_counts_from_axis, summarize,
 )
 import scripts.mnrf_branch_source_registry as source_registry
@@ -112,6 +113,27 @@ def test_aggregation_dimension_fields_and_single_variable_equivalence():
                                        predictions, predictions.copy())
     assert not _single_variable_consistent(scores, scores + 1e-6, 1.5, 1.5,
                                            predictions, predictions.copy())
+
+
+def test_aggregation_readme_renders_removal_contribution_as_full_minus_without(tmp_path):
+    values = {
+        "S": (0.50, 0.55), "SE": (0.60, 0.62), "SP": (0.65, 0.66),
+        "FULL": (0.80, 0.82), "WITHOUT_E": (0.60, 0.62),
+        "WITHOUT_P": (0.70, 0.72), "WITHOUT_R": (0.75, 0.77),
+    }
+    rows = []
+    for combination, (max_ap, mean_ap) in values.items():
+        rows.append({"dataset": "PSM", "combination": combination, "status": "passed",
+                     "max_ap": max_ap, "mean_ap": mean_ap,
+                     "max_auc_roc": max_ap, "mean_auc_roc": mean_ap,
+                     "delta_ap_mean_minus_max": mean_ap - max_ap,
+                     "delta_auc_roc_mean_minus_max": mean_ap - max_ap,
+                     "variable_count": 25})
+    _update_aggregation_readme(tmp_path, rows, successful=len(rows), failed=0)
+    output = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert "删除 E AP max/mean +0.2000/+0.2000" in output
+    assert "删除 P +0.1000/+0.1000" in output
+    assert "删除 R +0.0500/+0.0500" in output
 
 
 def test_plan_keeps_blocked_dataset_matrix_without_starting_work():

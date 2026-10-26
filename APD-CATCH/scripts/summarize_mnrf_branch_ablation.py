@@ -984,9 +984,9 @@ def _update_aggregation_readme(batch_dir, rows, successful, failed):
                 fmt(delta(table, "S", "SE", "max_auc_roc")), fmt(delta(table, "S", "SE", "mean_auc_roc")),
                 fmt(delta(table, "S", "SP", "max_ap")), fmt(delta(table, "S", "SP", "mean_ap")),
                 fmt(delta(table, "S", "SP", "max_auc_roc")), fmt(delta(table, "S", "SP", "mean_auc_roc")),
-                fmt(delta(table, "FULL", "WITHOUT_E", "max_ap")), fmt(delta(table, "FULL", "WITHOUT_E", "mean_ap")),
-                fmt(delta(table, "FULL", "WITHOUT_P", "max_ap")), fmt(delta(table, "FULL", "WITHOUT_P", "mean_ap")),
-                fmt(delta(table, "FULL", "WITHOUT_R", "max_ap")), fmt(delta(table, "FULL", "WITHOUT_R", "mean_ap"))))
+                fmt(delta(table, "WITHOUT_E", "FULL", "max_ap")), fmt(delta(table, "WITHOUT_E", "FULL", "mean_ap")),
+                fmt(delta(table, "WITHOUT_P", "FULL", "max_ap")), fmt(delta(table, "WITHOUT_P", "FULL", "mean_ap")),
+                fmt(delta(table, "WITHOUT_R", "FULL", "max_ap")), fmt(delta(table, "WITHOUT_R", "FULL", "mean_ap"))))
     _atomic_text(readme, prefix + "\n\n" + "\n".join(lines) + "\n")
 
 
