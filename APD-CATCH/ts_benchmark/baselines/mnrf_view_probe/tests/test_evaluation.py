@@ -2,6 +2,7 @@ import numpy as np
 import json
 import importlib.util
 from pathlib import Path
+import pytest
 
 from ts_benchmark.baselines.mnrf_view_probe.evaluation import (
     affiliation_f_segment_macro,
@@ -12,8 +13,12 @@ from ts_benchmark.baselines.mnrf_view_probe.evaluation import (
 from ts_benchmark.evaluation.metrics.classification_metrics_label import (
     affiliation_f, affiliation_precision, affiliation_recall,
 )
-from scripts.summarize_mnrf_branch_ablation import _affiliation_for_bundle, affiliation_only
+from scripts.summarize_mnrf_branch_ablation import (
+    _affiliation_for_bundle, _update_affiliation_readme, _update_aggregation_readme,
+    _validate_affiliation_plan, affiliation_only,
+)
 import scripts.summarize_mnrf_branch_ablation as branch_summary
+from scripts.run_mnrf_branch_ablation import COMBINATIONS
 import ts_benchmark.baselines.mnrf_view_probe.evaluation as probe_evaluation
 
 
@@ -95,6 +100,15 @@ def test_affiliation_single_continuous_interval_matches_original_core():
     assert float(bundle["threshold"]) == 0.75
 
 
+def test_affiliation_original_crosscheck_mismatch_is_not_swallowed(monkeypatch):
+    actual = np.array([0, 0, 1, 1, 1, 0, 0, 1, 1, 0], dtype=np.int8)
+    predicted = np.array([0, 1, 1, 1, 0, 0, 0, 1, 0, 0], dtype=np.int8)
+    bundle, labels, global_ids, segments = _affiliation_bundle(actual, predicted)
+    monkeypatch.setattr(branch_summary, "original_affiliation_f", lambda *_: 0.123)
+    with pytest.raises(ValueError, match="differs from original implementation"):
+        _affiliation_for_bundle(bundle, labels, global_ids, segments)
+
+
 def test_affiliation_does_not_join_invalid_gap_coordinate_gap_or_entity_boundary():
     actual = np.array([0, 1, 1, 0, 1, 1, 0, 1, 1, 0], dtype=np.int8)
     predicted = np.array([0, 1, 0, 0, 0, 1, 0, 1, 0, 0], dtype=np.int8)
@@ -130,6 +144,22 @@ def test_affiliation_distinguishes_no_prediction_zero_recall_from_undefined_f():
     assert "no_ground_truth_event" in undefined["undefined_reasons"]
 
 
+def test_affiliation_zero_precision_and_recall_keeps_macro_zero_and_marks_original_undefined(monkeypatch):
+    zero_result = {"precision": 0.0, "recall": 0.0}
+    monkeypatch.setattr(branch_summary, "pr_from_events", lambda *args: zero_result)
+    monkeypatch.setattr(probe_evaluation, "pr_from_events", lambda *args: zero_result)
+    actual = np.array([1, 1, 0, 0, 0, 0, 1, 1], dtype=np.int8)
+    predicted = np.array([0, 0, 0, 0, 1, 0, 0, 0], dtype=np.int8)
+    bundle, labels, global_ids, segments = _affiliation_bundle(actual, predicted)
+    result = _affiliation_for_bundle(bundle, labels, global_ids, segments)
+    assert result["affiliation_precision"] == 0.0
+    assert result["affiliation_recall"] == 0.0
+    assert result["affiliation_f"] == 0.0
+    assert result["aggregation_method"] == "affiliation_f_valid_segment_macro"
+    assert result["original_algorithm_crosscheck"] == "undefined"
+    assert result["crosscheck_reason"] == "original_f_zero_precision_recall"
+
+
 def test_affiliation_zero_f_is_distinct_from_undefined(monkeypatch):
     zero_result = {"precision": 0.0, "recall": 0.0}
     monkeypatch.setattr(branch_summary, "pr_from_events", lambda *args: zero_result)
@@ -147,16 +177,95 @@ def test_affiliation_zero_f_is_distinct_from_undefined(monkeypatch):
     assert result["defined_interval_count"] == 2
 
 
-def test_affiliation_only_retains_original_failed_cell_without_fabricating_values(tmp_path):
-    plan = {"rows": [{"dataset": "CICIDS", "combination": "WITHOUT_E", "head_seed": 2021,
-                      "status": "failed", "reason": "historical non-convergence"}]}
+def _affiliation_plan(tasks=("PSM",)):
+    return {
+        "batch_id": "synthetic-affiliation-plan", "mode": "first_round", "head_seed": 2021,
+        "tasks": list(tasks), "seeds": [2021], "positions": len(tasks) * len(COMBINATIONS),
+        "source_records": {task: {"task": task, "path": "/unused/{}".format(task)}
+                          for task in tasks},
+        "rows": [{"dataset": task, "combination": combination, "head_seed": 2021,
+                  "status": "reused", "candidate_or_output_path": "/unused/{}".format(task)}
+                 for task in tasks for combination, _ in COMBINATIONS],
+    }
+
+
+def test_affiliation_only_retains_explicit_original_failed_cell_without_fabricating_values(tmp_path):
+    plan = _affiliation_plan()
+    failed_row = plan["rows"][-1]
+    failed_row.update({"dataset": "PSM", "combination": "WITHOUT_R", "status": "failed",
+                       "reason": "historical non-convergence"})
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     rows = affiliation_only(plan_path)
-    assert len(rows) == 1
-    assert rows[0]["metric_status"] == "original_failed"
-    assert rows[0]["affiliation_f"] is None
-    assert rows[0]["undefined_or_failure_reason"] == "historical non-convergence"
+    assert len(rows) == len(COMBINATIONS)
+    failed = rows[-1]
+    assert failed["metric_status"] == "original_failed"
+    assert failed["affiliation_f"] is None
+    assert failed["undefined_or_failure_reason"] == "historical non-convergence"
+
+
+@pytest.mark.parametrize("mutation, message", [
+    (lambda plan: plan.clear(), "first_round"),
+    (lambda plan: plan.update(rows=[]), "scope mismatch"),
+    (lambda plan: plan["rows"].pop(), "scope mismatch"),
+    (lambda plan: plan["rows"].append(dict(plan["rows"][0])), "duplicate"),
+    (lambda plan: plan.update(head_seed=2022), "head_seed=2021"),
+    (lambda plan: plan["rows"][0].update(head_seed=2022), "head_seed=2021"),
+    (lambda plan: plan["rows"][0].update(status="mystery"), "unknown statuses"),
+])
+def test_affiliation_plan_structure_is_strict(mutation, message):
+    plan = _affiliation_plan()
+    mutation(plan)
+    with pytest.raises(ValueError, match=message):
+        _validate_affiliation_plan(plan)
+
+
+@pytest.mark.parametrize("status", ["pending", "blocked", "running", "conflict", "invalid"])
+def test_affiliation_unfinished_states_are_not_original_failures(status):
+    plan = _affiliation_plan()
+    plan["rows"][0]["status"] = status
+    with pytest.raises(ValueError, match="{}".format(status)):
+        _validate_affiliation_plan(plan)
+
+
+def test_affiliation_invalid_plan_does_not_replace_existing_outputs(tmp_path, monkeypatch):
+    plan = _affiliation_plan()
+    plan["rows"].pop()
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    csv_path = tmp_path / "affiliation_results.csv"
+    readme_path = tmp_path / "README.md"
+    csv_path.write_bytes(b"previous csv\n")
+    readme_path.write_bytes(b"previous readme\n")
+    before = (csv_path.read_bytes(), readme_path.read_bytes())
+    monkeypatch.setattr("sys.argv", ["summarize", "--plan", str(plan_path), "--affiliation-only"])
+    assert branch_summary.main() != 0
+    assert (csv_path.read_bytes(), readme_path.read_bytes()) == before
+
+
+@pytest.mark.parametrize("order", [("aggregation", "affiliation"),
+                                    ("affiliation", "aggregation")])
+def test_readme_sections_are_independent_idempotent_and_preserve_surrounding_content(
+        tmp_path, order):
+    tmp_path.joinpath("README.md").write_text(
+        "# Batch\n\nBefore both sections.\n\n## Existing context\n\nKeep this too.\n\n## After both sections\n\nKeep this tail.\n",
+        encoding="utf-8")
+    for _ in range(2):
+        for section in order:
+            if section == "aggregation":
+                _update_aggregation_readme(tmp_path, [], successful=0, failed=0)
+            else:
+                _update_affiliation_readme(tmp_path, [])
+    output = tmp_path.joinpath("README.md").read_text(encoding="utf-8")
+    assert output.count("## 变量评分聚合对照") == 1
+    assert output.count("## 正式 max 的 Aff-F 补算") == 1
+    assert "Before both sections." in output
+    assert "## Existing context\n\nKeep this too." in output
+    assert "## After both sections\n\nKeep this tail." in output
+    assert "阈值选择协议、评分区间、边界处理和汇总方式" in output
+    assert "不同方法各自使用的数值阈值不必相同" in output
+    assert "`affiliation_f_valid_segment_macro`" in output
+    assert "未被证明相同" in output
 
 
 def test_endpoint_validation_rejects_fractional_boolean_and_overflow_before_cast():
