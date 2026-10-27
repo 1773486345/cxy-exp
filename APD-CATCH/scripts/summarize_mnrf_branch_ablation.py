@@ -17,11 +17,19 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from sklearn.metrics import average_precision_score, roc_auc_score
+from ts_benchmark.evaluation.metrics.classification_metrics_label import (
+    affiliation_f as original_affiliation_f,
+    affiliation_precision as original_affiliation_precision,
+    affiliation_recall as original_affiliation_recall,
+)
+from ts_benchmark.evaluation.metrics.affiliation.generics import convert_vector_to_events
+from ts_benchmark.evaluation.metrics.affiliation.metrics import pr_from_events
 
 from scripts.run_mnrf_branch_ablation import (
     COMBINATIONS, TASKS, _json, _same_conditions, _sha256_file, _validate_run, _views, selected_indices,
 )
 from scripts.mnrf_branch_source_registry import selected_source
+from ts_benchmark.baselines.mnrf_view_probe.evaluation import affiliation_f_segment_macro
 
 
 def _atomic_json(path, value):
@@ -938,6 +946,217 @@ def aggregation_comparison(plan_path):
     return rows, successful, failed
 
 
+def _affiliation_for_bundle(bundle, test_labels, test_global, test_segments):
+    """Calculate affiliation scores on valid, continuous source-axis intervals."""
+    labels = np.asarray(test_labels)
+    global_axis = np.asarray(test_global)
+    segment_axis = np.asarray(test_segments)
+    if (labels.ndim != 1 or global_axis.shape != labels.shape or segment_axis.shape != labels.shape
+            or labels.dtype.kind not in "iu" or not np.isin(labels, (0, 1)).all()
+            or global_axis.dtype.kind not in "iu"):
+        raise ValueError("validated test label/coordinate/segment axes are invalid")
+
+    valid = np.asarray(bundle["valid_mask"])
+    local = np.asarray(bundle["local_indices"])
+    pred = np.asarray(bundle["predictions"])
+    if valid.dtype.kind != "b" or valid.shape != labels.shape:
+        raise ValueError("validated scoring mask does not align to full test axis")
+    if (local.ndim != 1 or local.dtype.kind not in "iu" or pred.shape != local.shape
+            or pred.dtype.kind not in "iu" or not np.isin(pred, (0, 1)).all()
+            or np.any(local < 0) or np.any(local >= len(labels))):
+        raise ValueError("validated prediction coordinates are invalid")
+    if not np.array_equal(np.flatnonzero(valid), local.astype(np.int64, copy=False)):
+        raise ValueError("prediction coordinates differ from the valid scoring mask")
+
+    predicted_axis = np.zeros(len(labels), dtype=np.int8)
+    predicted_axis[local] = pred.astype(np.int8, copy=False)
+    blocks = []
+    start = None
+    previous = None
+    for idx in range(len(labels)):
+        if not valid[idx]:
+            if start is not None:
+                blocks.append((start, idx))
+                start = None
+            previous = None
+            continue
+        if (start is None or previous is None or idx != previous + 1
+                or int(global_axis[idx]) != int(global_axis[previous]) + 1
+                or segment_axis[idx] != segment_axis[previous]):
+            if start is not None:
+                blocks.append((start, idx))
+            start = idx
+        previous = idx
+    if start is not None:
+        blocks.append((start, len(labels)))
+
+    records = []
+    p_values, r_values, f_values = [], [], []
+    for left, right in blocks:
+        truth = labels[left:right].astype(np.int8, copy=False)
+        guess = predicted_axis[left:right]
+        gt_events = convert_vector_to_events(truth)
+        pred_events = convert_vector_to_events(guess)
+        record = {"local_start": left, "local_end_exclusive": right,
+                  "global_start": int(global_axis[left]),
+                  "global_end_exclusive": int(global_axis[right - 1]) + 1,
+                  "segment_id": int(segment_axis[left]),
+                  "ground_truth_events": len(gt_events), "predicted_events": len(pred_events),
+                  "precision": None, "recall": None, "f": None, "undefined_reasons": []}
+        if not gt_events:
+            record["undefined_reasons"].append("no_ground_truth_event")
+            records.append(record)
+            continue
+        metrics = pr_from_events(pred_events, gt_events, (0, len(truth)))
+        segment_affiliation = affiliation_f_segment_macro(truth, guess)
+        precision = float(metrics["precision"])
+        recall = float(metrics["recall"])
+        if np.isfinite(precision):
+            record["precision"] = precision
+            p_values.append(precision)
+        else:
+            record["undefined_reasons"].append("precision_undefined_no_predicted_event")
+        if np.isfinite(recall):
+            record["recall"] = recall
+            r_values.append(recall)
+        else:
+            record["undefined_reasons"].append("recall_non_finite")
+        f_value = segment_affiliation["affiliation_f_segment_macro"]
+        if f_value is not None:
+            record["f"] = float(f_value)
+            f_values.append(float(f_value))
+        else:
+            record["undefined_reasons"].append("f_undefined_from_affiliation_segment_core")
+        records.append(record)
+
+    full_contiguous = (len(blocks) == 1 and blocks[0] == (0, len(labels))
+                       and len(np.unique(segment_axis)) == 1)
+    if full_contiguous and np.any(labels == 1):
+        truth = labels.astype(np.int8, copy=False)
+        guess = predicted_axis
+        try:
+            p = float(original_affiliation_precision(truth, guess))
+            r = float(original_affiliation_recall(truth, guess))
+            f = float(original_affiliation_f(truth, guess))
+            raw = pr_from_events(convert_vector_to_events(guess),
+                                 convert_vector_to_events(truth), (0, len(truth)))
+            if (not np.isclose(p, raw["precision"], rtol=1e-12, atol=1e-12)
+                    or not np.isclose(r, raw["recall"], rtol=1e-12, atol=1e-12)
+                    or not np.isclose(f, 2 * p * r / (p + r), rtol=1e-12, atol=1e-12)):
+                raise ValueError("single-interval affiliation differs from original implementation")
+            return {"affiliation_precision": p, "affiliation_recall": r,
+                    "affiliation_f": f, "calculation_scope": "full_single_continuous_valid_interval",
+                    "aggregation_method": "original_affiliation_f", "valid_points": int(valid.sum()),
+                    "interval_count": len(blocks), "defined_interval_count": 1,
+                    "undefined_reasons": [], "intervals": records,
+                    "original_algorithm_crosscheck": "passed"}
+        except (ZeroDivisionError, ValueError, FloatingPointError):
+            # The official wrapper computes F unguarded. Preserve mathematical
+            # undefinedness rather than coercing it to zero.
+            if not p_values and not r_values and not f_values:
+                pass
+
+    reasons = sorted({reason for record in records for reason in record["undefined_reasons"]})
+    if not blocks:
+        reasons.append("no_valid_scoring_points")
+    return {"affiliation_precision": float(np.mean(p_values)) if p_values else None,
+            "affiliation_recall": float(np.mean(r_values)) if r_values else None,
+            "affiliation_f": float(np.mean(f_values)) if f_values else None,
+            "calculation_scope": "valid_continuous_intervals",
+            "aggregation_method": "affiliation_f_valid_segment_macro",
+            "valid_points": int(valid.sum()), "interval_count": len(blocks),
+            "defined_interval_count": len(f_values), "undefined_reasons": reasons,
+            "intervals": records,
+            "original_algorithm_crosscheck": "not_applicable_multiple_or_partial_intervals"}
+
+
+def affiliation_only(plan_path):
+    """Revalidate each plan cell and add original max-threshold affiliation metrics."""
+    plan_path = Path(plan_path).resolve()
+    plan = _json(plan_path)
+    checked_runs = {}
+    rows = []
+    for planned in plan.get("rows", []):
+        dataset = planned.get("dataset", "")
+        combination = planned.get("combination", "")
+        seed = int(planned.get("head_seed", 2021))
+        status = planned.get("status", "invalid")
+        row = {"dataset": dataset, "combination": combination, "head_seed": seed,
+               "source_run_id": planned.get("source_run_id"), "original_status": status,
+               "metric_status": "not_attempted", "threshold": None,
+               "calculation_scope": None, "aggregation_method": None, "valid_points": None,
+               "affiliation_precision": None, "affiliation_recall": None,
+               "affiliation_f": None, "undefined_or_failure_reason": planned.get("reason", "")}
+        if status not in {"complete", "reused"}:
+            row["metric_status"] = "original_failed"
+            rows.append(row)
+            continue
+        try:
+            run_dir = Path(planned["candidate_or_output_path"]).resolve()
+            source_dir = Path(plan["source_records"][dataset]["path"]).resolve()
+            evaluation, bundle = _evaluation(run_dir, source_dir, dataset, combination, seed, checked_runs)
+            with _npz(source_dir / "analysis_inputs.npz") as inputs:
+                test_labels = np.asarray(inputs["test_labels"])
+                test_global = np.asarray(inputs["test_global_indices"])
+                test_segments = np.asarray(inputs["test_segment_ids"])
+            result = _affiliation_for_bundle(bundle, test_labels, test_global, test_segments)
+            row.update({"metric_status": "passed", "threshold": float(evaluation["threshold"]),
+                        "undefined_or_failure_reason": ";".join(result["undefined_reasons"]),
+                        **result})
+        except Exception as error:
+            row.update({"metric_status": "invalid",
+                        "undefined_or_failure_reason": "{}: {}".format(type(error).__name__, error)})
+        rows.append(row)
+    return rows
+
+
+def _update_affiliation_readme(batch_dir, rows):
+    batch_dir = Path(batch_dir)
+    readme = batch_dir / "README.md"
+    existing = readme.read_text(encoding="utf-8") if readme.is_file() else ""
+    marker = "## 正式 max 的 Aff-F 补算"
+    prefix = existing.split(marker, 1)[0].rstrip()
+    by_key = {(row["dataset"], row["combination"], int(row["head_seed"])): row for row in rows}
+    datasets = list(TASKS)
+    combinations = [name for name, _ in COMBINATIONS]
+    lines = [marker, "",
+             "本节使用原正式 max 分数、保存阈值与预测；逐格调用原生 `_evaluation()` 验证源/头、分数、标签、坐标及有效点绑定。没有重训、拟合、重新校准或修改预测。历史审查 ZIP 不包含本节或 `affiliation_results.csv`。", "",
+             "Affiliation Precision/Recall/F 使用仓库原始 event-affiliation 核心算法。评价仅覆盖有效预测点；连续有效区间依据有效掩码、全局坐标连续性及冻结段 ID 切分。单一完整连续区间报告原始 `affiliation_precision`、`affiliation_recall`、`affiliation_f` 并与原实现交叉核对；多个/部分区间报告各指标的 `*_valid_segment_macro`（仅对该指标有定义的区间取算术宏平均）。没有真实异常事件时相应指标未定义；没有预测事件时 Precision/F 可未定义而 Recall 可合法为 0。未定义值留空并保留原因，不替换为零。", "",
+             "阈值取每个组合原 `calibration.npz` 的 max 评分校准阈值，预测保持严格 `score > threshold`。无效点不补值、不压缩跨缺口，不作 point adjustment。", "",
+             "与 CATCH/Baseline Aff-F 的数值只有在相同标签、阈值、有效区间、边界处理和汇总协议下才可直接比较。本批次是冻结端点有效区间协议；原始 CATCH 文献/历史结果的窗口端点与区间汇总口径未由本次补算证明一致，因此仅并列作为协议参照，不据此宣称胜出。", "",
+             "### 八个 Full 的 Affiliation 指标", "",
+             "| Dataset | Precision | Recall | F | 状态 |", "|---|---:|---:|---:|---|"]
+    for dataset in datasets:
+        row = by_key.get((dataset, "FULL", 2021), {})
+        def fmt(value):
+            return "" if value is None else "{:.6f}".format(float(value))
+        lines.append("| {} | {} | {} | {} | {} |".format(
+            dataset, fmt(row.get("affiliation_precision")), fmt(row.get("affiliation_recall")),
+            fmt(row.get("affiliation_f")), row.get("metric_status", "missing")))
+    lines += ["", "### 八数据集九组合 Affiliation F", "",
+              "| Dataset | " + " | ".join(combinations) + " |",
+              "|---|" + "---:|" * len(combinations)]
+    for dataset in datasets:
+        values = []
+        for combination in combinations:
+            row = by_key.get((dataset, combination, 2021), {})
+            value = row.get("affiliation_f")
+            values.append("" if value is None else "{:.6f}".format(float(value)))
+        lines.append("| {} | {} |".format(dataset, " | ".join(values)))
+    lines += ["", "### CATCH 论文 Aff-F 参照（非同协议复现）", "",
+              "| Dataset | CATCH Table 2 Aff-F | 本批 FULL Aff-F |", "|---|---:|---:|"]
+    catch_reference = {"PSM": 0.859, "MSL": 0.740, "GECCO": 0.908,
+                       "Genesis": 0.896, "NYC": 0.994, "CalIt2": 0.835,
+                       "Creditcard": 0.750, "CICIDS": 0.787}
+    for dataset in datasets:
+        row = by_key.get((dataset, "FULL", 2021), {})
+        value = row.get("affiliation_f")
+        rendered = "" if value is None else "{:.6f}".format(float(value))
+        lines.append("| {} | {:.3f} | {} |".format(dataset, catch_reference[dataset], rendered))
+    lines += ["", "CATCH 数值引自 Wu et al., *CATCH: Channel-Aware Multivariate Time Series Anomaly Detection via Frequency Patching*, ICLR 2025, Table 2。论文值按其原始评估协议报告；本批次使用本地 Full 源冻结的测试端点、有效掩码和分段边界。窗口端点、无效区间与分段汇总未被证明相同，因此仅作并列参照，不据此宣称统一口径下胜出。"]
+    _atomic_text(readme, prefix + "\n\n" + "\n".join(lines) + "\n")
+
+
 def _update_aggregation_readme(batch_dir, rows, successful, failed):
     readme = Path(batch_dir) / "README.md"
     existing = readme.read_text(encoding="utf-8") if readme.is_file() else ""
@@ -1004,7 +1223,11 @@ def main():
     parser.add_argument("--plan", required=True, help="plan.json from run_mnrf_branch_ablation.py")
     parser.add_argument("--aggregation-comparison", action="store_true",
                         help="read-only max versus mean variable-score aggregation")
+    parser.add_argument("--affiliation-only", action="store_true",
+                        help="revalidate fixed max outputs and calculate affiliation metrics only")
     args = parser.parse_args()
+    if args.aggregation_comparison and args.affiliation_only:
+        parser.error("--aggregation-comparison and --affiliation-only are mutually exclusive")
     plan_path = Path(args.plan).resolve()
     if args.aggregation_comparison:
         rows, successful, failed = aggregation_comparison(plan_path)
@@ -1020,6 +1243,22 @@ def main():
         # The input batch intentionally retains the pre-existing failed cell
         # (CICIDS WITHOUT_E).  It is reported as an original skip; only a new
         # invalid cell means this read-only comparison failed.
+        return 1 if invalid else 0
+    if args.affiliation_only:
+        rows = affiliation_only(plan_path)
+        output = plan_path.parent / "affiliation_results.csv"
+        _atomic_csv(output, rows, lineterminator="\n")
+        _update_affiliation_readme(plan_path.parent, rows)
+        passed = sum(row["metric_status"] == "passed" for row in rows)
+        original_failed = sum(row["metric_status"] == "original_failed" for row in rows)
+        invalid = sum(row["metric_status"] == "invalid" for row in rows)
+        defined = sum(row["metric_status"] == "passed" and row["affiliation_f"] is not None
+                      for row in rows)
+        undefined = sum(row["metric_status"] == "passed" and row["affiliation_f"] is None
+                        for row in rows)
+        print("affiliation_csv={}".format(output))
+        print("affiliation_validated={} affiliation_f_defined={} affiliation_f_undefined={} original_failed={} invalid={}".format(
+            passed, defined, undefined, original_failed, invalid))
         return 1 if invalid else 0
     rows, contributions, paired, bundles = summarize(plan_path)
     batch_dir = plan_path.parent
