@@ -42,7 +42,7 @@ Affiliation Precision/Recall/F 使用仓库原始 event-affiliation 核心算法
 
 阈值取每个组合原 `calibration.npz` 的 max 评分校准阈值，预测保持严格 `score > threshold`。无效点不补值、不压缩跨缺口，不作 point adjustment。
 
-与 CATCH/Baseline Aff-F 的数值只有在相同标签、阈值、有效区间、边界处理和汇总协议下才可直接比较。本批次是冻结端点有效区间协议；原始 CATCH 文献/历史结果的窗口端点与区间汇总口径未由本次补算证明一致，因此仅并列作为协议参照，不据此宣称胜出。
+公平比较需要对齐标签、阈值选择协议、评分区间、边界处理和汇总方式；不同模型的数值阈值不必相同。本批次是冻结端点有效区间协议；原始 CATCH 文献/历史结果的窗口端点与区间汇总口径未由本次补算证明一致，因此仅并列作为协议参照，不据此宣称胜出。
 
 ### 八个 Full 的 Affiliation 指标
 
