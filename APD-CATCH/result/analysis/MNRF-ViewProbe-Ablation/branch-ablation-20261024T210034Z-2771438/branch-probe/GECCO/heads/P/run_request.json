@@ -1,0 +1,216 @@
+{
+  "config": {
+    "artifact_policy": "full",
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "device": "cpu",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "diag",
+    "gmm_fit_max_windows": 20000,
+    "gmm_log_every_iters": 10,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "log_every_seconds": 30.0,
+    "log_every_steps": 100,
+    "mode": "select_gmm",
+    "noise_seed": 20261013,
+    "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261024T210034Z-2771438/branch-probe/GECCO/heads/P",
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "resume_from": "",
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 8,
+    "selected_indices": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "selected_views": [
+      "P"
+    ],
+    "seq_len": 96,
+    "source_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "GECCO.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "gmm_progress_identity": "c68146b0e8f6411b799f181b56a66b143fb0c5a182e6719ee71b2dac5bd6a421",
+  "mode": "select_gmm",
+  "run_identity": "7fbc1d0d3c8d2ae48f0d92b406f27494c23034e41e49a5e0c2d1b48c35439f48",
+  "schema": "mnrf-view-probe-v2",
+  "source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "9f68a71a046af3b7d524ac4fb6ca8faa8e038056034142081c514318bec42fdf",
+    "input_length": 138521,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        62353,
+        69260
+      ],
+      "train": [
+        0,
+        55256
+      ],
+      "validation": [
+        55351,
+        62258
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          62353,
+          69260
+        ]
+      ],
+      "train": [
+        [
+          0,
+          55256
+        ]
+      ],
+      "validation": [
+        [
+          55351,
+          62258
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        138521
+      ]
+    ],
+    "seq_len": 96,
+    "task_name": "GECCO.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        55256
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 69166,
+    "test_endpoints_sha256": "b9d26089b8d63bbe0a0f94983ff41cb6e199e08fca489dd1e7a98ff2029724b0",
+    "test_segments": [
+      [
+        69260,
+        138521
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "72df0f243b61764f4f12bd9b6c7b5bb9bf40dd882f20f972ffbfae914526a4d6"
+    },
+    "train_length": 69260,
+    "variable_names": [
+      "Tp",
+      "Cl",
+      "pH",
+      "Redox",
+      "Leit",
+      "Trueb",
+      "Cl_2",
+      "Fm",
+      "Fm_2"
+    ]
+  },
+  "stage": "gmm_fitting",
+  "task_name": "GECCO.csv"
+}

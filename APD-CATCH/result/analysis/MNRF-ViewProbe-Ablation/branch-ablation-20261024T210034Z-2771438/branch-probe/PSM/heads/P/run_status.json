@@ -1,0 +1,9 @@
+{
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "mode": "select_gmm",
+  "run_identity": "38bb32b9748e6975d9211df117075beb6944502843d5a02df367959d28d2679f",
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete",
+  "task_name": "PSM.csv"
+}

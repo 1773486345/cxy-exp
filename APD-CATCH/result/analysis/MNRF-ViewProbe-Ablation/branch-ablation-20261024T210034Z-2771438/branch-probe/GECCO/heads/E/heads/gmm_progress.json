@@ -1,0 +1,476 @@
+{
+  "completed": {
+    "0": {
+      "model_sha256": "bd97eff697295e5ef87a15012b8018779b2ef5a2d151ea6ec630733a66b575e4",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -1.2965688066374237,
+        "model_sha256": "bd97eff697295e5ef87a15012b8018779b2ef5a2d151ea6ec630733a66b575e4",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 6,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 0
+      }
+    },
+    "1": {
+      "model_sha256": "a65f1b2cb241d784acda5329516489f56a6e5e8c3cbbf6a549b64d74aea037ef",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -6.195318076463538,
+        "model_sha256": "a65f1b2cb241d784acda5329516489f56a6e5e8c3cbbf6a549b64d74aea037ef",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 7,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 1
+      }
+    },
+    "2": {
+      "model_sha256": "91637809fcc30230f2c99e0ab8c269036cc3b71e8dc29cdea3f00275dd2ec552",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -5.199385527508026,
+        "model_sha256": "91637809fcc30230f2c99e0ab8c269036cc3b71e8dc29cdea3f00275dd2ec552",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 20,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 2
+      }
+    },
+    "3": {
+      "model_sha256": "2afeb4393739037169dffadd9031337da6327cc69f38b0af42fa08a5c42471f3",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -3.2349605041375784,
+        "model_sha256": "2afeb4393739037169dffadd9031337da6327cc69f38b0af42fa08a5c42471f3",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 12,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 3
+      }
+    },
+    "4": {
+      "model_sha256": "34b1dcb55d28bf502a9b061dd49f95e8886d08be023b013f7805f7a426a691cf",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": 0.5072232708068062,
+        "model_sha256": "34b1dcb55d28bf502a9b061dd49f95e8886d08be023b013f7805f7a426a691cf",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 34,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 4
+      }
+    },
+    "5": {
+      "model_sha256": "6bb71c132c7f3e9e79a7ba46356f2629c386b098abf334b9cfd28cfedb3eb251",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -4.864311329590035,
+        "model_sha256": "6bb71c132c7f3e9e79a7ba46356f2629c386b098abf334b9cfd28cfedb3eb251",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 8,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 5
+      }
+    },
+    "6": {
+      "model_sha256": "2b7440f427ca937600c251402755d8b09d726edb13ef011e49eb486ffb0859f2",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -5.681693641578837,
+        "model_sha256": "2b7440f427ca937600c251402755d8b09d726edb13ef011e49eb486ffb0859f2",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 27,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 6
+      }
+    },
+    "7": {
+      "model_sha256": "3447faa7a0c9d195f976a5e37859b8dc17829d87776877b0971af0260a79bea6",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -3.656914966418482,
+        "model_sha256": "3447faa7a0c9d195f976a5e37859b8dc17829d87776877b0971af0260a79bea6",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 9,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 7
+      }
+    },
+    "8": {
+      "model_sha256": "8145e42f44e0a942cf7815efbb9fc653259f88fc639622cfa3d36b4bd9b47244",
+      "status": {
+        "converged": true,
+        "covariance_type": "diag",
+        "lower_bound": -2.3323091331818873,
+        "model_sha256": "8145e42f44e0a942cf7815efbb9fc653259f88fc639622cfa3d36b4bd9b47244",
+        "n_components": 4,
+        "n_features_in": 8,
+        "n_iter": 25,
+        "parameter_count_free": 67,
+        "parameter_count_storage": 68,
+        "sample_count": 20000,
+        "variable": 8
+      }
+    }
+  },
+  "config_projection": {
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "diag",
+    "gmm_fit_max_windows": 20000,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "mode": "select_gmm",
+    "noise_seed": 20261013,
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 8,
+    "selected_indices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "selected_views": [
+      "E"
+    ],
+    "seq_len": 96,
+    "source_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "GECCO.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "identity": "aaa2d362cdcff865c26ec1eec9477e07dc6adb0bacbc9a8af11a88b95adcc77f",
+  "identity_payload": {
+    "cache_hashes": {
+      "calibration": "0aa74d9fe0e552a2eb4f169cda73192d8879b452aa6fa15d5d02f0c97604b5b0",
+      "test": "54b37a0326df9f89e962ba9056800721af4d6e9cb36cedb88353e6debcef28fc",
+      "train": "3a0abe34d1a1496afda89cd21316b1e80e8aa9d402b00c678426d1f90433e7db",
+      "validation": "29e325702c6e163488b82541ffc27504ff29de7b0826d1328aefaba9162c5137"
+    },
+    "config": {
+      "batch_size": 128,
+      "cache_chunk_size": 256,
+      "calibration_quantile": 0.995,
+      "cpu_threads": 1,
+      "data_source": "large_detect",
+      "encoding_batch_size": 128,
+      "evolution_dim": 8,
+      "feature_std_floor": 0.05,
+      "gmm_components": 4,
+      "gmm_covariance_type": "diag",
+      "gmm_fit_max_windows": 20000,
+      "gmm_max_iter": 100,
+      "gmm_n_init": 1,
+      "gmm_reg_covar": 0.001,
+      "hidden_dim": 32,
+      "learning_rate": 0.001,
+      "mode": "select_gmm",
+      "noise_seed": 20261013,
+      "patience": 5,
+      "pattern_dim": 8,
+      "pattern_len": 32,
+      "relation_dim": 8,
+      "resolved_layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "score_mad_floor": 0.001,
+      "seed": 2021,
+      "selected_dim": 8,
+      "selected_indices": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "selected_views": [
+        "E"
+      ],
+      "seq_len": 96,
+      "source_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+      "stage1_epochs": 50,
+      "stage2_epochs": 30,
+      "task_name": "GECCO.csv",
+      "train_noise_std": 0.01,
+      "view_dim": 8,
+      "weight_decay": 0.0001
+    },
+    "endpoint_hashes": {
+      "calibration": "50163335fb483983ddff6612f50bed49976ebf2d4db790e9da95091b356c07e0",
+      "test": "01c340a1f8d7588698c09a45234720b44eb48fa530a78bb3cf64ecb3e8310c4b",
+      "train": "744850ebbe9b0993af2b498792ced87b59a5b1d9af44e2cdab083501a8ad2101",
+      "validation": "31254a2b22b64bf1618652fda96633fb941bd32a03cc5401bf59457e2afbd169"
+    },
+    "noise_hash": "2d0c776ebb7bc0c2aabd583afd1cde0d853f4f29a2d68dd50b8235dd5187af89",
+    "sample_hash": "b0aaabd7d559713b44284e17a166fcd55512f71320385ba23c6c7212fa3209b6",
+    "selected_indices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "source": {
+      "cache_sha256": {
+        "calibration": "0aa74d9fe0e552a2eb4f169cda73192d8879b452aa6fa15d5d02f0c97604b5b0",
+        "test": "54b37a0326df9f89e962ba9056800721af4d6e9cb36cedb88353e6debcef28fc",
+        "train": "3a0abe34d1a1496afda89cd21316b1e80e8aa9d402b00c678426d1f90433e7db",
+        "validation": "29e325702c6e163488b82541ffc27504ff29de7b0826d1328aefaba9162c5137"
+      },
+      "endpoint_sha256": {
+        "calibration": "50163335fb483983ddff6612f50bed49976ebf2d4db790e9da95091b356c07e0",
+        "test": "01c340a1f8d7588698c09a45234720b44eb48fa530a78bb3cf64ecb3e8310c4b",
+        "train": "744850ebbe9b0993af2b498792ced87b59a5b1d9af44e2cdab083501a8ad2101",
+        "validation": "31254a2b22b64bf1618652fda96633fb941bd32a03cc5401bf59457e2afbd169"
+      },
+      "source_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+      "source_identity": {
+        "boundary_columns": [],
+        "boundary_values_sha256": null,
+        "data_source": "large_detect",
+        "feature_data_sha256": "9f68a71a046af3b7d524ac4fb6ca8faa8e038056034142081c514318bec42fdf",
+        "input_length": 138521,
+        "layout": {
+          "F": 25,
+          "dimensions": {
+            "E": 8,
+            "P": 8,
+            "R": 8,
+            "S": 1
+          },
+          "order": [
+            "S",
+            "E",
+            "P",
+            "R"
+          ],
+          "slices": {
+            "E": [
+              1,
+              9
+            ],
+            "P": [
+              9,
+              17
+            ],
+            "R": [
+              17,
+              25
+            ],
+            "S": [
+              0,
+              1
+            ]
+          }
+        },
+        "pattern_len": 32,
+        "ranges": {
+          "calibration": [
+            62353,
+            69260
+          ],
+          "train": [
+            0,
+            55256
+          ],
+          "validation": [
+            55351,
+            62258
+          ]
+        },
+        "schema": "mnrf-view-probe-source-identity-v2",
+        "segment_ranges": {
+          "calibration": [
+            [
+              62353,
+              69260
+            ]
+          ],
+          "train": [
+            [
+              0,
+              55256
+            ]
+          ],
+          "validation": [
+            [
+              55351,
+              62258
+            ]
+          ]
+        },
+        "segments": [
+          [
+            0,
+            138521
+          ]
+        ],
+        "seq_len": 96,
+        "task_name": "GECCO.csv",
+        "temporal_rule": {
+          "entity_boundary_columns": [],
+          "expected_interval_ns": 1,
+          "fit_range": [
+            0,
+            55256
+          ],
+          "time_kind": "timestamp_naive_ns",
+          "tolerance": 0.05,
+          "version": "train-frozen-cadence-v1"
+        },
+        "test_endpoints_count": 69166,
+        "test_endpoints_sha256": "b9d26089b8d63bbe0a0f94983ff41cb6e199e08fca489dd1e7a98ff2029724b0",
+        "test_segments": [
+          [
+            69260,
+            138521
+          ]
+        ],
+        "time_index": {
+          "kind": "timestamp_naive_ns",
+          "source_timezone": null,
+          "values_sha256": "72df0f243b61764f4f12bd9b6c7b5bb9bf40dd882f20f972ffbfae914526a4d6"
+        },
+        "train_length": 69260,
+        "variable_names": [
+          "Tp",
+          "Cl",
+          "pH",
+          "Redox",
+          "Leit",
+          "Trueb",
+          "Cl_2",
+          "Fm",
+          "Fm_2"
+        ]
+      }
+    },
+    "statistics_hash": "06aeed632ab0e255b85f5a4f347c96f0433a1454060a496dc00b6d5e932218b4",
+    "version": 2
+  },
+  "identity_version": 2,
+  "schema": "mnrf-view-probe-v2"
+}

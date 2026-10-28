@@ -11,6 +11,10 @@ import numpy as np
 import pandas as pd
 
 from ts_benchmark.baselines.mnrf_view_probe import MNRFViewProbe, load_probe
+from scripts.run_mnrf_branch_probe_diagnostic import (
+    calibrate_fusion, fuse_branch_nll, metric_delta, same_axis,
+    validate_coordinates, validate_pinned_source_binding,
+)
 from scripts.validate_mnrf_view_probe import validate
 
 from scripts.run_mnrf_branch_ablation import COMBINATIONS, EXPECTED_LAYOUT, build_plan, selected_indices
@@ -33,6 +37,85 @@ def test_matrix_has_all_nine_combinations_and_dimensions():
     ]
     assert [len(selected_indices(views)) for _, views in COMBINATIONS] == [1, 9, 9, 9, 25, 24, 17, 17, 17]
     assert EXPECTED_LAYOUT["slices"] == {"S": [0, 1], "E": [1, 9], "P": [9, 17], "R": [17, 25]}
+
+
+def test_branch_fusion_averages_branch_axis_before_maximizing_variables():
+    # For variable 0, S dominates; for variable 1, E dominates. Averaging the
+    # branch axis first gives 50 per variable and then max=50. Max-before-mean
+    # would incorrectly produce 100 and tests the wrong aggregation order.
+    nll = {"S": np.asarray([[100.0, 0.0]], dtype=np.float32),
+           "E": np.asarray([[0.0, 100.0]], dtype=np.float32)}
+    stats = {"S": (np.zeros(2, dtype=np.float32), np.ones(2, dtype=np.float32)),
+             "E": (np.zeros(2, dtype=np.float32), np.ones(2, dtype=np.float32))}
+    scores, per_variable = fuse_branch_nll(nll, stats, ("S", "E"))
+    np.testing.assert_array_equal(per_variable, np.asarray([[50.0, 50.0]], dtype=np.float32))
+    np.testing.assert_array_equal(scores, np.asarray([50.0], dtype=np.float32))
+
+
+def test_branch_fusion_threshold_uses_calibration_only_and_strict_threshold():
+    cal = {"S": np.asarray([[0.0], [1.0], [2.0]], dtype=np.float32)}
+    test = {"S": np.asarray([[2.0], [1000.0]], dtype=np.float32)}
+    stats = {"S": (np.asarray([0.0], dtype=np.float32), np.asarray([1.0], dtype=np.float32))}
+    scores, threshold, pred = calibrate_fusion(cal, test, stats, ("S",), 0.5)
+    assert threshold == 1.0
+    np.testing.assert_array_equal(scores, np.asarray([2.0, 1000.0], dtype=np.float32))
+    np.testing.assert_array_equal(pred, np.asarray([1, 1], dtype=np.int8))
+    # Equality to threshold is negative, matching the established protocol.
+    _, _, at_threshold = calibrate_fusion(cal, {"S": np.asarray([[1.0]], dtype=np.float32)},
+                                          stats, ("S",), 0.5)
+    np.testing.assert_array_equal(at_threshold, np.asarray([0], dtype=np.int8))
+
+
+@pytest.mark.parametrize("coords", [np.asarray([[1, 2]]), np.asarray([1.0, 2.0]),
+                                     np.asarray([1, 1]), np.asarray([2, 1])])
+def test_diagnostic_coordinates_reject_non_integer_duplicate_or_unsorted(coords):
+    with pytest.raises(ValueError):
+        validate_coordinates(coords, "test")
+
+
+def test_diagnostic_pairing_rejects_any_coordinate_intersection_fallback():
+    with pytest.raises(ValueError, match="differs from pinned Full"):
+        same_axis(np.asarray([10, 11, 12]), np.asarray([10, 12]), "global test axis")
+    same_axis(np.asarray([10, 11, 12]), np.asarray([10, 11, 12]), "global test axis")
+
+
+def test_diagnostic_metric_deltas_accept_csv_values_and_preserve_missingness():
+    assert metric_delta("0.75", "0.50") == pytest.approx(0.25)
+    assert metric_delta(None, "0.50") is None
+    assert metric_delta("", "0.50") is None
+
+
+def test_diagnostic_pinned_source_binding_checks_fingerprint_cache_and_noise():
+    record = {"source_identity_sha256": "identity", "feature_fingerprint": "encoder",
+              "cache_sha256": {"train": "cache"}, "endpoint_sha256": {"test": "points"},
+              "fixed_noise_sha256": "noise"}
+    manifest = dict(record)
+    assert validate_pinned_source_binding(record, manifest)
+    for key, changed in (("feature_fingerprint", "other-encoder"),
+                         ("cache_sha256", {"train": "other-cache"}),
+                         ("fixed_noise_sha256", "other-noise")):
+        damaged = dict(manifest)
+        damaged[key] = changed
+        with pytest.raises(ValueError, match="pinned source"):
+            validate_pinned_source_binding(record, damaged)
+
+
+def test_diagnostic_failed_head_retains_failure_and_undefined_metric_is_null():
+    from scripts.run_mnrf_branch_probe_diagnostic import _row
+    from scripts.summarize_mnrf_branch_ablation import _affiliation_for_bundle
+    failure = _row("PSM", "E", "diagonal_gmm_head", ("E",), "none", None,
+                   None, None, None, {"_path": "/source/full"}, "failed", 1.0,
+                   error="convergence failure")
+    assert failure["status"] == "failed"
+    assert "convergence failure" in failure["failure_reason"]
+    assert failure.get("affiliation_f") is None
+    undefined = _affiliation_for_bundle(
+        {"valid_mask": np.ones(4, dtype=bool), "local_indices": np.arange(4),
+         "predictions": np.zeros(4, dtype=np.int8)},
+        np.zeros(4, dtype=np.int8), np.arange(4, dtype=np.int64),
+        np.zeros(4, dtype=np.int64))
+    assert undefined["affiliation_f"] is None
+    assert "no_ground_truth_event" in undefined["undefined_reasons"]
 
 
 @pytest.mark.parametrize("manifest,task", [

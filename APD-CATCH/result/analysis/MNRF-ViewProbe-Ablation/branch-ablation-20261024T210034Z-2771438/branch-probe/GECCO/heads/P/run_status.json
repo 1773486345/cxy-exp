@@ -1,0 +1,9 @@
+{
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "mode": "select_gmm",
+  "run_identity": "7fbc1d0d3c8d2ae48f0d92b406f27494c23034e41e49a5e0c2d1b48c35439f48",
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete",
+  "task_name": "GECCO.csv"
+}

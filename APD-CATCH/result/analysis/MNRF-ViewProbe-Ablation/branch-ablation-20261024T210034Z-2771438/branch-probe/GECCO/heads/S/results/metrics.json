@@ -1,0 +1,21 @@
+{
+  "auc_pr": 0.13804121599443175,
+  "auc_roc": 0.6799407425555883,
+  "coverage": 0.9986283767199434,
+  "excluded_points": 95,
+  "fit_time_seconds": 7.301505379378796,
+  "gmm_fit_endpoint_count": 20000,
+  "head": "gmm",
+  "head_parameter_count": 99,
+  "inference_time_seconds": 19.521468514576554,
+  "selected_dim": 1,
+  "selected_indices": [
+    0
+  ],
+  "selected_views": [
+    "S"
+  ],
+  "status": "complete",
+  "threshold": 44.99907302856445,
+  "valid_points": 69166
+}

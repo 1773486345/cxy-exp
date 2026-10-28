@@ -1,0 +1,251 @@
+{
+  "config": {
+    "artifact_policy": "full",
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "device": "cpu",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "diag",
+    "gmm_fit_max_windows": 20000,
+    "gmm_log_every_iters": 10,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "log_every_seconds": 30.0,
+    "log_every_steps": 100,
+    "mode": "select_gmm",
+    "noise_seed": 20261013,
+    "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261024T210034Z-2771438/branch-probe/GECCO/heads/S",
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "resume_from": "",
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 1,
+    "selected_indices": [
+      0
+    ],
+    "selected_views": [
+      "S"
+    ],
+    "seq_len": 96,
+    "source_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "GECCO.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "fit_endpoint_count": 20000,
+  "fit_endpoint_sha256": "b0aaabd7d559713b44284e17a166fcd55512f71320385ba23c6c7212fa3209b6",
+  "fixed_noise_sha256": "2d0c776ebb7bc0c2aabd583afd1cde0d853f4f29a2d68dd50b8235dd5187af89",
+  "fixed_noise_shape": [
+    4,
+    25
+  ],
+  "gmm_models_sha256": "1c3daf4e11b56ed8b9c2d0a8dba9699640859d70adb8c0c67c36d91059a9a631",
+  "head_parameter_count": 99,
+  "head_storage_parameter_count": 108,
+  "sklearn_version": "1.3.2",
+  "threadpool_info": [
+    {
+      "architecture": "Zen",
+      "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/numpy.libs/libopenblas64_p-r0-15028c96.3.21.so",
+      "internal_api": "openblas",
+      "num_threads": 1,
+      "prefix": "libopenblas",
+      "threading_layer": "pthreads",
+      "user_api": "blas",
+      "version": "0.3.21"
+    },
+    {
+      "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/torch/lib/libgomp-a34b3233.so.1",
+      "internal_api": "openmp",
+      "num_threads": 1,
+      "prefix": "libgomp",
+      "user_api": "openmp",
+      "version": null
+    },
+    {
+      "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0",
+      "internal_api": "openmp",
+      "num_threads": 1,
+      "prefix": "libgomp",
+      "user_api": "openmp",
+      "version": null
+    },
+    {
+      "architecture": "Zen",
+      "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/scipy.libs/libopenblasp-r0-41284840.3.18.so",
+      "internal_api": "openblas",
+      "num_threads": 1,
+      "prefix": "libopenblas",
+      "threading_layer": "pthreads",
+      "user_api": "blas",
+      "version": "0.3.18"
+    }
+  ],
+  "variables": [
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": -1.0794872918856668,
+      "model_sha256": "f436ee7f8cf01559c66f26349506ae2032d11e97a4fc4aa4b577403e54d1229a",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 13,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 0
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": -0.06017134404908807,
+      "model_sha256": "95178c1e99cdf2a72ca92ca361b5f3e83271388dbd6def5cd1997040f8edd031",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 3,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 1
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": -0.5332258789585869,
+      "model_sha256": "d621764b151524c609c01909e3157a9ee886bb6553410494848068bfc110f35e",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 9,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 2
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": 0.059199294563666856,
+      "model_sha256": "32a904ed04ea5821ca2dbb9cf067f405e13f302d083260b3b66a4d83606a418d",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 6,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 3
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": 0.21099712004325658,
+      "model_sha256": "a35f73b99c6446a756b8159a3de95ec241ddd3aca26deb0f67012873e6fc3833",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 12,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 4
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": -1.3416831065803414,
+      "model_sha256": "acd352ff171a323343ecd2a5c6deef301bed4f436c5ca259236260a8be8c8b70",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 8,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 5
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": -1.258678113072848,
+      "model_sha256": "c3aa540056676e366cd719f1e41d3c4346256cf439ecf7afa1372138b9268258",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 10,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 6
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": -1.4047992856826703,
+      "model_sha256": "be478f1d0c4dc811b7c0f5c00ea7591e7c0a4e9bdffb67c95ba6905722f7a82c",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 7,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 7
+    },
+    {
+      "converged": true,
+      "covariance_type": "diag",
+      "lower_bound": -1.193970197218106,
+      "model_sha256": "fa9d8e0a7cd3424448c9c279ae100074659f343001d72f7536492d3f5cbcb3c6",
+      "n_components": 4,
+      "n_features_in": 1,
+      "n_iter": 4,
+      "parameter_count_free": 11,
+      "parameter_count_storage": 12,
+      "sample_count": 20000,
+      "variable": 8
+    }
+  ]
+}

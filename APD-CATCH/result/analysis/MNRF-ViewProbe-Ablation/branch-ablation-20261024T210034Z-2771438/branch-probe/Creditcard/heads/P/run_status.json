@@ -1,0 +1,9 @@
+{
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "mode": "select_gmm",
+  "run_identity": "25b0d4264e4a4fa97638cd8b6d5be3f93c018167d31d2614228395f9d72e2de5",
+  "schema": "mnrf-view-probe-v2",
+  "status": "complete",
+  "task_name": "Creditcard.csv"
+}

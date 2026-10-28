@@ -1,0 +1,351 @@
+{
+  "aligned_scores_sha256": "1ac0c04119fe562d5308e340e2a60b5ba2b9328bf09a400e10ae3804cf49733e",
+  "artifact_policy": "full",
+  "artifact_type": "probe_head",
+  "cache_feature_dim": null,
+  "calibration_sha256": "ccafb3bf1840a3e6923f5f29105ef907c0efdb0848366af67c6b05f51301dbaa",
+  "config": {
+    "artifact_policy": "full",
+    "batch_size": 128,
+    "cache_chunk_size": 256,
+    "calibration_quantile": 0.995,
+    "cpu_threads": 1,
+    "data_source": "large_detect",
+    "device": "cpu",
+    "encoding_batch_size": 128,
+    "evolution_dim": 8,
+    "feature_std_floor": 0.05,
+    "gmm_components": 4,
+    "gmm_covariance_type": "diag",
+    "gmm_fit_max_windows": 20000,
+    "gmm_log_every_iters": 10,
+    "gmm_max_iter": 100,
+    "gmm_n_init": 1,
+    "gmm_reg_covar": 0.001,
+    "hidden_dim": 32,
+    "learning_rate": 0.001,
+    "log_every_seconds": 30.0,
+    "log_every_steps": 100,
+    "mode": "select_gmm",
+    "noise_seed": 20261013,
+    "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261024T210034Z-2771438/branch-probe/PSM/heads/E",
+    "patience": 5,
+    "pattern_dim": 8,
+    "pattern_len": 32,
+    "relation_dim": 8,
+    "resolved_layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "resume_from": "",
+    "score_mad_floor": 0.001,
+    "seed": 2021,
+    "selected_dim": 8,
+    "selected_indices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "selected_views": [
+      "E"
+    ],
+    "seq_len": 192,
+    "source_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+    "stage1_epochs": 50,
+    "stage2_epochs": 30,
+    "task_name": "PSM.csv",
+    "train_noise_std": 0.01,
+    "view_dim": 8,
+    "weight_decay": 0.0001
+  },
+  "feature_statistics_sha256": "e073af26d715a4599076bb9a88720e0d80f51df3ff443c7a3cd0c05f277dcca4",
+  "fixed_noise_sha256": "2d0c776ebb7bc0c2aabd583afd1cde0d853f4f29a2d68dd50b8235dd5187af89",
+  "gmm_fit_endpoint_count": 20000,
+  "gmm_fit_endpoints_sha256": "661d38ca675d94dbea623536bce4f7fd783d1897ea6b668dd81bdecfe24a5e35",
+  "gmm_status_sha256": "6edbd084632ad5694afeeeaee59626d7dfa9b26a7081937bb17c63b97ee08da4",
+  "head": "gmm",
+  "head_status": "complete",
+  "head_type": "gmm",
+  "layout": {
+    "F": 25,
+    "dimensions": {
+      "E": 8,
+      "P": 8,
+      "R": 8,
+      "S": 1
+    },
+    "order": [
+      "S",
+      "E",
+      "P",
+      "R"
+    ],
+    "slices": {
+      "E": [
+        1,
+        9
+      ],
+      "P": [
+        9,
+        17
+      ],
+      "R": [
+        17,
+        25
+      ],
+      "S": [
+        0,
+        1
+      ]
+    }
+  },
+  "metrics_sha256": "826509a50674887361629cb78d6478011e149e83916e68d8276e6ffc3cee30af",
+  "mode": "select_gmm",
+  "raw_input_statistics_sha256": "0cfb16ff7b5d61d7753694d3d17e025c9940903be1d7d8cd14f18966ccf0e2df",
+  "schema": "mnrf-view-probe-v2",
+  "selected_dim": 8,
+  "selected_indices": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "selected_views": [
+    "E"
+  ],
+  "source_cache_sha256": {
+    "calibration": "e65209ff51e3bd4975203c0868724cd461944afc9265f99647a559c9a32059ac",
+    "test": "b8acea919ab60e4a86c64917e87636a7f450bdd7704130e998e8014f05afc77f",
+    "train": "f39088d0a014b3a081c07b2c66b9707f9c7b483559f980c22aef8767fe9f35b7",
+    "validation": "4cd17ccc9bd4581ed825561804b6f5ef0612269bd5a71ba2515374baf9ec14ce"
+  },
+  "source_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+  "source_endpoint_sha256": {
+    "calibration": "0dfea2d1bad91c6e09b709fb45cac7c461c1a46e9fd46b3979677221cb774d6c",
+    "test": "25215e6895960e3605605963ecfbf98a10a41406b4bbd59b2bfea6216bb9e4cf",
+    "train": "c6aaabb91268ad8eab23387bbf9541af5b9739af69603170d2d2d1a2183d7d59",
+    "validation": "302e63ba819b1ea3192abf43cadef84366bee2d79332c6a6fb3ad370c5388c51"
+  },
+  "source_feature_fingerprint": "13e2ad46057f0d38cfc6031c5276fb375533ce5ab724817257bc7610bc0c3063",
+  "source_gmm_fit_endpoints_sha256": "661d38ca675d94dbea623536bce4f7fd783d1897ea6b668dd81bdecfe24a5e35",
+  "source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "37bdb5839f655c938fec3384b8e1f8e76da34b2f07e5888b1f4879390bee4407",
+    "input_length": 220322,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        119270,
+        132481
+      ],
+      "train": [
+        0,
+        105679
+      ],
+      "validation": [
+        105870,
+        119079
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          119270,
+          132481
+        ]
+      ],
+      "train": [
+        [
+          0,
+          105679
+        ]
+      ],
+      "validation": [
+        [
+          105870,
+          119079
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        220322
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "PSM.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        105679
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 87650,
+    "test_endpoints_sha256": "9f5600c48142c568d2bd7b0772b64304c5ec06e1ffedd5dbcd8c826ea113cb9f",
+    "test_segments": [
+      [
+        132481,
+        220322
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "b894a9b86b1c8ab7039d21ea48699a434b8e28c16fcfddec6c5b07511ba59ecc"
+    },
+    "train_length": 132481,
+    "variable_names": [
+      "feature_0",
+      "feature_1",
+      "feature_2",
+      "feature_3",
+      "feature_4",
+      "feature_5",
+      "feature_6",
+      "feature_7",
+      "feature_8",
+      "feature_9",
+      "feature_10",
+      "feature_11",
+      "feature_12",
+      "feature_13",
+      "feature_14",
+      "feature_15",
+      "feature_16",
+      "feature_17",
+      "feature_18",
+      "feature_19",
+      "feature_20",
+      "feature_21",
+      "feature_22",
+      "feature_23",
+      "feature_24"
+    ]
+  },
+  "source_identity_sha256": "8711277a408942ac1ee53b0a6e1bdc92a82d16dfbed328b82c3e6a2f86a6ba1e",
+  "stage_status": "complete",
+  "temporal_rule": {
+    "entity_boundary_columns": [],
+    "expected_interval_ns": 1,
+    "fit_range": [
+      0,
+      105679
+    ],
+    "time_kind": "timestamp_naive_ns",
+    "tolerance": 0.05,
+    "version": "train-frozen-cadence-v1"
+  },
+  "test_endpoint_count": 87650,
+  "test_endpoint_sha256": "9f5600c48142c568d2bd7b0772b64304c5ec06e1ffedd5dbcd8c826ea113cb9f",
+  "test_length": 87841,
+  "test_local_indices_sha256": "7f726c80a581273de39846377918b6e30ec0e734cdd57a99160f206f78614887",
+  "test_nll_sha256": "6731b188fdecccdca12a8257f8e994f5315d8b8547c71b3f5efe705163a19f5d",
+  "test_time_values_sha256": "440d874806c651bba69b0e5c1996f51f17c434f4652218e9399f3d31e32aeb0e",
+  "variable_names": [
+    "feature_0",
+    "feature_1",
+    "feature_2",
+    "feature_3",
+    "feature_4",
+    "feature_5",
+    "feature_6",
+    "feature_7",
+    "feature_8",
+    "feature_9",
+    "feature_10",
+    "feature_11",
+    "feature_12",
+    "feature_13",
+    "feature_14",
+    "feature_15",
+    "feature_16",
+    "feature_17",
+    "feature_18",
+    "feature_19",
+    "feature_20",
+    "feature_21",
+    "feature_22",
+    "feature_23",
+    "feature_24"
+  ]
+}
