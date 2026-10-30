@@ -1,4 +1,8 @@
 import json
+import subprocess
+import sys
+from types import SimpleNamespace
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -6,7 +10,8 @@ import pytest
 
 from scripts.mnrf_common_data import load_task_frame
 from scripts.evaluate_mnrf_view_probe_common import _same_task_identity
-from scripts.run_mnrf_common_baselines import _existing_catch_run, _fit_light_method, _full_axis_metrics
+from scripts import run_mnrf_common_baselines as common
+from scripts.run_mnrf_common_baselines import _existing_catch_run, _fit_light_method, _fit_residual_pca, _full_axis_metrics
 from ts_benchmark.baselines.mnrf_view_probe.evaluation import calibrated_quantile
 
 
@@ -116,5 +121,71 @@ def test_complete_catch_output_can_be_reused_but_partial_output_is_not_overwritt
     (output / "results/aligned_scores.npz").unlink()
     with pytest.raises(FileExistsError, match="incomplete"):
         _existing_catch_run(output, "PSM")
+
+
+def test_catch_common_cli_has_no_duplicate_options():
+    result = subprocess.run([sys.executable, "scripts/run_mnrf_catch_common.py", "--help"],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("\n  --auxi-lambda ") == 1
+    assert result.stdout.count("\n  --inference-patch-size ") == 1
+
+
+def test_common_baselines_cli_exposes_resume_batch():
+    result = subprocess.run([sys.executable, "scripts/run_mnrf_common_baselines.py", "--help"],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "--resume-batch" in result.stdout
+
+
+def test_pca_residual_rule_applies_to_all_dimensions_uniformly():
+    rng = np.random.RandomState(17)
+    for dimension in (2, 3, 9, 25, 55, 72):
+        train = rng.normal(size=(240, dimension))
+        model, params = _fit_residual_pca(train, dimension)
+        assert model.n_components_ < dimension
+        assert params["residual_dimensions"] >= 1
+        assert params["selection_rule"] == "min(components_for_95_percent_variance, D-1)"
+
+
+def test_resume_batch_reuses_complete_batch_and_preserves_published_files_on_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(common, "ROOT", tmp_path)
+    monkeypatch.setattr(common, "TASKS", ("PSM",))
+    archive_summary = tmp_path / "physical_task_metrics.csv"
+    archive_summary.write_text("fixture\n", encoding="utf-8")
+    configs = {"PSM": {"resolved_common_run_model_config": {"seq_len": 32}}}
+    archive_rows = [{"dataset": "PSM", "reference": "fixture"}]
+    monkeypatch.setattr(common, "_archive_references", lambda: (configs, archive_rows, archive_summary))
+    calls = {"count": 0, "fail": False}
+
+    def task_pipeline(task, batch, analysis_root, score_root, catch_configs, method_rows, task_records):
+        calls["count"] += 1
+        if calls["fail"]:
+            raise RuntimeError("injected partial resume failure")
+        method_rows.append({"dataset": task, "method": "MNRF Full", "roc_auc": 0.5})
+        task_records.append({"dataset": task, "status": "complete", "methods": {}})
+
+    monkeypatch.setattr(common, "_task_pipeline", task_pipeline)
+    monkeypatch.setattr(common, "_write_readme",
+                        lambda path, *args: Path(path).write_text("complete report\n", encoding="utf-8"))
+    args = SimpleNamespace(batch_name="resume-fixture", resume_batch=False)
+    out = common.run_all(args)
+    metrics = out / "common_protocol_metrics.csv"
+    status = out / "task_status.json"
+    readme = out / "README.md"
+    first = (metrics.read_bytes(), status.read_bytes(), readme.read_bytes())
+
+    args.resume_batch = True
+    common.run_all(args)
+    assert calls["count"] == 2
+    second = (metrics.read_bytes(), status.read_bytes(), readme.read_bytes())
+    assert json.loads(status.read_text())["completed_tasks"] == 1
+
+    calls["fail"] = True
+    with pytest.raises(RuntimeError, match="previous complete batch report was preserved"):
+        common.run_all(args)
+    assert (metrics.read_bytes(), status.read_bytes(), readme.read_bytes()) == second
+    assert list(out.glob("resume-attempt-*.json"))
+    assert first[0] == second[0]
 
 

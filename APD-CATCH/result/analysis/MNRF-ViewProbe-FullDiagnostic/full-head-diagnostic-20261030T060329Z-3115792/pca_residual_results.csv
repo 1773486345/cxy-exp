@@ -1,0 +1,9 @@
+dataset,status,run_path,selected_components,input_dimensions,residual_dimensions,roc_auc,average_precision,old_full_dimension_result_retained
+PSM,reused,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/PCA,12,25,13,0.7925755416458282,0.5348424872628248,
+MSL,reused,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/MSL/PCA,32,55,23,0.5052713757147835,0.14401553140684592,
+GECCO,reused,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/PCA,8,9,1,0.6795650390685988,0.3618443522146658,
+Genesis,reused,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/PCA,12,18,6,0.9875620202020201,0.5155251498045019,
+NYC,recomputed,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-FullDiagnostic/full-head-diagnostic-20261030T060329Z-3115792/NYC/PCA-residual,2,3,1,0.5007491296875689,0.02384784690355183,True
+CalIt2,recomputed,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-FullDiagnostic/full-head-diagnostic-20261030T060329Z-3115792/CalIt2/PCA-residual,1,2,1,0.7636754569025486,0.08579503576528469,True
+Creditcard,reused,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/PCA,25,29,4,0.800732065970704,0.045347014929507774,
+CICIDS,reused,/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/PCA,21,72,51,0.5738736137464496,0.0010659702564034075,

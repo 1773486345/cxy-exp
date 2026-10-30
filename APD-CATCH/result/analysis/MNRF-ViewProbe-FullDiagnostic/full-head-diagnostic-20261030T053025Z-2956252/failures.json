@@ -1,0 +1,42 @@
+[
+  {
+    "dataset": "PSM",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  },
+  {
+    "dataset": "MSL",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  },
+  {
+    "dataset": "GECCO",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  },
+  {
+    "dataset": "Genesis",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  },
+  {
+    "dataset": "NYC",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  },
+  {
+    "dataset": "CalIt2",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  },
+  {
+    "dataset": "Creditcard",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  },
+  {
+    "dataset": "CICIDS",
+    "status": "failed",
+    "reason": "TypeError: tuple indices must be integers or slices, not str"
+  }
+]

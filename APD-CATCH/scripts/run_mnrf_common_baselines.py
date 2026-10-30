@@ -118,6 +118,64 @@ def _existing_catch_run(output, task):
         metrics.get("calibration_and_inference_time_seconds", 0.0))
 
 
+def _existing_light_run(output, method, contract):
+    """Validate and reuse one completed IF/PCA result without touching it."""
+    output = Path(output)
+    manifest_path = output / "evidence" / "baseline.json"
+    if not manifest_path.is_file():
+        raise FileExistsError("refusing to overwrite incomplete {} output".format(method))
+    manifest = _load_json(manifest_path)
+    expected = {
+        "method": method,
+        "seed": SEED,
+        "common_contract_path": contract["common_contract_path"],
+        "common_contract_sha256": _sha256(contract["common_contract_path"]),
+        "probe_run": contract["probe_run"],
+        "probe_manifest_sha256": contract["probe_manifest_sha256"],
+        "data_csv_sha256": contract["data_csv_sha256"],
+        "data_identity": contract["data_identity"],
+        "time_identity": contract["time_identity"],
+        "boundary_identity": contract["boundary_identity"],
+        "calibration_quantile": CALIBRATION_QUANTILE,
+    }
+    for key, value in expected.items():
+        if manifest.get(key) != value:
+            raise ValueError("existing {} run {} binding mismatch: {}".format(method, output, key))
+    artifacts = {
+        "normalization_sha256": output / "normalization.npz",
+        "model_sha256": output / "model.joblib",
+        "calibration_scores_sha256": output / "results" / "calibration_scores.npz",
+        "score_sha256": output / "results" / "aligned_scores.npz",
+        "train_rows_sha256": output / "evidence" / "train_fit_rows.npy",
+    }
+    for field, path in artifacts.items():
+        if not path.is_file() or _sha256(path) != manifest.get(field):
+            raise ValueError("existing {} artifact is missing or changed: {}".format(method, path))
+    if manifest.get("status") != "complete":
+        raise ValueError("existing {} run is not complete".format(method))
+    with np.load(output / "results" / "calibration_scores.npz", allow_pickle=False) as calibration:
+        cal_scores = np.asarray(calibration["scores"])
+        cal_indices = strict_integer_indices(calibration["time_indices"], "calibration coordinates",
+                                             upper_bound=int(contract["input_length"]), require_sorted=True)
+        threshold = float(np.asarray(calibration["threshold"]))
+    with np.load(output / "results" / "aligned_scores.npz", allow_pickle=False) as scored:
+        scores = np.asarray(scored["scores"])
+        pred = np.asarray(scored["predictions"])
+        indices = strict_integer_indices(scored["time_indices"], "test coordinates",
+                                         upper_bound=int(contract["input_length"]), require_sorted=True)
+        score_threshold = float(np.asarray(scored["threshold"]))
+    expected_cal = np.load(contract["catch_splits"]["calibration"]["path"], allow_pickle=False)
+    expected_test = np.load(contract["catch_test"]["path"], allow_pickle=False)
+    if (not np.array_equal(cal_indices, expected_cal) or not np.array_equal(indices, expected_test)
+            or not np.isfinite(cal_scores).all() or not np.isfinite(scores).all()
+            or not math.isclose(threshold, score_threshold, rel_tol=0, abs_tol=1e-12)
+            or not math.isclose(threshold, calibrated_quantile(cal_scores, CALIBRATION_QUANTILE),
+                                rel_tol=0, abs_tol=1e-12)
+            or not np.array_equal(pred.astype(np.int8), (scores > threshold).astype(np.int8))):
+        raise ValueError("existing {} scores do not match the bound axes or calibration".format(method))
+    return output / "results" / "aligned_scores.npz", manifest
+
+
 def _atomic_json(path, payload):
     path = Path(path)
     temporary = path.with_name(path.name + ".tmp-{}".format(os.getpid()))
@@ -343,6 +401,8 @@ def _fit_light_method(method, output, values, labels, times, contract):
                                           "test endpoints", upper_bound=len(values), require_sorted=True)
     calibration_indices = strict_integer_indices(np.load(contract["catch_splits"]["calibration"]["path"], allow_pickle=False),
                                                  "calibration endpoints", upper_bound=len(values), require_sorted=True)
+    if output.exists():
+        return _existing_light_run(output, method, contract)
     scaler = StandardScaler().fit(values[train_rows])
     normalized = scaler.transform(values).astype(np.float32, copy=False)
     fit_start = time.perf_counter()
@@ -359,8 +419,7 @@ def _fit_light_method(method, output, values, labels, times, contract):
                   "contamination": "auto", "random_state": SEED, "n_jobs": 1,
                   "score": "negative score_samples"}
     else:
-        estimator = PCA(n_components=0.95, svd_solver="full")
-        estimator.fit(normalized[train_rows])
+        estimator, params = _fit_residual_pca(normalized[train_rows], normalized.shape[1])
         fit_seconds = time.perf_counter() - fit_start
 
         def score_rows(indices):
@@ -372,8 +431,6 @@ def _fit_light_method(method, output, values, labels, times, contract):
                 output_scores[start:start + len(block)] = np.mean((block - reconstruction) ** 2, axis=1)
             return output_scores
 
-        params = {"n_components": 0.95, "svd_solver": "full", "selected_components": int(estimator.n_components_),
-                  "score": "per-row mean squared reconstruction error"}
     inference_start = time.perf_counter()
     calibration_scores = np.asarray(score_rows(calibration_indices), dtype=np.float64)
     threshold = calibrated_quantile(calibration_scores, CALIBRATION_QUANTILE)
@@ -428,6 +485,26 @@ def _fit_light_method(method, output, values, labels, times, contract):
     }
     _atomic_json(output / "evidence" / "baseline.json", manifest)
     return scores_path, manifest
+
+
+def _fit_residual_pca(train_values, feature_count):
+    """Fit PCA on training rows, retaining a residual dimension on every task."""
+    feature_count = int(feature_count)
+    if feature_count < 2:
+        raise ValueError("PCA residual scoring requires at least two input variables")
+    preliminary = PCA(n_components=0.95, svd_solver="full")
+    preliminary.fit(train_values)
+    component_count = min(int(preliminary.n_components_), feature_count - 1)
+    if component_count < 1:
+        raise ValueError("PCA residual scoring selected no retained dimensions")
+    estimator = PCA(n_components=component_count, svd_solver="full")
+    estimator.fit(train_values)
+    params = {"variance_target": 0.95, "maximum_components": feature_count - 1,
+              "selection_rule": "min(components_for_95_percent_variance, D-1)",
+              "svd_solver": "full", "selected_components": int(estimator.n_components_),
+              "residual_dimensions": feature_count - int(estimator.n_components_),
+              "score": "per-row mean squared reconstruction error"}
+    return estimator, params
 
 
 def _metrics_from_evaluation(method, evaluation):
@@ -627,6 +704,14 @@ def _task_pipeline(task, batch_name, analysis_root, score_root, catch_configs, m
     frame, values, labels, times = _verify_frame_for_contract(task, data_path, contract)
     for method in ("IsolationForest", "PCA"):
         baseline_output = task_score / method
+        if method == "PCA" and baseline_output.is_dir():
+            old_model_path = baseline_output / "model.joblib"
+            if old_model_path.is_file():
+                old_estimator = joblib.load(old_model_path).get("estimator")
+                if old_estimator is not None and int(old_estimator.n_components_) >= values.shape[1]:
+                    # Preserve the historical full-reconstruction result and
+                    # write the residual-subspace correction beside it.
+                    baseline_output = task_score / "PCA-residual"
         score_path, evidence = _fit_light_method(method, baseline_output, values, labels, times, contract)
         with np.load(score_path, allow_pickle=False) as scored:
             scored_indices = strict_integer_indices(scored["time_indices"], "{} endpoints".format(method),
@@ -717,7 +802,7 @@ def _write_readme(path, batch_name, method_rows, archive_rows, task_records, cat
     lines += ["", "## 结果读取与边界", "",
               "共同协议使用相同测试端点和完整标签轴；没有按标签清洗训练数据，也没有内部再次划分训练行。Validation 仅用于 CATCH 早停，calibration 仅用于各自 0.995 阈值。CalIt2/Genesis 校准端点较少，分位阈值方差较高，仍按统一规则报告，不作特例调整。", "",
               "不能把历史 score 和 label 两个独立运行的结果合成一个历史 CATCH 运行。`archive_references.csv` 同时记录每组 score/label 的参数和压缩归档来源；当前归档中权重文件计数为零。共同协议 CATCH 是本次新训练，保存可重载 checkpoint、训练证据、归一化统计、分数和注册验证。", "",
-              "Isolation Forest 参数固定为 100 trees、max_samples=min(256,n_train)、contamination=auto、seed=2021；PCA 在训练行上以 95% 方差保留率拟合，按每行重建 MSE 排序。它们均没有内部 holdout。", "",
+              "Isolation Forest 参数固定为 100 trees、max_samples=min(256,n_train)、contamination=auto、seed=2021；PCA 只在原始训练行拟合，先按 95% 方差目标选维，再统一限制保留维数不超过 D−1，确保存在非空残差子空间，并按每行重建 MSE 排序。旧的全维重建 PCA 结果保留为历史退化结果；该规则不根据测试表现选维。它们均没有内部 holdout。", "",
               "逐点 AP/ROC 描述排序；点报警指标和有效段 affiliation 指标使用 calibration 阈值。原 CATCH score 归档还可能使用合并 train/test 能量及 anomaly_ratio 阈值，协议不同。数值并列/接近不能解释为论文协议复现。", "",
               "## 每组配置与失败状态", ""]
     for task in TASKS:
@@ -745,12 +830,34 @@ def run_all(args):
         raise ValueError("only one side of this result batch exists; refusing mixed resume")
     analysis_root.mkdir(parents=True, exist_ok=args.resume_batch)
     score_root.mkdir(parents=True, exist_ok=args.resume_batch)
+    prior_status_path = analysis_root / "task_status.json"
+    prior_status = _load_json(prior_status_path) if args.resume_batch and prior_status_path.is_file() else None
+    published_complete_batch = bool(
+        prior_status and int(prior_status.get("completed_tasks", 0)) == len(TASKS)
+        and (analysis_root / "common_protocol_metrics.csv").is_file()
+        and (analysis_root / "README.md").is_file())
     catch_configs, archive_rows, archive_summary = _archive_references()
-    _write_csv(analysis_root / "archive_references.csv", archive_rows)
-    (analysis_root / "archive_summary_source.txt").write_text(
-        "{} sha256={}\n".format(archive_summary, _sha256(archive_summary)), encoding="utf-8")
-    (analysis_root / "archived_score_configs.json").write_text(
-        json.dumps(catch_configs, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+    archive_csv = analysis_root / "archive_references.csv"
+    archive_summary_file = analysis_root / "archive_summary_source.txt"
+    archive_config_file = analysis_root / "archived_score_configs.json"
+    if args.resume_batch:
+        if archive_csv.is_file() and archive_config_file.is_file() and archive_summary_file.is_file():
+            saved_config = _load_json(archive_config_file)
+            if saved_config != catch_configs:
+                raise ValueError("archived configuration changed; refusing to resume this batch")
+            if archive_summary_file.read_text(encoding="utf-8").strip() != "{} sha256={}".format(
+                    archive_summary, _sha256(archive_summary)):
+                raise ValueError("archived summary source changed; refusing to resume this batch")
+        elif any(path.exists() for path in (archive_csv, archive_summary_file, archive_config_file)):
+            raise ValueError("batch archive evidence is partial; refusing to overwrite it")
+        else:
+            _write_csv(archive_csv, archive_rows)
+            archive_summary_file.write_text("{} sha256={}\n".format(archive_summary, _sha256(archive_summary)), encoding="utf-8")
+            archive_config_file.write_text(json.dumps(catch_configs, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+    else:
+        _write_csv(archive_csv, archive_rows)
+        archive_summary_file.write_text("{} sha256={}\n".format(archive_summary, _sha256(archive_summary)), encoding="utf-8")
+        archive_config_file.write_text(json.dumps(catch_configs, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
     method_rows = []
     task_records = []
     for task in TASKS:
@@ -767,8 +874,23 @@ def run_all(args):
             record["traceback"] = traceback.format_exc()
             _atomic_json(analysis_root / "{}.failure.json".format(task), record)
             print("{} failed: {}".format(task, record["error"]), flush=True)
-    _write_csv(analysis_root / "common_protocol_metrics.csv", method_rows)
-    _atomic_json(analysis_root / "task_status.json", {"batch": batch_name,
+    failed = any(item.get("status") != "complete" for item in task_records)
+    if failed and published_complete_batch:
+        # A failed continuation must not replace the last published complete
+        # report. Keep this attempt separately inspectable and retryable.
+        attempt = {"batch": batch_name, "status": "partial_resume_failed",
+                   "task_records": task_records,
+                   "environment": {"python": os.sys.version.split()[0], "torch": torch.__version__,
+                                   "numpy": np.__version__, "pandas": pd.__version__,
+                                   "scikit_learn": sklearn.__version__}}
+        attempt_path = analysis_root / "resume-attempt-{}-{}.json".format(
+            time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()), os.getpid())
+        _atomic_json(attempt_path, attempt)
+        print("preserved_previous_complete_report=true")
+        raise RuntimeError("resume attempt incomplete; previous complete batch report was preserved")
+    else:
+        _write_csv(analysis_root / "common_protocol_metrics.csv", method_rows)
+        _atomic_json(analysis_root / "task_status.json", {"batch": batch_name,
                                                         "expected_tasks": list(TASKS),
                                                         "completed_tasks": sum(item.get("status") == "complete" for item in task_records),
                                                         "task_records": task_records,
@@ -779,8 +901,8 @@ def run_all(args):
                                                                         "scikit_learn": sklearn.__version__},
                                                         "device": "cuda:0", "seed": SEED,
                                                         "calibration_quantile": CALIBRATION_QUANTILE})
-    _write_readme(analysis_root / "README.md", batch_name, method_rows, archive_rows,
-                  task_records, catch_configs, archive_summary)
+        _write_readme(analysis_root / "README.md", batch_name, method_rows, archive_rows,
+                      task_records, catch_configs, archive_summary)
     print("analysis_dir={}".format(analysis_root.resolve()))
     print("score_dir={}".format(score_root.resolve()))
     print("complete_tasks={}/{}".format(sum(item.get("status") == "complete" for item in task_records), len(TASKS)))
