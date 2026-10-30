@@ -197,6 +197,49 @@ def _gmm_progress_payload(config, sample_hash, statistics_hash, noise_hash,
     }
 
 
+def _legacy_gmm_progress_matches(progress_identity, persisted_config, requested_config,
+                                 sample_hash, statistics_hash, noise_hash,
+                                 cache_hashes, endpoint_hashes, selected_indices,
+                                 source_identity, identity_version=None):
+    """Verify a historical progress identity without relaxing its contract.
+
+    Versions predating ``gmm_compute_dtype`` used float32.  Normalize that one
+    absent field, compare the complete numerical configuration, then rebuild
+    the original payload shape, including its version field when present.
+    """
+    if persisted_config is None:
+        return False
+    if identity_version not in (None, GMM_PROGRESS_IDENTITY_VERSION):
+        return False
+    if _gmm_numeric_config(persisted_config) != _gmm_numeric_config(requested_config):
+        return False
+    if identity_version is not None:
+        # Versioned v2 payloads stored the projected numerical config.
+        legacy_config = _gmm_numeric_config(persisted_config)
+        if "gmm_compute_dtype" not in persisted_config:
+            # The historical serialized projection omitted this key; the
+            # semantic comparison above still interprets that absence as f32.
+            legacy_config.pop("gmm_compute_dtype", None)
+    else:
+        # Earlier unversioned payloads stored the full config minus paths.
+        legacy_config = dict(persisted_config)
+        legacy_config.pop("output_dir", None)
+        legacy_config.pop("resume_from", None)
+    payload = {
+        "config": legacy_config,
+        "sample_hash": sample_hash,
+        "statistics_hash": statistics_hash,
+        "noise_hash": noise_hash,
+        "cache_hashes": cache_hashes,
+        "endpoint_hashes": endpoint_hashes,
+        "selected_indices": list(selected_indices),
+        "source": source_identity,
+    }
+    if identity_version is not None:
+        payload["version"] = identity_version
+    return progress_identity == _json_hash(payload)
+
+
 def _strict_integer_indices(value, name):
     array = np.asarray(value)
     if array.ndim != 1 or array.dtype.kind not in "iu" or array.dtype.kind == "b":
@@ -1184,17 +1227,12 @@ class MNRFViewProbe:
                     persisted = manifest.get("config")
                 if persisted is None:
                     raise ValueError("GMM resume rejected: versioned or legacy numerical identity is missing")
-                legacy_config = dict(persisted)
-                legacy_config.pop("output_dir", None)
-                legacy_config.pop("resume_from", None)
-                legacy_payload = {"config": legacy_config, "sample_hash": sample_hash,
-                                  "statistics_hash": _sha256_file(statistics_path),
-                                  "noise_hash": _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
-                                  "cache_hashes": cache_hashes,
-                                  "endpoint_hashes": endpoint_hashes,
-                                  "selected_indices": self.config.selected_indices,
-                                  "source": source_cache_identity}
-                if progress.get("identity") != _json_hash(legacy_payload):
+                if not _legacy_gmm_progress_matches(
+                        progress.get("identity"), persisted, self.config,
+                        sample_hash, _sha256_file(statistics_path),
+                        _sha256_file(self.output_dir / "heads" / "fixed_noise.npy"),
+                        cache_hashes, endpoint_hashes, self.config.selected_indices,
+                        source_cache_identity, progress.get("identity_version")):
                     raise ValueError("GMM resume rejected: numerical head configuration or fitting sample differs")
                 # The read-only preflight has already verified every binding;
                 # migrate the legacy envelope atomically now so a second
@@ -1867,22 +1905,12 @@ class MNRFViewProbe:
                 expected_progress_identity = _json_hash(identity_payload)
                 if progress.get("identity") != expected_progress_identity:
                     persisted_config = (request or {}).get("config") or (manifest or {}).get("config")
-                    legacy_payload = None
-                    if persisted_config is not None:
-                        legacy_config = dict(persisted_config)
-                        legacy_config.pop("output_dir", None)
-                        legacy_config.pop("resume_from", None)
-                        legacy_payload = {
-                            "config": legacy_config,
-                            "sample_hash": _sha256_file(sample_path),
-                            "statistics_hash": _sha256_file(stats_path),
-                            "noise_hash": _sha256_file(noise_path),
-                            "cache_hashes": current_cache_hashes,
-                            "endpoint_hashes": current_endpoint_hashes,
-                            "selected_indices": self.config.selected_indices,
-                            "source": source_cache_identity,
-                        }
-                    if legacy_payload is None or progress.get("identity") != _json_hash(legacy_payload):
+                    if not _legacy_gmm_progress_matches(
+                            progress.get("identity"), persisted_config, self.config,
+                            _sha256_file(sample_path), _sha256_file(stats_path),
+                            _sha256_file(noise_path), current_cache_hashes,
+                            current_endpoint_hashes, self.config.selected_indices,
+                            source_cache_identity, progress.get("identity_version")):
                         raise ValueError("resume rejected: GMM numerical progress identity differs")
                     self._legacy_gmm_config = persisted_config
         return validated_source

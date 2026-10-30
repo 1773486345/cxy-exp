@@ -1,0 +1,1896 @@
+{
+  "CICIDS": {
+    "feature_fingerprint": "e023c9c7602438773d68aa52afa5359a769c29997581a2218a9f199a65fb7e47",
+    "score_replay": {
+      "calibration_max_abs": 0.0001844463508859917,
+      "test_max_abs": 0.0032918904689722694,
+      "test_max_rel": 1.3464799865790036e-07,
+      "validation_max_abs": 0.0003239650150135276
+    },
+    "scoring_seconds": 107.56391646199972,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "a4222ec14aaef06be8eb5d99d7bdbea614beef00259b139a4a96bfd89fd12e77",
+      "input_length": 170231,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          76641,
+          85115
+        ],
+        "train": [
+          0,
+          67786
+        ],
+        "validation": [
+          67977,
+          76450
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            76641,
+            85115
+          ]
+        ],
+        "train": [
+          [
+            0,
+            67786
+          ]
+        ],
+        "validation": [
+          [
+            67977,
+            76450
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          170231
+        ]
+      ],
+      "seq_len": 192,
+      "task_name": "CICIDS.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1,
+        "fit_range": [
+          0,
+          67786
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 84925,
+      "test_endpoints_sha256": "45867bec7f701ec04a2a5f163723c326a3f98a85a500d9792aa40fb63fcff012",
+      "test_segments": [
+        [
+          85115,
+          170231
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "90395e9b5370403341d6bb89a0a87a748c9286d455394669404baf5d3105ec6c"
+      },
+      "train_length": 85115,
+      "variable_names": [
+        "Total Length of Bwd Packets",
+        "Fwd Packet Length Min",
+        "Fwd Packet Length Mean",
+        "Fwd Packet Length Std",
+        "Bwd Packet Length Max",
+        "Bwd Packet Length Min",
+        "Bwd Packet Length Mean",
+        "Bwd Packet Length Std",
+        "Flow Bytes/s",
+        "Flow Packets/s",
+        "Flow IAT Mean",
+        "Flow IAT Std",
+        "Flow IAT Max",
+        "Flow IAT Min",
+        "Fwd IAT Total",
+        "Fwd IAT Mean",
+        "Fwd IAT Std",
+        "Fwd IAT Max",
+        "Fwd IAT Min",
+        "Bwd IAT Total",
+        "Bwd IAT Mean",
+        "Bwd IAT Std",
+        "Bwd IAT Max",
+        "Bwd IAT Min",
+        "Fwd PSH Flags",
+        "Bwd PSH Flags",
+        "Fwd URG Flags",
+        "Bwd URG Flags",
+        "Fwd Header Length",
+        "Bwd Header Length",
+        "Fwd Packets/s",
+        "Bwd Packets/s",
+        "Min Packet Length",
+        "Max Packet Length",
+        "Packet Length Mean",
+        "Packet Length Std",
+        "Packet Length Variance",
+        "FIN Flag Count",
+        "SYN Flag Count",
+        "RST Flag Count",
+        "PSH Flag Count",
+        "ACK Flag Count",
+        "URG Flag Count",
+        "CWE Flag Count",
+        "ECE Flag Count",
+        "Down/Up Ratio",
+        "Average Packet Size",
+        "Avg Fwd Segment Size",
+        "Avg Bwd Segment Size",
+        "Fwd Header Length.1",
+        "Fwd Avg Bytes/Bulk",
+        "Fwd Avg Packets/Bulk",
+        "Fwd Avg Bulk Rate",
+        "Bwd Avg Bytes/Bulk",
+        "Bwd Avg Packets/Bulk",
+        "Bwd Avg Bulk Rate",
+        "Subflow Fwd Packets",
+        "Subflow Fwd Bytes",
+        "Subflow Bwd Packets",
+        "Subflow Bwd Bytes",
+        "Init_Win_bytes_forward",
+        "Init_Win_bytes_backward",
+        "act_data_pkt_fwd",
+        "min_seg_size_forward",
+        "Active Mean",
+        "Active Std",
+        "Active Max",
+        "Active Min",
+        "Idle Mean",
+        "Idle Std",
+        "Idle Max",
+        "Idle Min"
+      ]
+    },
+    "source_manifest_sha256": "8cdf4d090c6f3a73b454f49102edba0d8c8e028601ae55e86581d372adfc8d8a",
+    "status": "complete",
+    "target_variables": [
+      "Total Length of Bwd Packets",
+      "Fwd Packet Length Min",
+      "Fwd Packet Length Mean",
+      "Fwd Packet Length Std",
+      "Bwd Packet Length Max",
+      "Bwd Packet Length Min",
+      "Bwd Packet Length Mean",
+      "Bwd Packet Length Std",
+      "Flow Bytes/s",
+      "Flow Packets/s",
+      "Flow IAT Mean",
+      "Flow IAT Std",
+      "Flow IAT Max",
+      "Flow IAT Min",
+      "Fwd IAT Total",
+      "Fwd IAT Mean",
+      "Fwd IAT Std",
+      "Fwd IAT Max",
+      "Fwd IAT Min",
+      "Bwd IAT Total",
+      "Bwd IAT Mean",
+      "Bwd IAT Std",
+      "Bwd IAT Max",
+      "Bwd IAT Min",
+      "Fwd PSH Flags",
+      "Bwd PSH Flags",
+      "Fwd URG Flags",
+      "Bwd URG Flags",
+      "Fwd Header Length",
+      "Bwd Header Length",
+      "Fwd Packets/s",
+      "Bwd Packets/s",
+      "Min Packet Length",
+      "Max Packet Length",
+      "Packet Length Mean",
+      "Packet Length Std",
+      "Packet Length Variance",
+      "FIN Flag Count",
+      "SYN Flag Count",
+      "RST Flag Count",
+      "PSH Flag Count",
+      "ACK Flag Count",
+      "URG Flag Count",
+      "CWE Flag Count",
+      "ECE Flag Count",
+      "Down/Up Ratio",
+      "Average Packet Size",
+      "Avg Fwd Segment Size",
+      "Avg Bwd Segment Size",
+      "Fwd Header Length.1",
+      "Fwd Avg Bytes/Bulk",
+      "Fwd Avg Packets/Bulk",
+      "Fwd Avg Bulk Rate",
+      "Bwd Avg Bytes/Bulk",
+      "Bwd Avg Packets/Bulk",
+      "Bwd Avg Bulk Rate",
+      "Subflow Fwd Packets",
+      "Subflow Fwd Bytes",
+      "Subflow Bwd Packets",
+      "Subflow Bwd Bytes",
+      "Init_Win_bytes_forward",
+      "Init_Win_bytes_backward",
+      "act_data_pkt_fwd",
+      "min_seg_size_forward",
+      "Active Mean",
+      "Active Std",
+      "Active Max",
+      "Active Min",
+      "Idle Mean",
+      "Idle Std",
+      "Idle Max",
+      "Idle Min"
+    ]
+  },
+  "CalIt2": {
+    "feature_fingerprint": "f915d1f6870227e881842956c66b4fff57bee7cbfc45992eb8976f31cd8ee14e",
+    "raw_count_conversion": {
+      "archive_sha256": "19cc7b40a4c44defe674f409862785fd65534c78e9ac144582373ec35848a4f1",
+      "conversion": "local flow counts equal original integer counts modulo 10",
+      "data_sha256": "7c5b1d6af36488ba42b6fd89d8d0c63721cdc13143be2acdc4c9da0f5d83d12a",
+      "flows": {
+        "7": {
+          "count": 5040,
+          "exact_mod10_match": true,
+          "exact_raw_match": false,
+          "local_max": 9,
+          "local_min": 0,
+          "local_unique_count": 10,
+          "raw_max": 54,
+          "raw_min": 0,
+          "raw_unique_count": 45
+        },
+        "9": {
+          "count": 5040,
+          "exact_mod10_match": true,
+          "exact_raw_match": false,
+          "local_max": 9,
+          "local_min": 0,
+          "local_unique_count": 10,
+          "raw_max": 62,
+          "raw_min": 0,
+          "raw_unique_count": 48
+        }
+      },
+      "raw_rows": 10080,
+      "url": "https://archive.ics.uci.edu/static/public/156/calit2+building+people+counts.zip"
+    },
+    "score_replay": {
+      "calibration_max_abs": 7.035843516689511e-07,
+      "test_max_abs": 2.2648255111334947e-06,
+      "test_max_rel": 1.0419553183804382e-07,
+      "validation_max_abs": 9.753364960118915e-07
+    },
+    "scoring_seconds": 0.09208109400015019,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "3aa8a86531fb42bc8e5fc2bdd30159f59f67eaaf6030203005134ed0f0d211be",
+      "input_length": 5040,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          2305,
+          2520
+        ],
+        "train": [
+          0,
+          1710
+        ],
+        "validation": [
+          1901,
+          2114
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            2305,
+            2520
+          ]
+        ],
+        "train": [
+          [
+            0,
+            1710
+          ]
+        ],
+        "validation": [
+          [
+            1901,
+            2114
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          5040
+        ]
+      ],
+      "seq_len": 192,
+      "task_name": "CalIt2.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1800000000000,
+        "fit_range": [
+          0,
+          1710
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 2329,
+      "test_endpoints_sha256": "d1026661376393908e117f69252badd6aa1a52ea007ce95971cd45b5edee35db",
+      "test_segments": [
+        [
+          2520,
+          5040
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "1b68c2cf5221a257066765ca3035a946c2af3dd4419fcc0e2d952dcf95993cb8"
+      },
+      "train_length": 2520,
+      "variable_names": [
+        "9",
+        "7"
+      ]
+    },
+    "source_manifest_sha256": "eb951c662ada304fae6f713b6a078a97f85b5130868487e21696c363a8376c38",
+    "status": "complete",
+    "target_variables": [
+      "9",
+      "7"
+    ]
+  },
+  "Creditcard": {
+    "feature_fingerprint": "9e30484ba13240f715d4353794781140a82aa01a160432292e3b8bbffd6f15a9",
+    "score_replay": {
+      "calibration_max_abs": 9.134565675594786e-05,
+      "test_max_abs": 0.0006988370641920483,
+      "test_max_rel": 1.300091465858171e-07,
+      "validation_max_abs": 9.46486936754809e-05
+    },
+    "scoring_seconds": 73.17394102099979,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "7f0fb02297011ae69ddf41f81ac3a0ee1cc8800e83e2bd46e0e996e417b6c7ee",
+      "input_length": 284807,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          128200,
+          142403
+        ],
+        "train": [
+          0,
+          113616
+        ],
+        "validation": [
+          113807,
+          128009
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            128200,
+            142403
+          ]
+        ],
+        "train": [
+          [
+            0,
+            113616
+          ]
+        ],
+        "validation": [
+          [
+            113807,
+            128009
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          284807
+        ]
+      ],
+      "seq_len": 192,
+      "task_name": "Creditcard.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1,
+        "fit_range": [
+          0,
+          113616
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 142213,
+      "test_endpoints_sha256": "fb800f63b46cd7b2c46d3a33a172806336c1b07daf23eaad39e12ddeda3c4b7c",
+      "test_segments": [
+        [
+          142403,
+          284807
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "8c4d38ab85cc992d2f2be66a216cc327922ab3cf53ea5fed4081645e85591e8b"
+      },
+      "train_length": 142403,
+      "variable_names": [
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7",
+        "V8",
+        "V9",
+        "V10",
+        "V11",
+        "V12",
+        "V13",
+        "V14",
+        "V15",
+        "V16",
+        "V17",
+        "V18",
+        "V19",
+        "V20",
+        "V21",
+        "V22",
+        "V23",
+        "V24",
+        "V25",
+        "V26",
+        "V27",
+        "V28",
+        "Amount"
+      ]
+    },
+    "source_manifest_sha256": "67077eca148b7489e5113365e69fb29ded7e0f3e6f03f80f8967421d763ae834",
+    "status": "complete",
+    "target_variables": [
+      "V1",
+      "V2",
+      "V3",
+      "V4",
+      "V5",
+      "V6",
+      "V7",
+      "V8",
+      "V9",
+      "V10",
+      "V11",
+      "V12",
+      "V13",
+      "V14",
+      "V15",
+      "V16",
+      "V17",
+      "V18",
+      "V19",
+      "V20",
+      "V21",
+      "V22",
+      "V23",
+      "V24",
+      "V25",
+      "V26",
+      "V27",
+      "V28",
+      "Amount"
+    ]
+  },
+  "GECCO": {
+    "feature_fingerprint": "8affc0dd4128df999e66bf29c856b6be412830b1dc98f12369e5e71498f4f42e",
+    "score_replay": {
+      "calibration_max_abs": 0.00012905329708701174,
+      "test_max_abs": 0.008072193610132672,
+      "test_max_rel": 1.2709277106126767e-07,
+      "validation_max_abs": 0.006596756924409419
+    },
+    "scoring_seconds": 11.040418682000109,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "9f68a71a046af3b7d524ac4fb6ca8faa8e038056034142081c514318bec42fdf",
+      "input_length": 138521,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          62353,
+          69260
+        ],
+        "train": [
+          0,
+          55256
+        ],
+        "validation": [
+          55351,
+          62258
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            62353,
+            69260
+          ]
+        ],
+        "train": [
+          [
+            0,
+            55256
+          ]
+        ],
+        "validation": [
+          [
+            55351,
+            62258
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          138521
+        ]
+      ],
+      "seq_len": 96,
+      "task_name": "GECCO.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1,
+        "fit_range": [
+          0,
+          55256
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 69166,
+      "test_endpoints_sha256": "b9d26089b8d63bbe0a0f94983ff41cb6e199e08fca489dd1e7a98ff2029724b0",
+      "test_segments": [
+        [
+          69260,
+          138521
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "72df0f243b61764f4f12bd9b6c7b5bb9bf40dd882f20f972ffbfae914526a4d6"
+      },
+      "train_length": 69260,
+      "variable_names": [
+        "Tp",
+        "Cl",
+        "pH",
+        "Redox",
+        "Leit",
+        "Trueb",
+        "Cl_2",
+        "Fm",
+        "Fm_2"
+      ]
+    },
+    "source_manifest_sha256": "27c4d6420a5d4db6fa8972aa8d165f7ce8323b018fb3b96a2cdcd82ee94b4bde",
+    "status": "complete",
+    "target_variables": [
+      "Tp",
+      "Cl",
+      "pH",
+      "Redox",
+      "Leit",
+      "Trueb",
+      "Cl_2",
+      "Fm",
+      "Fm_2"
+    ]
+  },
+  "Genesis": {
+    "feature_fingerprint": "0dce909f1487a225bba20ab1f95daad398456b8f90be6b2b50fa57bbc7477a82",
+    "score_replay": {
+      "calibration_max_abs": 4.6706485363756656e-06,
+      "test_max_abs": 0.0030986864294391125,
+      "test_max_rel": 1.2467652690233888e-07,
+      "validation_max_abs": 7.923777957330458e-06
+    },
+    "scoring_seconds": 3.532919424999818,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "cbc812eabd653e945f37c2005316654ce836d26138e6d091565296348bc62e88",
+      "input_length": 16220,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          3281,
+          3604
+        ],
+        "train": [
+          0,
+          2577
+        ],
+        "validation": [
+          2768,
+          3090
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            3281,
+            3604
+          ]
+        ],
+        "train": [
+          [
+            0,
+            2577
+          ]
+        ],
+        "validation": [
+          [
+            2768,
+            3090
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          16220
+        ]
+      ],
+      "seq_len": 192,
+      "task_name": "Genesis.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1,
+        "fit_range": [
+          0,
+          2577
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 12425,
+      "test_endpoints_sha256": "2f8d6c5b72ddc74c22b87963ae5921d819e6be80dbd017ddf9877fac955af615",
+      "test_segments": [
+        [
+          3604,
+          16220
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "35b03ab6a1ec09a1845fad934e57a6e72997b9bd5851d1b769a1b267b79452bb"
+      },
+      "train_length": 3604,
+      "variable_names": [
+        "MotorData.ActCurrent",
+        "MotorData.ActPosition",
+        "MotorData.ActSpeed",
+        "MotorData.IsAcceleration",
+        "MotorData.IsForce",
+        "MotorData.Motor_Pos1reached",
+        "MotorData.Motor_Pos2reached",
+        "MotorData.Motor_Pos3reached",
+        "MotorData.Motor_Pos4reached",
+        "NVL_Recv_Ind.GL_Metall",
+        "NVL_Recv_Ind.GL_NonMetall",
+        "NVL_Recv_Storage.GL_I_ProcessStarted",
+        "NVL_Recv_Storage.GL_I_Slider_IN",
+        "NVL_Recv_Storage.GL_I_Slider_OUT",
+        "NVL_Recv_Storage.GL_LightBarrier",
+        "NVL_Send_Storage.ActivateStorage",
+        "PLC_PRG.Gripper",
+        "PLC_PRG.MaterialIsMetal"
+      ]
+    },
+    "source_manifest_sha256": "d9c790772ba682c7d298e626da9744e01591429da03fa51d130b34313d2bc020",
+    "status": "complete",
+    "target_variables": [
+      "MotorData.ActCurrent",
+      "MotorData.ActPosition",
+      "MotorData.ActSpeed",
+      "MotorData.IsAcceleration",
+      "MotorData.IsForce",
+      "MotorData.Motor_Pos1reached",
+      "MotorData.Motor_Pos2reached",
+      "MotorData.Motor_Pos3reached",
+      "MotorData.Motor_Pos4reached",
+      "NVL_Recv_Ind.GL_Metall",
+      "NVL_Recv_Ind.GL_NonMetall",
+      "NVL_Recv_Storage.GL_I_ProcessStarted",
+      "NVL_Recv_Storage.GL_I_Slider_IN",
+      "NVL_Recv_Storage.GL_I_Slider_OUT",
+      "NVL_Recv_Storage.GL_LightBarrier",
+      "NVL_Send_Storage.ActivateStorage",
+      "PLC_PRG.Gripper",
+      "PLC_PRG.MaterialIsMetal"
+    ]
+  },
+  "MSL": {
+    "boundary_sensitivity": {
+      "common_points": 68572,
+      "excluded_points": 4966,
+      "interpretation": "test-only sensitivity analysis; frozen encoder and head were trained on concatenated axis",
+      "methods": {
+        "CATCH-common": {
+          "affiliation_defined_segments": 20,
+          "affiliation_f_valid_segment_macro": 0.6407911115250156,
+          "affiliation_total_segments": 27,
+          "average_precision": 0.20077120915960145,
+          "boundary_rule": "192-row windows confined to official per-channel test sequence",
+          "dataset": "MSL",
+          "excluded_cross_sequence_or_cold_start": 4966,
+          "f1": 0.10792904466766405,
+          "fn": 7261,
+          "fp": 1087,
+          "fpr": 0.017876525342893794,
+          "method": "CATCH-common",
+          "points_after": 68572,
+          "points_before": 73538,
+          "precision": 0.31721105527638194,
+          "recall": 0.06502704094772084,
+          "recall_at_fpr": {
+            "0.001": 0.021890291012104043,
+            "0.005": 0.040818954416688126,
+            "0.01": 0.05240793201133145,
+            "0.05": 0.10661859387071852
+          },
+          "roc_auc": 0.668308074960987,
+          "threshold_source": "method's saved independent calibration threshold",
+          "tn": 59719,
+          "tp": 505
+        },
+        "IsolationForest": {
+          "affiliation_defined_segments": 10,
+          "affiliation_f_valid_segment_macro": 0.8207496305680209,
+          "affiliation_total_segments": 27,
+          "average_precision": 0.15358194253179888,
+          "boundary_rule": "192-row windows confined to official per-channel test sequence",
+          "dataset": "MSL",
+          "excluded_cross_sequence_or_cold_start": 4966,
+          "f1": 0.014739517153748412,
+          "fn": 7708,
+          "fp": 46,
+          "fpr": 0.0007565042923395718,
+          "method": "IsolationForest",
+          "points_after": 68572,
+          "points_before": 73538,
+          "precision": 0.5576923076923077,
+          "recall": 0.007468452227659027,
+          "recall_at_fpr": {
+            "0.001": 0.007468452227659027,
+            "0.005": 0.01390677311357198,
+            "0.01": 0.019958794746330156,
+            "0.05": 0.08575843420036054
+          },
+          "roc_auc": 0.6073837000968931,
+          "threshold_source": "method's saved independent calibration threshold",
+          "tn": 60760,
+          "tp": 58
+        },
+        "MNRF-Full": {
+          "affiliation_defined_segments": 18,
+          "affiliation_f_valid_segment_macro": 0.6299594816576283,
+          "affiliation_total_segments": 27,
+          "average_precision": 0.17146332979761206,
+          "boundary_rule": "192-row windows confined to official per-channel test sequence",
+          "dataset": "MSL",
+          "excluded_cross_sequence_or_cold_start": 4966,
+          "f1": 0.12355053873781426,
+          "fn": 7164,
+          "fp": 1377,
+          "fpr": 0.022645791533730225,
+          "method": "MNRF-Full",
+          "points_after": 68572,
+          "points_before": 73538,
+          "precision": 0.3041940373926225,
+          "recall": 0.07751738346639196,
+          "recall_at_fpr": {
+            "0.001": 0.011588977594643318,
+            "0.005": 0.02240535668297708,
+            "0.01": 0.03708472830285862,
+            "0.05": 0.1022405356682977
+          },
+          "roc_auc": 0.6112221764817132,
+          "threshold_source": "method's saved independent calibration threshold",
+          "tn": 59429,
+          "tp": 602
+        },
+        "PCA": {
+          "affiliation_defined_segments": 27,
+          "affiliation_f_valid_segment_macro": 0.7154300727746892,
+          "affiliation_total_segments": 27,
+          "average_precision": 0.15412826514553246,
+          "boundary_rule": "192-row windows confined to official per-channel test sequence",
+          "dataset": "MSL",
+          "excluded_cross_sequence_or_cold_start": 4966,
+          "f1": 0.1591098327151616,
+          "fn": 6715,
+          "fp": 4394,
+          "fpr": 0.07226260566391475,
+          "method": "PCA",
+          "points_after": 68572,
+          "points_before": 73538,
+          "precision": 0.19302112029384758,
+          "recall": 0.1353335050218903,
+          "recall_at_fpr": {
+            "0.001": 0.028586144733453514,
+            "0.005": 0.02910121040432655,
+            "0.01": 0.04352304918877157,
+            "0.05": 0.09425701776976564
+          },
+          "roc_auc": 0.5093020935548356,
+          "threshold_source": "method's saved independent calibration threshold",
+          "tn": 56412,
+          "tp": 1051
+        }
+      },
+      "status": "complete"
+    },
+    "feature_fingerprint": "37d9f7178e98ec7d02ddd650d4b15164a6b0e142176ac443f1ccfa803e198bb5",
+    "score_replay": {
+      "calibration_max_abs": 0.05706619285047054,
+      "test_max_abs": 26382154816.0,
+      "test_max_rel": 1.2429160186476608e-07,
+      "validation_max_abs": 1.1979395896196365
+    },
+    "scoring_seconds": 68.92996044499978,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "5fe9f96f80e632f01640f3a59f65e295ec300e084b6700d571120a22b9074a5a",
+      "input_length": 132046,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          52523,
+          58317
+        ],
+        "train": [
+          0,
+          46348
+        ],
+        "validation": [
+          46539,
+          52332
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            52523,
+            58317
+          ]
+        ],
+        "train": [
+          [
+            0,
+            46348
+          ]
+        ],
+        "validation": [
+          [
+            46539,
+            52332
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          132046
+        ]
+      ],
+      "seq_len": 192,
+      "task_name": "MSL.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1,
+        "fit_range": [
+          0,
+          46348
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 73538,
+      "test_endpoints_sha256": "1149356eeab9753ff2c4a396ebbb8b74f9f5d53ef88254b2d4223fa304663ac2",
+      "test_segments": [
+        [
+          58317,
+          132046
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "c1370d4795286d0dd668909b525c489449cb2bb1685ac007777e5447627c3ba9"
+      },
+      "train_length": 58317,
+      "variable_names": [
+        "col_0",
+        "col_1",
+        "col_2",
+        "col_3",
+        "col_4",
+        "col_5",
+        "col_6",
+        "col_7",
+        "col_8",
+        "col_9",
+        "col_10",
+        "col_11",
+        "col_12",
+        "col_13",
+        "col_14",
+        "col_15",
+        "col_16",
+        "col_17",
+        "col_18",
+        "col_19",
+        "col_20",
+        "col_21",
+        "col_22",
+        "col_23",
+        "col_24",
+        "col_25",
+        "col_26",
+        "col_27",
+        "col_28",
+        "col_29",
+        "col_30",
+        "col_31",
+        "col_32",
+        "col_33",
+        "col_34",
+        "col_35",
+        "col_36",
+        "col_37",
+        "col_38",
+        "col_39",
+        "col_40",
+        "col_41",
+        "col_42",
+        "col_43",
+        "col_44",
+        "col_45",
+        "col_46",
+        "col_47",
+        "col_48",
+        "col_49",
+        "col_50",
+        "col_51",
+        "col_52",
+        "col_53",
+        "col_54"
+      ]
+    },
+    "source_manifest_sha256": "d795da020c87441205a2dac31dbd8867ddd2133496c980caffc9a7320d479f3b",
+    "status": "complete",
+    "target_variables": [
+      "col_0",
+      "col_1",
+      "col_2",
+      "col_3",
+      "col_4",
+      "col_5",
+      "col_6",
+      "col_7",
+      "col_8",
+      "col_9",
+      "col_10",
+      "col_11",
+      "col_12",
+      "col_13",
+      "col_14",
+      "col_15",
+      "col_16",
+      "col_17",
+      "col_18",
+      "col_19",
+      "col_20",
+      "col_21",
+      "col_22",
+      "col_23",
+      "col_24",
+      "col_25",
+      "col_26",
+      "col_27",
+      "col_28",
+      "col_29",
+      "col_30",
+      "col_31",
+      "col_32",
+      "col_33",
+      "col_34",
+      "col_35",
+      "col_36",
+      "col_37",
+      "col_38",
+      "col_39",
+      "col_40",
+      "col_41",
+      "col_42",
+      "col_43",
+      "col_44",
+      "col_45",
+      "col_46",
+      "col_47",
+      "col_48",
+      "col_49",
+      "col_50",
+      "col_51",
+      "col_52",
+      "col_53",
+      "col_54"
+    ],
+    "test_sequence_evidence": {
+      "label_axis_match": "previously established and rechecked by exact source/test label identity",
+      "sequences": [
+        {
+          "anomaly_points": 312,
+          "channel_id": "C-1",
+          "test_global_start": 58317,
+          "test_global_stop": 60581,
+          "test_length": 2264,
+          "test_local_start": 0,
+          "test_local_stop": 2264,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 137,
+          "channel_id": "C-2",
+          "test_global_start": 60581,
+          "test_global_stop": 62632,
+          "test_length": 2051,
+          "test_local_start": 2264,
+          "test_local_stop": 4315,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 222,
+          "channel_id": "D-14",
+          "test_global_start": 62632,
+          "test_global_stop": 65257,
+          "test_length": 2625,
+          "test_local_start": 4315,
+          "test_local_stop": 6940,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 641,
+          "channel_id": "D-15",
+          "test_global_start": 65257,
+          "test_global_stop": 67415,
+          "test_length": 2158,
+          "test_local_start": 6940,
+          "test_local_stop": 9098,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 651,
+          "channel_id": "D-16",
+          "test_global_start": 67415,
+          "test_global_stop": 69606,
+          "test_length": 2191,
+          "test_local_start": 9098,
+          "test_local_stop": 11289,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 71,
+          "channel_id": "F-4",
+          "test_global_start": 69606,
+          "test_global_stop": 73028,
+          "test_length": 3422,
+          "test_local_start": 11289,
+          "test_local_stop": 14711,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 151,
+          "channel_id": "F-5",
+          "test_global_start": 73028,
+          "test_global_stop": 76950,
+          "test_length": 3922,
+          "test_local_start": 14711,
+          "test_local_stop": 18633,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 423,
+          "channel_id": "F-7",
+          "test_global_start": 76950,
+          "test_global_stop": 82004,
+          "test_length": 5054,
+          "test_local_start": 18633,
+          "test_local_stop": 23687,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 537,
+          "channel_id": "F-8",
+          "test_global_start": 82004,
+          "test_global_stop": 84491,
+          "test_length": 2487,
+          "test_local_start": 23687,
+          "test_local_stop": 26174,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 1141,
+          "channel_id": "M-1",
+          "test_global_start": 84491,
+          "test_global_stop": 86768,
+          "test_length": 2277,
+          "test_local_start": 26174,
+          "test_local_stop": 28451,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 1141,
+          "channel_id": "M-2",
+          "test_global_start": 86768,
+          "test_global_stop": 89045,
+          "test_length": 2277,
+          "test_local_start": 28451,
+          "test_local_stop": 30728,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 251,
+          "channel_id": "M-3",
+          "test_global_start": 89045,
+          "test_global_stop": 91172,
+          "test_length": 2127,
+          "test_local_start": 30728,
+          "test_local_stop": 32855,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 251,
+          "channel_id": "M-4",
+          "test_global_start": 91172,
+          "test_global_stop": 93210,
+          "test_length": 2038,
+          "test_local_start": 32855,
+          "test_local_stop": 34893,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 301,
+          "channel_id": "M-5",
+          "test_global_start": 93210,
+          "test_global_stop": 95513,
+          "test_length": 2303,
+          "test_local_start": 34893,
+          "test_local_stop": 37196,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 181,
+          "channel_id": "M-6",
+          "test_global_start": 95513,
+          "test_global_stop": 97562,
+          "test_length": 2049,
+          "test_local_start": 37196,
+          "test_local_stop": 39245,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 101,
+          "channel_id": "M-7",
+          "test_global_start": 97562,
+          "test_global_stop": 99718,
+          "test_length": 2156,
+          "test_local_start": 39245,
+          "test_local_stop": 41401,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 131,
+          "channel_id": "P-10",
+          "test_global_start": 99718,
+          "test_global_stop": 105818,
+          "test_length": 6100,
+          "test_local_start": 41401,
+          "test_local_stop": 47501,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 228,
+          "channel_id": "P-11",
+          "test_global_start": 105818,
+          "test_global_stop": 109353,
+          "test_length": 3535,
+          "test_local_start": 47501,
+          "test_local_stop": 51036,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 181,
+          "channel_id": "P-14",
+          "test_global_start": 109353,
+          "test_global_stop": 115453,
+          "test_length": 6100,
+          "test_local_start": 51036,
+          "test_local_stop": 57136,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 21,
+          "channel_id": "P-15",
+          "test_global_start": 115453,
+          "test_global_stop": 118309,
+          "test_length": 2856,
+          "test_local_start": 57136,
+          "test_local_stop": 59992,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 11,
+          "channel_id": "S-2",
+          "test_global_start": 118309,
+          "test_global_stop": 120136,
+          "test_length": 1827,
+          "test_local_start": 59992,
+          "test_local_stop": 61819,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 121,
+          "channel_id": "T-12",
+          "test_global_start": 120136,
+          "test_global_stop": 122566,
+          "test_length": 2430,
+          "test_local_start": 61819,
+          "test_local_stop": 64249,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 252,
+          "channel_id": "T-13",
+          "test_global_start": 122566,
+          "test_global_stop": 124996,
+          "test_length": 2430,
+          "test_local_start": 64249,
+          "test_local_stop": 66679,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 69,
+          "channel_id": "T-4",
+          "test_global_start": 124996,
+          "test_global_stop": 127213,
+          "test_length": 2217,
+          "test_local_start": 66679,
+          "test_local_stop": 68896,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 26,
+          "channel_id": "T-5",
+          "test_global_start": 127213,
+          "test_global_stop": 129431,
+          "test_length": 2218,
+          "test_local_start": 68896,
+          "test_local_stop": 71114,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 102,
+          "channel_id": "T-8",
+          "test_global_start": 129431,
+          "test_global_stop": 130950,
+          "test_length": 1519,
+          "test_local_start": 71114,
+          "test_local_stop": 72633,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        },
+        {
+          "anomaly_points": 112,
+          "channel_id": "T-9",
+          "test_global_start": 130950,
+          "test_global_stop": 132046,
+          "test_length": 1096,
+          "test_local_start": 72633,
+          "test_local_stop": 73729,
+          "train_length": null,
+          "train_mapping_status": "not recoverable from labels file; original per-channel train arrays absent locally"
+        }
+      ],
+      "sha256": "057ce2d6c8875982bf4e5404aefea14efdcbce413d80826d2b737c95b59b7539",
+      "sort": "channel id lexical",
+      "test_length_sum": 73729,
+      "test_sequences": 27,
+      "train_side": "per-channel train lengths unavailable; global train_length=58,317 is verified, channel-wise mapping unknown",
+      "url": "https://raw.githubusercontent.com/khundman/telemanom/master/labeled_anomalies.csv"
+    }
+  },
+  "NYC": {
+    "feature_fingerprint": "c2e8c1fcfdd958d297ab9819f7b715013f48abab87c199d12b965159ad35c9f3",
+    "score_replay": {
+      "calibration_max_abs": 3.3525832776604148e-06,
+      "test_max_abs": 3.6765845834452193e-06,
+      "test_max_rel": 1.1108990772419568e-07,
+      "validation_max_abs": 3.3536038799297785e-06
+    },
+    "scoring_seconds": 0.31289980200017453,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "f1f036249a8ac221780af1e677aaa4ca116db78bb8b27cd1b14656e928a1cccf",
+      "input_length": 17520,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          11831,
+          13104
+        ],
+        "train": [
+          0,
+          10177
+        ],
+        "validation": [
+          10368,
+          11640
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            11831,
+            13104
+          ]
+        ],
+        "train": [
+          [
+            0,
+            10177
+          ]
+        ],
+        "validation": [
+          [
+            10368,
+            11640
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          17520
+        ]
+      ],
+      "seq_len": 192,
+      "task_name": "NYC.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1,
+        "fit_range": [
+          0,
+          10177
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 4225,
+      "test_endpoints_sha256": "1d0140dc22aed4e5829f0794ac9443495573d420b324a0b7298ffa793d76261e",
+      "test_segments": [
+        [
+          13104,
+          17520
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "15f2f9583870525bbbbb509b787165a74f54f06eb0b69faf0cbc296ed5e29038"
+      },
+      "train_length": 13104,
+      "variable_names": [
+        "channnel1",
+        "channnel2",
+        "channnel3"
+      ]
+    },
+    "source_manifest_sha256": "06eebc2845264ec1cca3255d7f6b8e3958b2380291aca3773ff1895a23f87e09",
+    "status": "complete",
+    "target_variables": [
+      "channnel1"
+    ],
+    "upstream_row_time": {
+      "local_column_matches": {
+        "channnel1": "passenger_count",
+        "channnel2": "timeofday",
+        "channnel3": "dayofweek"
+      },
+      "match": "exact all rows",
+      "rows": 17520,
+      "sha256": "092d957f5bb0d2cd62f85098ed2268114a47b4738a5f4b29ea6be4be7349fc4d",
+      "url": "https://raw.githubusercontent.com/chickenbestlover/Online-Recurrent-Extreme-Learning-Machine/master/data/nyc_taxi.csv"
+    }
+  },
+  "PSM": {
+    "feature_fingerprint": "13e2ad46057f0d38cfc6031c5276fb375533ce5ab724817257bc7610bc0c3063",
+    "score_replay": {
+      "calibration_max_abs": 0.00016787382492111647,
+      "test_max_abs": 0.0034407700004521757,
+      "test_max_rel": 1.2961333270956363e-07,
+      "validation_max_abs": 0.00021099234072607942
+    },
+    "scoring_seconds": 42.02759659599997,
+    "source_identity": {
+      "boundary_columns": [],
+      "boundary_values_sha256": null,
+      "data_source": "large_detect",
+      "feature_data_sha256": "37bdb5839f655c938fec3384b8e1f8e76da34b2f07e5888b1f4879390bee4407",
+      "input_length": 220322,
+      "layout": {
+        "F": 25,
+        "dimensions": {
+          "E": 8,
+          "P": 8,
+          "R": 8,
+          "S": 1
+        },
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "slices": {
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ],
+          "S": [
+            0,
+            1
+          ]
+        }
+      },
+      "pattern_len": 32,
+      "ranges": {
+        "calibration": [
+          119270,
+          132481
+        ],
+        "train": [
+          0,
+          105679
+        ],
+        "validation": [
+          105870,
+          119079
+        ]
+      },
+      "schema": "mnrf-view-probe-source-identity-v2",
+      "segment_ranges": {
+        "calibration": [
+          [
+            119270,
+            132481
+          ]
+        ],
+        "train": [
+          [
+            0,
+            105679
+          ]
+        ],
+        "validation": [
+          [
+            105870,
+            119079
+          ]
+        ]
+      },
+      "segments": [
+        [
+          0,
+          220322
+        ]
+      ],
+      "seq_len": 192,
+      "task_name": "PSM.csv",
+      "temporal_rule": {
+        "entity_boundary_columns": [],
+        "expected_interval_ns": 1,
+        "fit_range": [
+          0,
+          105679
+        ],
+        "time_kind": "timestamp_naive_ns",
+        "tolerance": 0.05,
+        "version": "train-frozen-cadence-v1"
+      },
+      "test_endpoints_count": 87650,
+      "test_endpoints_sha256": "9f5600c48142c568d2bd7b0772b64304c5ec06e1ffedd5dbcd8c826ea113cb9f",
+      "test_segments": [
+        [
+          132481,
+          220322
+        ]
+      ],
+      "time_index": {
+        "kind": "timestamp_naive_ns",
+        "source_timezone": null,
+        "values_sha256": "b894a9b86b1c8ab7039d21ea48699a434b8e28c16fcfddec6c5b07511ba59ecc"
+      },
+      "train_length": 132481,
+      "variable_names": [
+        "feature_0",
+        "feature_1",
+        "feature_2",
+        "feature_3",
+        "feature_4",
+        "feature_5",
+        "feature_6",
+        "feature_7",
+        "feature_8",
+        "feature_9",
+        "feature_10",
+        "feature_11",
+        "feature_12",
+        "feature_13",
+        "feature_14",
+        "feature_15",
+        "feature_16",
+        "feature_17",
+        "feature_18",
+        "feature_19",
+        "feature_20",
+        "feature_21",
+        "feature_22",
+        "feature_23",
+        "feature_24"
+      ]
+    },
+    "source_manifest_sha256": "9bb6b1c45bc3ee4c8710e7d36fecbacf1d5d706094c296178862652f15884cb1",
+    "status": "complete",
+    "target_variables": [
+      "feature_0",
+      "feature_1",
+      "feature_2",
+      "feature_3",
+      "feature_4",
+      "feature_5",
+      "feature_6",
+      "feature_7",
+      "feature_8",
+      "feature_9",
+      "feature_10",
+      "feature_11",
+      "feature_12",
+      "feature_13",
+      "feature_14",
+      "feature_15",
+      "feature_16",
+      "feature_17",
+      "feature_18",
+      "feature_19",
+      "feature_20",
+      "feature_21",
+      "feature_22",
+      "feature_23",
+      "feature_24"
+    ]
+  }
+}

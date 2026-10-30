@@ -1,0 +1,214 @@
+dataset,name,index,dtype,min,max,unique_count_full_axis,constant_full_axis,duplicate_of,responsibility,evidence
+PSM,feature_0,0,float64,0.4864898079147307,1.0,220269,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_1,1,float64,0.3874150248626241,1.0,220262,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_2,2,float64,0.4214841683123811,1.0,219273,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_3,3,float64,0.3311630899790935,1.0,220288,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_4,4,float64,0.0,1.0,1891,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_5,5,float64,0.0,1.0,1837,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_6,6,float64,0.0,1.0,329,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_7,7,float64,0.0,1.0,1601,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_8,8,float64,0.0,1.0,101131,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_9,9,float64,0.0397263283432194,1.0,110275,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_10,10,float64,0.0,1.0,187349,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_11,11,float64,0.0554131401339732,1.0,96842,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_12,12,float64,0.1179975665966577,1.0,220224,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_13,13,float64,0.0,1.0,219893,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_14,14,float64,0.0,1.0,219876,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_15,15,float64,0.1261497579038777,1.0,220268,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_16,16,float64,0.0777983217181055,1.0,3531,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_17,17,float64,0.3935330241884947,1.0,2967,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_18,18,float64,0.0,1.0,58452,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_19,19,float64,0.4242424242424242,1.0,2487,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_20,20,float64,0.0,1.0,113,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_21,21,float64,0.0,1.0,67,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_22,22,float64,0.0,1.0,25101,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_23,23,float64,0.0,1.0,324,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+PSM,feature_24,24,float64,0.0,1.0,146,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+MSL,col_0,0,float64,-1.47721668720188,258.1081081081054,35103,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_1,1,float64,0.0,0.0,1,True,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_2,2,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_3,3,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_4,4,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_5,5,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_6,6,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_7,7,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_8,8,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_9,9,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_10,10,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_11,11,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_12,12,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_13,13,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_14,14,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_15,15,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_16,16,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_17,17,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_18,18,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_19,19,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_20,20,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_21,21,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_22,22,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_23,23,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_24,24,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_25,25,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_26,26,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_27,27,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_28,28,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_29,29,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_30,30,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_31,31,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_32,32,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_33,33,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_34,34,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_35,35,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_36,36,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_37,37,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_38,38,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_39,39,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_40,40,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_41,41,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_42,42,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_43,43,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_44,44,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_45,45,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_46,46,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_47,47,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_48,48,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_49,49,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_50,50,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_51,51,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_52,52,float64,0.0,0.0,1,True,col_1,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_53,53,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+MSL,col_54,54,float64,0.0,1.0,2,False,,observation_preserved_mapping_unknown,"local conversion renamed variables col_N; upstream defines channel value plus command context, but per-column mapping/raw arrays are unavailable locally"
+GECCO,Tp,0,float64,0.0,11.8,49,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,Cl,1,float64,0.0,0.8,104,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,pH,2,float64,4.0,8.936227628,285,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,Redox,3,float64,300.0,895.0,274,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,Leit,4,float64,0.0,646.0,60,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,Trueb,5,float64,0.0,0.254,141,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,Cl_2,6,float64,0.0,0.462,206,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,Fm,7,float64,0.0,3923.0,1106,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+GECCO,Fm_2,8,float64,0.0,2592.0,863,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.ActCurrent,0,float64,-1181.0,1181.0,2010,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.ActPosition,1,float64,22011.0,389992.0,4074,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.ActSpeed,2,float64,-422617.0,110954.0,2407,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.IsAcceleration,3,float64,-3045.0,6090.0,21,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.IsForce,4,float64,-256.0,260.0,512,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.Motor_Pos1reached,5,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.Motor_Pos2reached,6,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.Motor_Pos3reached,7,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,MotorData.Motor_Pos4reached,8,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,NVL_Recv_Ind.GL_Metall,9,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,NVL_Recv_Ind.GL_NonMetall,10,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,NVL_Recv_Storage.GL_I_ProcessStarted,11,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,NVL_Recv_Storage.GL_I_Slider_IN,12,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,NVL_Recv_Storage.GL_I_Slider_OUT,13,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,NVL_Recv_Storage.GL_LightBarrier,14,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,NVL_Send_Storage.ActivateStorage,15,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,PLC_PRG.Gripper,16,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Genesis,PLC_PRG.MaterialIsMetal,17,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+NYC,channnel1,0,float64,8.0,39197.0,11790,False,,target_observation,exact match to upstream passenger_count
+NYC,channnel2,1,float64,0.0,1410.0,48,False,,exogenous_condition,exact match to upstream timeofday
+NYC,channnel3,2,float64,0.0,6.0,7,False,,exogenous_condition,exact match to upstream dayofweek
+CalIt2,9,0,int64,0.0,9.0,10,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CalIt2,7,1,int64,0.0,9.0,10,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V1,0,float64,-56.40750963,2.454929991,275653,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V2,1,float64,-72.71572756,22.05772899,275655,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V3,2,float64,-48.32558936,9.382558433,275657,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V4,3,float64,-5.683171198,16.87534403,275654,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V5,4,float64,-113.7433067,34.80166588,275657,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V6,5,float64,-26.16050594,73.30162555,275652,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V7,6,float64,-43.55724157,120.5894939,275651,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V8,7,float64,-73.21671846,20.00720837,275643,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V9,8,float64,-13.43406632,15.59499461,275656,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V10,9,float64,-24.58826244,23.74513612,275646,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V11,10,float64,-4.797473465,12.01891318,275648,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V12,11,float64,-18.68371463,7.848392076,275654,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V13,12,float64,-5.791881206,7.126882959,275657,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V14,13,float64,-19.21432549,10.52676605,275653,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V15,14,float64,-4.498944677,8.877741598,275653,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V16,15,float64,-14.12985452,17.31511152,275645,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V17,16,float64,-25.16279937,9.25352625,275646,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V18,17,float64,-9.498745921,5.041069185,275655,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V19,18,float64,-7.21352743,5.591971427,275645,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V20,19,float64,-54.49772049,39.42090425,275632,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V21,20,float64,-34.83038214,27.20283916,275617,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V22,21,float64,-10.9331437,10.50309009,275644,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V23,22,float64,-44.8077352,22.52841169,275611,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V24,23,float64,-2.836626919,4.584549137,275645,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V25,24,float64,-10.29539707,7.519588679,275640,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V26,25,float64,-2.604550553,3.517345612,275647,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V27,26,float64,-22.56567932,31.61219811,275597,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,V28,27,float64,-15.43008391,33.84780782,275558,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+Creditcard,Amount,28,float64,0.0,25691.16,32767,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Total Length of Bwd Packets,0,float64,0.0,627000000.0,13285,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd Packet Length Min,1,float64,0.0,1729.0,162,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd Packet Length Mean,2,float64,0.0,4183.057143,15505,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd Packet Length Std,3,float64,0.0,5463.49385,23334,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd Packet Length Max,4,float64,0.0,13140.0,2897,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd Packet Length Min,5,float64,0.0,1460.0,383,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd Packet Length Mean,6,float64,0.0,3494.917198,19796,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd Packet Length Std,7,float64,0.0,3433.501973,23608,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Flow Bytes/s,8,float64,-261000000.0,2070000000.0,112494,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Flow Packets/s,9,float64,-2000000.0,3000000.0,90875,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Flow IAT Mean,10,float64,-1.0,120000000.0,89207,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Flow IAT Std,11,float64,0.0,84800000.0,75945,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Flow IAT Max,12,float64,-1.0,120000000.0,61427,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Flow IAT Min,13,float64,-12.0,120000000.0,23633,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd IAT Total,14,float64,0.0,120000000.0,35618,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd IAT Mean,15,float64,0.0,120000000.0,56266,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd IAT Std,16,float64,0.0,83200000.0,50016,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd IAT Max,17,float64,0.0,120000000.0,36225,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd IAT Min,18,float64,0.0,120000000.0,13467,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd IAT Total,19,float64,0.0,120000000.0,19624,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd IAT Mean,20,float64,0.0,120000000.0,38883,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd IAT Std,21,float64,0.0,83300000.0,35539,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd IAT Max,22,float64,0.0,120000000.0,19979,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd IAT Min,23,float64,0.0,120000000.0,6656,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd PSH Flags,24,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd PSH Flags,25,float64,0.0,0.0,1,True,,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Fwd URG Flags,26,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Bwd URG Flags,27,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Fwd Header Length,28,float64,0.0,4173072.0,1118,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd Header Length,29,float64,0.0,5413720.0,1184,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd Packets/s,30,float64,0.0,3000000.0,90106,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Bwd Packets/s,31,float64,0.0,2000000.0,84059,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Min Packet Length,32,float64,0.0,1359.0,139,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Max Packet Length,33,float64,0.0,23360.0,3401,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Packet Length Mean,34,float64,0.0,2155.52381,25653,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Packet Length Std,35,float64,0.0,3796.583764,31057,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Packet Length Variance,36,float64,0.0,14400000.0,31057,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,FIN Flag Count,37,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,SYN Flag Count,38,float64,0.0,1.0,2,False,Fwd PSH Flags,duplicate_observed_field,exact duplicate over full loaded axis; retained in scoring
+CICIDS,RST Flag Count,39,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,PSH Flag Count,40,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,ACK Flag Count,41,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,URG Flag Count,42,float64,0.0,1.0,2,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,CWE Flag Count,43,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,ECE Flag Count,44,float64,0.0,1.0,2,False,RST Flag Count,duplicate_observed_field,exact duplicate over full loaded axis; retained in scoring
+CICIDS,Down/Up Ratio,45,float64,0.0,10.0,8,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Average Packet Size,46,float64,0.0,2784.0,25005,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Avg Fwd Segment Size,47,float64,0.0,4183.057143,15505,False,Fwd Packet Length Mean,duplicate_observed_field,exact duplicate over full loaded axis; retained in scoring
+CICIDS,Avg Bwd Segment Size,48,float64,0.0,3494.917198,19796,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Fwd Header Length.1,49,float64,0.0,4173072.0,1118,False,Fwd Header Length,duplicate_observed_field,exact duplicate over full loaded axis; retained in scoring
+CICIDS,Fwd Avg Bytes/Bulk,50,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Fwd Avg Packets/Bulk,51,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Fwd Avg Bulk Rate,52,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Bwd Avg Bytes/Bulk,53,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Bwd Avg Packets/Bulk,54,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Bwd Avg Bulk Rate,55,float64,0.0,0.0,1,True,Bwd PSH Flags,constant_observed_field,full loaded axis exact cardinality=1; retained in scoring
+CICIDS,Subflow Fwd Packets,56,float64,1.0,200755.0,488,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Subflow Fwd Bytes,57,float64,0.0,1197199.0,5763,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Subflow Bwd Packets,58,float64,0.0,270686.0,576,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Subflow Bwd Bytes,59,float64,0.0,627040569.0,13286,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Init_Win_bytes_forward,60,float64,-1.0,65535.0,3229,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Init_Win_bytes_backward,61,float64,-1.0,65535.0,3524,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,act_data_pkt_fwd,62,float64,0.0,192491.0,398,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,min_seg_size_forward,63,float64,0.0,60.0,12,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Active Mean,64,float64,0.0,103000000.0,27180,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Active Std,65,float64,0.0,63700000.0,17600,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Active Max,66,float64,0.0,103000000.0,26814,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Active Min,67,float64,0.0,103000000.0,19777,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Idle Mean,68,float64,0.0,120000000.0,13576,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Idle Std,69,float64,0.0,72600000.0,17388,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Idle Max,70,float64,0.0,120000000.0,6909,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found
+CICIDS,Idle Min,71,float64,0.0,120000000.0,16304,False,,observation_preserved_unknown,benchmark input field; no field-level exogenous-role evidence found

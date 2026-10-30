@@ -1,10 +1,14 @@
 import numpy as np
+import hashlib
+import json
 from sklearn.mixture import GaussianMixture
 from sklearn.mixture._gaussian_mixture import _estimate_gaussian_parameters
 
 from ts_benchmark.baselines.mnrf_view_probe.config import ViewProbeConfig
 from ts_benchmark.baselines.mnrf_view_probe.probe import (
     _gmm_fit_values, _gmm_numeric_config, _gmm_score_values,
+    GMM_PROGRESS_IDENTITY_VERSION,
+    _legacy_gmm_progress_matches,
     _runtime_free_config, _validate_gmm_numeric_state,
 )
 
@@ -49,6 +53,51 @@ def test_gmm_compute_dtype_is_part_of_resume_identity_and_legacy_defaults_to_flo
     assert _runtime_free_config(legacy) == _runtime_free_config(old)
     assert _gmm_numeric_config(legacy) == _gmm_numeric_config(old)
     assert _gmm_numeric_config(old) != _gmm_numeric_config(precise)
+
+
+def test_historical_v2_gmm_progress_without_compute_dtype_reuses_only_as_float32():
+    # This mirrors the real saved v2 envelope: identity_version/version are 2,
+    # while the projected numerical config predates gmm_compute_dtype.
+    historical_config = ViewProbeConfig().to_dict()
+    historical_config.pop("gmm_compute_dtype")
+    historical_projection = _gmm_numeric_config(historical_config)
+    historical_projection.pop("gmm_compute_dtype")
+    payload = {
+        "version": GMM_PROGRESS_IDENTITY_VERSION,
+        "config": historical_projection,
+        "sample_hash": "sample-sha256",
+        "statistics_hash": "statistics-sha256",
+        "noise_hash": "noise-sha256",
+        "cache_hashes": {"train": "train-sha256"},
+        "endpoint_hashes": {"train": "endpoint-sha256"},
+        "selected_indices": list(ViewProbeConfig().selected_indices),
+        "source": None,
+    }
+    identity = hashlib.sha256(json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), default=str
+    ).encode()).hexdigest()
+    arguments = (identity, historical_config, ViewProbeConfig(),
+                 "sample-sha256", "statistics-sha256", "noise-sha256",
+                 {"train": "train-sha256"}, {"train": "endpoint-sha256"},
+                 ViewProbeConfig().selected_indices, None,
+                 GMM_PROGRESS_IDENTITY_VERSION)
+    assert _legacy_gmm_progress_matches(*arguments)
+
+    float64_request = ViewProbeConfig(gmm_compute_dtype="float64")
+    assert not _legacy_gmm_progress_matches(
+        identity, historical_config, float64_request,
+        "sample-sha256", "statistics-sha256", "noise-sha256",
+        {"train": "train-sha256"}, {"train": "endpoint-sha256"},
+        float64_request.selected_indices, None, GMM_PROGRESS_IDENTITY_VERSION,
+    )
+    changed_config = dict(historical_config)
+    changed_config["gmm_components"] = 5
+    assert not _legacy_gmm_progress_matches(
+        identity, changed_config, ViewProbeConfig(),
+        "sample-sha256", "statistics-sha256", "noise-sha256",
+        {"train": "train-sha256"}, {"train": "endpoint-sha256"},
+        ViewProbeConfig().selected_indices, None, GMM_PROGRESS_IDENTITY_VERSION,
+    )
 
 
 def test_gmm_boundary_widens_only_after_original_float32_normalization_and_noise():
