@@ -261,7 +261,8 @@ def _nll_artifacts(run):
             "test_nll": test_nll}
 
 
-def _verify_head(run, task, source, source_manifest, views, source_axes):
+def _verify_head(run, task, source, source_manifest, views, source_axes,
+                 expected_compute_dtype="float32"):
     checked = validate(run)
     manifest = _json(run / "probe_manifest.json")
     config = manifest.get("config", {})
@@ -279,6 +280,7 @@ def _verify_head(run, task, source, source_manifest, views, source_axes):
     source_config = source_manifest.get("config", {})
     expected_numeric = {
         "seed": 2021, "gmm_components": 4, "gmm_covariance_type": "diag",
+        "gmm_compute_dtype": expected_compute_dtype,
         "gmm_reg_covar": 0.001, "gmm_n_init": 1, "gmm_max_iter": 100,
         "gmm_fit_max_windows": 20000, "train_noise_std": source_config.get("train_noise_std"),
         "noise_seed": source_config.get("noise_seed"),
@@ -294,7 +296,8 @@ def _verify_head(run, task, source, source_manifest, views, source_axes):
     }
     if (tuple(manifest.get("selected_views", ())) != tuple(views)
             or list(manifest.get("selected_indices", [])) != _indices(views)
-            or any(config.get(key) != value for key, value in expected_numeric.items())):
+            or any(config.get(key, "float32" if key == "gmm_compute_dtype" else None) != value
+                   for key, value in expected_numeric.items())):
         raise ValueError("head configuration does not match frozen diagnostic protocol")
     data = _nll_artifacts(run)
     source_sample = source / "heads/gmm_fit_endpoints.npy"
@@ -352,13 +355,14 @@ def _indices(views):
     return [index for view in views for index in range(*widths[view])]
 
 
-def _config_for(task, source, source_manifest, views, output):
+def _config_for(task, source, source_manifest, views, output, gmm_compute_dtype="float32"):
     cfg = dict(source_manifest["config"])
     for key in ("resolved_layout", "selected_indices", "selected_dim", "resume_from", "output_dir"):
         cfg.pop(key, None)
     cfg.update({"mode": "select_gmm", "selected_views": tuple(views),
                 "source_dir": str(source), "output_dir": str(output), "device": "cpu",
                 "seed": 2021, "gmm_components": 4, "gmm_covariance_type": "diag",
+                "gmm_compute_dtype": gmm_compute_dtype,
                 "gmm_reg_covar": 0.001, "gmm_n_init": 1, "gmm_max_iter": 100,
                 "gmm_fit_max_windows": 20000, "cpu_threads": 1,
                 "artifact_policy": "full", "task_name": task + ".csv"})

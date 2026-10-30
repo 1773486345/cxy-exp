@@ -134,6 +134,39 @@ def _diagnostic_output_paths(reuse_batch, timestamp=None, pid=None):
     return analysis_parent / name, score_parent / name, False
 
 
+def _select_existing_diag_head(old_path, current_path, reuse_only):
+    """Prefer a verified external source-bound head; never fit in reuse mode."""
+    for candidate in (old_path, current_path):
+        if candidate is not None and Path(candidate).is_dir():
+            return Path(candidate)
+    if reuse_only:
+        raise FileNotFoundError("reuse-only diagnostic head is missing")
+    return None
+
+
+def _load_or_fit_diag_head(old_path, current_path, reuse_only, verify, fit):
+    selected = _select_existing_diag_head(old_path, current_path, reuse_only)
+    if selected is not None:
+        return selected, verify(selected), "reused"
+    return Path(current_path), fit(Path(current_path)), "complete"
+
+
+def _require_or_reuse_pca_residual(path, reuse_only):
+    """Return whether a residual PCA result exists; caller validates before use."""
+    path = Path(path)
+    if path.is_dir() or path.is_symlink():
+        return True
+    if reuse_only:
+        raise FileNotFoundError("reuse-only PCA residual result is missing: {}".format(path))
+    return False
+
+
+def _load_or_fit_pca_residual(path, reuse_only, reuse, fit):
+    if _require_or_reuse_pca_residual(path, reuse_only):
+        return reuse(Path(path)), "reused"
+    return fit(Path(path)), "complete"
+
+
 def _result_row(task, config_name, covariance, aggregation, run_path, data, aligned,
                 source, source_manifest, axes, fit_seconds=0.0, status="reused"):
     if aggregation == "max":
@@ -186,7 +219,8 @@ def _result_row(task, config_name, covariance, aggregation, run_path, data, alig
         "inference_time_seconds_historical": run_metrics.get("inference_time_seconds") if historical else None,
         "fit_time_seconds_this_run": run_metrics.get("fit_time_seconds") if not historical else None,
         "inference_time_seconds_this_run": run_metrics.get("inference_time_seconds") if not historical else None,
-        "end_to_end_seconds_this_run": float(fit_seconds) if not historical else None,
+        "end_to_end_seconds_this_run": (float(fit_seconds)
+                                         if not historical and fit_seconds is not None else None),
         "fit_endpoints_sha256": manifest.get("gmm_fit_endpoints_sha256"),
         "failure_reason": None,
     }, candidate
@@ -348,27 +382,33 @@ def run_diagnostic(reuse_batch=None):
             task_output.mkdir(parents=True, exist_ok=True)
             frame, train_length, labels, _, _, _ = _read_task(task, "large_detect")
             output_path = task_output
-            diag_path = (output_path / "heads" / "FULL_CONCAT") if reuse_only else (
-                old_diag_path or (output_path / "heads" / "FULL_CONCAT"))
-            if old_diag_path is not None and not reuse_only:
-                diag_data, diag_aligned = old_data, old_aligned
-                diag_status, diag_elapsed, diag_reused_path = "reused", 0.0, old_diag_path
-            elif diag_path.exists():
-                diag_data, diag_aligned, _ = _verify_head(diag_path, task, source, source_manifest,
-                                                           ("S", "E", "P", "R"), axes)
-                diag_status, diag_elapsed, diag_reused_path = "reused", 0.0, diag_path
-            else:
-                if reuse_only:
-                    raise FileNotFoundError("reuse-only diagnostic head is missing: {}".format(diag_path))
-                config = _config_for(task, source, source_manifest, ("S", "E", "P", "R"), diag_path)
+            local_diag_path = output_path / "heads" / "FULL_CONCAT"
+            def verify_diag(candidate):
+                if old_diag_path is not None and candidate == old_diag_path:
+                    return old_data, old_aligned
+                data, aligned, _ = _verify_head(candidate, task, source, source_manifest,
+                                                 ("S", "E", "P", "R"), axes)
+                return data, aligned
+
+            def fit_diag(candidate):
+                config = _config_for(task, source, source_manifest, ("S", "E", "P", "R"), candidate)
                 started = time.perf_counter()
                 probe = MNRFViewProbe(**config)
                 probe.fit(frame, train_length, labels=labels)
                 diag_elapsed = time.perf_counter() - started
-                diag_data, diag_aligned, _ = _verify_head(diag_path, task, source, source_manifest,
+                diag_data, diag_aligned, _ = _verify_head(candidate, task, source, source_manifest,
                                                            ("S", "E", "P", "R"), axes)
-                diag_reused_path = diag_path
-                diag_status = "complete"
+                return diag_data, diag_aligned, diag_elapsed
+
+            diag_path = local_diag_path
+            selected_diag_path, loaded_diag, diag_status = _load_or_fit_diag_head(
+                old_diag_path, local_diag_path, reuse_only, verify_diag, fit_diag)
+            if diag_status == "reused":
+                diag_data, diag_aligned = loaded_diag
+                diag_elapsed = 0.0
+            else:
+                diag_data, diag_aligned, diag_elapsed = loaded_diag
+            diag_reused_path = selected_diag_path
             # Existing three diagonal heads are reused; only missing heads fit.
             for aggregation in ("max", "mean"):
                 row, candidate = _result_row(task, "DIAG_" + aggregation.upper(), "diag", aggregation,
@@ -446,9 +486,14 @@ def run_diagnostic(reuse_batch=None):
                                  "roc_auc": old_metrics["roc_auc"],
                                  "average_precision": old_metrics["average_precision"]})
             else:
-                if reuse_only:
-                    raise FileNotFoundError("reuse-only PCA residual result is missing: {}".format(corrected_output))
-                score_path, evidence = _fit_light_method("PCA", corrected_output, values, labels, times, contract)
+                def reuse_pca(candidate):
+                    return _existing_light_run(candidate, "PCA", contract)
+
+                def fit_pca(candidate):
+                    return _fit_light_method("PCA", candidate, values, labels, times, contract)
+
+                (score_path, evidence), pca_status = _load_or_fit_pca_residual(
+                    corrected_output, reuse_only, reuse_pca, fit_pca)
                 with np.load(score_path, allow_pickle=False) as scored:
                     scores = np.asarray(scored["scores"])
                     indices = np.asarray(scored["time_indices"])
@@ -546,10 +591,80 @@ def run_diagnostic(reuse_batch=None):
     return analysis_root, failures
 
 
+def run_msl_float64_diagonal():
+    """Fit the single requested MSL diagonal head from its frozen Full cache."""
+    from scripts.run_mnrf_branch_probe_diagnostic import _verify_head as verify_head
+
+    plan = _json(ROOT / BATCH / "plan.json")
+    if int(plan.get("head_seed", -1)) != SEED or "MSL" not in plan.get("source_records", {}):
+        raise ValueError("pinned MSL Full source record with head_seed=2021 is required")
+    record = plan["source_records"]["MSL"]
+    source = Path(record["path"]).resolve()
+    if source != (SOURCE_ROOT / "MSL" / source.name).resolve():
+        raise ValueError("MSL source is outside the pinned Full source root")
+    source_manifest = _json(source / "probe_manifest.json")
+    validate_pinned_source_binding(record, source_manifest)
+    if (source_manifest.get("artifact_policy") != "full"
+            or source_manifest.get("stage_status") != "complete"
+            or source_manifest.get("head_status") != "complete"
+            or source_manifest.get("config", {}).get("gmm_covariance_type") != "full"):
+        raise ValueError("pinned MSL source is not a completed full-covariance Full run")
+    source_axes = _load_source_axes(source)
+    output = (ROOT / "result/score/MNRF-ViewProbe-FullDiagnostic"
+              / "full-head-diagnostic-20261030T062555Z-3226097/MSL/heads/FULL_CONCAT_FLOAT64")
+    if output.exists() or output.is_symlink():
+        run_status = _json(output / "run_status.json")
+        if run_status.get("status") != "complete":
+            raise FileExistsError("existing MSL float64 diagnostic is incomplete; refusing to overwrite: {}".format(output))
+        elapsed = None
+    else:
+        frame, train_length, labels, _, _, _ = _read_task("MSL", "large_detect")
+        config = _config_for("MSL", source, source_manifest, ("S", "E", "P", "R"), output,
+                             gmm_compute_dtype="float64")
+        started = time.perf_counter()
+        probe = MNRFViewProbe(**config)
+        probe.fit(frame, train_length, labels=labels)
+        elapsed = time.perf_counter() - started
+    data, aligned, checked = verify_head(output, "MSL", source, source_manifest,
+                                         ("S", "E", "P", "R"), source_axes,
+                                         expected_compute_dtype="float64")
+    rows = []
+    for aggregation in ("max", "mean"):
+        row, candidate = _result_row("MSL", "DIAG_FLOAT64_" + aggregation.upper(), "diag",
+                                     aggregation, output, data, aligned, source,
+                                     source_manifest, source_axes, elapsed, "complete")
+        row["gmm_compute_dtype"] = "float64"
+        row["native_validation_status"] = checked.get("status")
+        rows.append(row)
+    report = {
+        "dataset": "MSL", "source_run_id": source.name,
+        "source_identity_sha256": source_manifest.get("source_identity_sha256"),
+        "feature_fingerprint": source_manifest.get("feature_fingerprint"),
+        "run_path": str(output.resolve()), "status": "complete",
+        "gmm_compute_dtype": "float64", "fit_seconds": elapsed,
+        "native_validation_status": checked.get("status"),
+        "native_validation_head_type": checked.get("head_type"),
+        "derived_aggregations": rows,
+        "fit_invocations": 1,
+        "note": "One diag GMM head; max is the native saved result and mean is derived from the same saved per-variable NLL/calibration NLL.",
+    }
+    report_path = ROOT / "result/analysis/MNRF-ViewProbe-FullDiagnostic/full-head-diagnostic-20261030T062555Z-3226097/msl_diag_float64_result.json"
+    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
+    print("msl_float64_head={}".format(output.resolve()))
+    print("msl_float64_report={}".format(report_path.resolve()))
+    print("fit_seconds={}".format("unknown_not_persisted" if elapsed is None else "{:.3f}".format(elapsed)))
+    return report
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reuse-batch", help="validate and reuse heads from an existing diagnostic batch; never fit a missing head")
+    parser.add_argument("--msl-diag-float64", action="store_true",
+                        help="fit only one MSL diagonal head from the pinned frozen cache using float64 GMM arithmetic")
     args = parser.parse_args()
+    if args.msl_diag_float64:
+        run_msl_float64_diagonal()
+        raise SystemExit(0)
     out, errors = run_diagnostic(reuse_batch=args.reuse_batch)
     if errors:
         raise SystemExit(1)

@@ -46,6 +46,7 @@ class ViewProbeConfig:
     gmm_n_init: int = 1
     gmm_max_iter: int = 100
     gmm_fit_max_windows: int = 20000
+    gmm_compute_dtype: str = "float32"
     cpu_threads: int = 1
     artifact_policy: str = "full"
     log_every_steps: int = 100
@@ -83,6 +84,8 @@ class ViewProbeConfig:
             raise ValueError("GMM component, sample, initialization, and iteration limits must be positive")
         if self.gmm_covariance_type not in {"full", "tied", "diag", "spherical"}:
             raise ValueError("gmm_covariance_type must be full, tied, diag, or spherical")
+        if self.gmm_compute_dtype not in {"float32", "float64"}:
+            raise ValueError("gmm_compute_dtype must be float32 or float64")
         if self.gmm_reg_covar <= 0 or self.cpu_threads < 1:
             raise ValueError("gmm_reg_covar and cpu_threads must be positive")
         if self.artifact_policy not in {"full", "results"}:

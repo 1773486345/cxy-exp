@@ -105,12 +105,59 @@ def _json_hash(payload):
 def _runtime_free_config(config):
     """Return the persisted configuration fields that define an artifact."""
     value = dict(config.to_dict() if hasattr(config, "to_dict") else config)
+    # Historical manifests predate the field and used float32 GMM arithmetic.
+    value.setdefault("gmm_compute_dtype", "float32")
     # Logging cadence and retention are execution/storage metadata. They must
     # be persisted, but changing them must not invalidate numerical recovery.
     for key in ("output_dir", "resume_from", "resolved_layout", "selected_indices", "selected_dim",
                 "artifact_policy", "log_every_steps", "log_every_seconds", "gmm_log_every_iters"):
         value.pop(key, None)
     return value
+
+
+def _gmm_fit_values(values, mean, scale, compute_dtype):
+    """Keep feature normalization in float32 and widen only at the GMM boundary."""
+    standardized = ((np.asarray(values, dtype=np.float32)
+                    - np.asarray(mean, dtype=np.float32))
+                   / np.asarray(scale, dtype=np.float32)).astype(np.float32, copy=False)
+    return standardized.astype(np.dtype(compute_dtype), copy=False)
+
+
+def _gmm_score_values(values, mean, scale, noise, compute_dtype):
+    """Apply the frozen float32 normalization/noise path, then widen for likelihood."""
+    standardized = ((np.asarray(values, dtype=np.float32)
+                    - np.asarray(mean, dtype=np.float32))
+                   / np.asarray(scale, dtype=np.float32)).astype(np.float32, copy=False)
+    noisy = standardized + np.asarray(noise, dtype=np.float32)
+    return noisy.astype(np.dtype(compute_dtype), copy=False)
+
+
+def _validate_gmm_numeric_state(model, compute_dtype, variable=None):
+    """Reject invalid fitted state; sklearn stores GMM parameters in float64."""
+    if compute_dtype not in {"float32", "float64"}:
+        raise ValueError("unsupported GMM compute dtype: {}".format(compute_dtype))
+    # sklearn 1.3 promotes model parameters to float64 even when X is float32.
+    # The requested compute precision is therefore bound by config/status and
+    # per-variable progress identity, while this checks the library's storage.
+    storage_dtype = np.dtype("float64")
+    label = "GMM" if variable is None else "GMM variable {}".format(variable)
+    names = ("weights_", "means_", "covariances_", "precisions_cholesky_")
+    arrays = {}
+    for name in names:
+        value = getattr(model, name, None)
+        if value is None:
+            raise ValueError("{} is missing {}".format(label, name))
+        array = np.asarray(value)
+        if array.dtype != storage_dtype:
+            raise ValueError("{} {} dtype mismatch: expected {}, got {}".format(
+                label, name, storage_dtype.name, array.dtype))
+        if not np.isfinite(array).all():
+            raise FloatingPointError("{} {} contains non-finite values".format(label, name))
+        arrays[name] = array
+    covariance = arrays["covariances_"]
+    if model.covariance_type in {"diag", "spherical"} and np.any(covariance <= 0):
+        raise FloatingPointError("{} has non-positive covariance".format(label))
+    return arrays
 
 
 GMM_PROGRESS_IDENTITY_VERSION = 2
@@ -124,6 +171,7 @@ def _gmm_numeric_config(config):
     resume cannot invalidate an otherwise identical numerical run.
     """
     value = dict(config.to_dict() if hasattr(config, "to_dict") else config)
+    value.setdefault("gmm_compute_dtype", "float32")
     excluded = {
         "output_dir", "resume_from", "artifact_policy", "device",
         "log_every_steps", "log_every_seconds", "gmm_log_every_iters",
@@ -1179,13 +1227,17 @@ class MNRFViewProbe:
                     self._log_event("gmm_variable_reused", variable=variable, path=model_path)
                     with open(model_path, "rb") as handle:
                         model = pickle.load(handle)
+                    if (entry.get("status", {}).get("numeric_dtype", "float32")
+                            != self.config.gmm_compute_dtype):
+                        raise ValueError("GMM resume rejected: completed variable {} uses a different numerical dtype".format(variable))
+                    _validate_gmm_numeric_state(model, self.config.gmm_compute_dtype, variable)
                     statuses[variable] = entry["status"]
                     self._gmm[variable] = model
                     continue
                 values = np.asarray(train[positions, variable][:, selected], dtype=np.float32)
                 mean = self.trainer.fixed_feature.mean_[variable, selected]
                 scale = self.trainer.fixed_feature.scale_[variable, selected]
-                values = (values - mean) / scale
+                values = _gmm_fit_values(values, mean, scale, self.config.gmm_compute_dtype)
                 model = GaussianMixture(
                     n_components=self.config.gmm_components,
                     covariance_type=self.config.gmm_covariance_type,
@@ -1201,6 +1253,7 @@ class MNRFViewProbe:
                 model.fit(values)
                 if not model.converged_:
                     raise RuntimeError(f"GMM variable {variable} did not converge")
+                _validate_gmm_numeric_state(model, self.config.gmm_compute_dtype, variable)
                 self._gmm[variable] = model
                 dimension = int(model.means_.shape[1])
                 covariance_type = model.covariance_type
@@ -1221,6 +1274,7 @@ class MNRFViewProbe:
                           "sample_count": len(values), "n_features_in": dimension,
                           "n_components": int(model.n_components),
                           "covariance_type": model.covariance_type,
+                          "numeric_dtype": self.config.gmm_compute_dtype,
                           "parameter_count_free": free_count,
                           "parameter_count_storage": storage_count}
                 statuses[variable] = status
@@ -1278,14 +1332,17 @@ class MNRFViewProbe:
         output = np.lib.format.open_memmap(output_path, mode="w+", dtype=np.float32, shape=(len(features), features.shape[1])) if output_path else np.empty((len(features), features.shape[1]), dtype=np.float32)
         output[:] = 0.0
         noises = self._fixed_noise_vectors()
+        for variable, model in enumerate(self._gmm):
+            _validate_gmm_numeric_state(model, self.config.gmm_compute_dtype, variable)
         with threadpool_limits(limits=self.config.cpu_threads):
             for noise_index, noise in enumerate(noises):
                 for start in range(0, len(features), self.config.batch_size):
                     stop = min(len(features), start + self.config.batch_size)
                     for variable, model in enumerate(self._gmm):
                         values = np.asarray(features[start:stop, variable][:, selected], dtype=np.float32)
-                        values = (values - feature_mean[variable, selected]) / feature_scale[variable, selected]
-                        values = values + noise[selected]
+                        values = _gmm_score_values(values, feature_mean[variable, selected],
+                                                   feature_scale[variable, selected], noise[selected],
+                                                   self.config.gmm_compute_dtype)
                         output[start:stop, variable] += -model.score_samples(values) / len(noises)
                     batch_number = start // self.config.batch_size + 1
                     if noise_index == len(noises) - 1 and (batch_number == 1 or stop == len(features)
@@ -2766,6 +2823,7 @@ def load_probe(path, device="cpu"):
         status_config = status.get("config")
         if status_config is None or _runtime_free_config(status_config) != _runtime_free_config(persisted_config):
             raise ValueError("view probe GMM configuration does not match the manifest")
+        expected_dtype = np.dtype(probe.config.gmm_compute_dtype)
         if status_config.get("selected_indices") != probe.config.selected_indices:
             raise ValueError("view probe GMM selected indices do not match its configuration")
         with np.load(stats_path, allow_pickle=False) as stats:
@@ -2835,9 +2893,11 @@ def load_probe(path, device="cpu"):
                 raise ValueError(f"view probe GMM variable {variable} configuration mismatch")
             if not getattr(model, "converged_", False):
                 raise ValueError(f"view probe GMM variable {variable} is not converged")
+            _validate_gmm_numeric_state(model, probe.config.gmm_compute_dtype, variable)
             if (status_item.get("n_features_in") != probe.config.selected_dim
                     or status_item.get("n_components") != probe.config.gmm_components
                     or status_item.get("covariance_type") != probe.config.gmm_covariance_type
+                    or status_item.get("numeric_dtype", "float32") != expected_dtype.name
                     or not status_item.get("converged")):
                 raise ValueError("view probe per-variable GMM metadata mismatch")
             dimension = int(model.means_.shape[1])

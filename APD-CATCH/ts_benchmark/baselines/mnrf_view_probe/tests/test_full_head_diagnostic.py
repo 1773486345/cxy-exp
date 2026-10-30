@@ -3,6 +3,8 @@ import pytest
 
 from scripts.run_mnrf_full_head_diagnostic import (
     _aggregate, _check_equal, _diagnostic_output_paths, _effect_deltas,
+    _load_or_fit_diag_head, _load_or_fit_pca_residual,
+    _require_or_reuse_pca_residual, _select_existing_diag_head,
 )
 from scripts.analyze_mnrf_full_loss import _distribution, _full_axis_context, _recall_at_fpr
 
@@ -98,3 +100,30 @@ def test_calibration_context_respects_frozen_segment_boundary():
 def test_distribution_reports_empty_population_as_undefined():
     assert _distribution(np.asarray([]))["undefined_reason"] == "empty_or_nonfinite"
     assert _distribution(np.asarray([1.0, 2.0]))["q0.5"] == 1.5
+
+
+def test_reuse_batch_selects_bound_external_diag_head_and_never_falls_through_to_fit(tmp_path):
+    external = tmp_path / "existing-source-bound-diag"
+    local = tmp_path / "new-batch" / "heads" / "FULL_CONCAT"
+    external.mkdir()
+    fit_calls = []
+    selected, value, status = _load_or_fit_diag_head(
+        external, local, True, lambda path: ("validated", path),
+        lambda path: fit_calls.append(path))
+    assert selected == external and value == ("validated", external) and status == "reused"
+    assert fit_calls == []
+    with pytest.raises(FileNotFoundError):
+        _select_existing_diag_head(None, local, reuse_only=True)
+
+
+def test_reuse_batch_accepts_existing_pca_residual_but_rejects_missing(tmp_path):
+    output = tmp_path / "PCA-residual"
+    output.mkdir()
+    fit_calls = []
+    result, status = _load_or_fit_pca_residual(
+        output, True, lambda path: ("validated", path), lambda path: fit_calls.append(path))
+    assert result == ("validated", output) and status == "reused"
+    assert fit_calls == []
+    assert _require_or_reuse_pca_residual(output, reuse_only=True)
+    with pytest.raises(FileNotFoundError):
+        _require_or_reuse_pca_residual(tmp_path / "missing", reuse_only=True)
