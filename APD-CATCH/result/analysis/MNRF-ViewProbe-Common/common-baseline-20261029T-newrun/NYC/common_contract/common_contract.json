@@ -1,0 +1,250 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": null,
+  "boundary_ids": null,
+  "catch_seq_len": 192,
+  "catch_splits": {
+    "calibration": {
+      "count": 1082,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/catch_calibration_indices.npy",
+      "sha256": "e585b1ce6f8247fc20d3f128a4055e504eb19fcc99c0f015abc9a5a6558f2ed9"
+    },
+    "train": {
+      "count": 9986,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/catch_train_indices.npy",
+      "sha256": "29729d39d222454a2ab5f941a2940776ec89095c5710263dd30315940e789252"
+    },
+    "validation": {
+      "count": 1081,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/catch_validation_indices.npy",
+      "sha256": "e7d53efc2387536428b0b62fbf0cfb40ca0b105db724cb3e2cacb45bc98e3ff0"
+    }
+  },
+  "catch_test": {
+    "count": 4225,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/catch_test_indices.npy",
+    "sha256": "e117f4cf25ab4478e83417b10b86bfeb7783845f93aae61efa3ed3f1518dbae5"
+  },
+  "data_csv_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/NYC.csv",
+  "data_csv_sha256": "64049d2d09967e90c47f8169bb54efb82c0199e9ff3b8b8ac952990aff266b9f",
+  "data_identity": "f1f036249a8ac221780af1e677aaa4ca116db78bb8b27cd1b14656e928a1cccf",
+  "input_length": 17520,
+  "labels": {
+    "count": 17520,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/labels.npy",
+    "sha256": "f424cdc0696ffd800e6578f43506f8ae28ac4bd0abfa1a18d426fced0571cfd9"
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "probe_manifest_sha256": "06eebc2845264ec1cca3255d7f6b8e3958b2380291aca3773ff1895a23f87e09",
+  "probe_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+  "probe_source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "f1f036249a8ac221780af1e677aaa4ca116db78bb8b27cd1b14656e928a1cccf",
+    "input_length": 17520,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        11831,
+        13104
+      ],
+      "train": [
+        0,
+        10177
+      ],
+      "validation": [
+        10368,
+        11640
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          11831,
+          13104
+        ]
+      ],
+      "train": [
+        [
+          0,
+          10177
+        ]
+      ],
+      "validation": [
+        [
+          10368,
+          11640
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        17520
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "NYC.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        10177
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 4225,
+    "test_endpoints_sha256": "1d0140dc22aed4e5829f0794ac9443495573d420b324a0b7298ffa793d76261e",
+    "test_segments": [
+      [
+        13104,
+        17520
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "15f2f9583870525bbbbb509b787165a74f54f06eb0b69faf0cbc296ed5e29038"
+    },
+    "train_length": 13104,
+    "variable_names": [
+      "channnel1",
+      "channnel2",
+      "channnel3"
+    ]
+  },
+  "ranges": {
+    "calibration": [
+      11831,
+      13104
+    ],
+    "train": [
+      0,
+      10177
+    ],
+    "validation": [
+      10368,
+      11640
+    ]
+  },
+  "raw_training_range": [
+    0,
+    10177
+  ],
+  "schema": "mnrf-view-probe-common-export-v2",
+  "segment_ranges": {
+    "calibration": [
+      [
+        11831,
+        13104
+      ]
+    ],
+    "train": [
+      [
+        0,
+        10177
+      ]
+    ],
+    "validation": [
+      [
+        10368,
+        11640
+      ]
+    ]
+  },
+  "seq_len": 192,
+  "source_timezone": null,
+  "splits": {
+    "calibration": {
+      "count": 1082,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/calibration_indices.npy",
+      "sha256": "e585b1ce6f8247fc20d3f128a4055e504eb19fcc99c0f015abc9a5a6558f2ed9"
+    },
+    "train": {
+      "count": 9986,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/train_indices.npy",
+      "sha256": "29729d39d222454a2ab5f941a2940776ec89095c5710263dd30315940e789252"
+    },
+    "validation": {
+      "count": 1081,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/validation_indices.npy",
+      "sha256": "e7d53efc2387536428b0b62fbf0cfb40ca0b105db724cb3e2cacb45bc98e3ff0"
+    }
+  },
+  "status": "complete",
+  "task_name": "NYC.csv",
+  "temporal_rule": {
+    "entity_boundary_columns": [],
+    "expected_interval_ns": 1,
+    "fit_range": [
+      0,
+      10177
+    ],
+    "time_kind": "timestamp_naive_ns",
+    "tolerance": 0.05,
+    "version": "train-frozen-cadence-v1"
+  },
+  "test_segments": [
+    [
+      13104,
+      17520
+    ]
+  ],
+  "time_identity": "15f2f9583870525bbbbb509b787165a74f54f06eb0b69faf0cbc296ed5e29038",
+  "time_kind": "timestamp_naive_ns",
+  "time_values_ns": {
+    "count": 17520,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/time_values_ns.npy",
+    "sha256": "0886ec6bab10d0cc093be4b1e1095af37f4f2070b11db358ade754f3512b68ad"
+  },
+  "train_length": 13104,
+  "train_rows": {
+    "count": 10177,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/common_contract/train_rows.npy",
+    "sha256": "7c9699bb3a2624c633d8e19640dc8638b5d0d9620fe184a1c389ec9501d9e720"
+  },
+  "variable_names": [
+    "channnel1",
+    "channnel2",
+    "channnel3"
+  ]
+}

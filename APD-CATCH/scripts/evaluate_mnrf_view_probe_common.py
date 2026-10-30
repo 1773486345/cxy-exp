@@ -257,6 +257,11 @@ def _read_npz(path):
         raise ValueError(f"{path} has invalid endpoint or score values")
     result["time_indices"] = indices
     result["scores"] = scores
+    if "time_values_ns" in result:
+        times = np.asarray(result["time_values_ns"])
+        if times.ndim != 1 or times.dtype.kind not in "iu" or len(times) != len(indices):
+            raise ValueError(f"{path} has invalid normalized timestamp coordinates")
+        result["time_values_ns"] = times.astype(np.int64, copy=False)
     return result
 
 
@@ -332,7 +337,7 @@ def _validate_probe_execution(probe_path, probe, catch, common_evidence, split_p
     if not np.isfinite(declared_threshold) or not np.isclose(declared_threshold, restored_threshold, rtol=0, atol=1e-12):
         raise ValueError("strict CATCH-common probe threshold is not its calibrated threshold")
     source = manifest.get("source_identity") or {}
-    if not source.get("task_name") or source.get("task_name") != common_evidence.get("task_name"):
+    if not _same_task_identity(source.get("task_name"), common_evidence.get("task_name")):
         raise ValueError("strict CATCH-common probe task identity differs")
     if common_evidence.get("data_identity") and source.get("feature_data_sha256"):
         if common_evidence.get("data_identity") != source.get("feature_data_sha256"):
@@ -402,6 +407,16 @@ def _metric(actual, scores):
             "auc_pr": average_precision}
 
 
+def _same_task_identity(source_task, common_task):
+    """Compare benchmark CSV filename identity with its dataset stem."""
+    source_task = str(source_task or "")
+    common_task = str(common_task or "")
+    # Probe records may use "PSM.csv" while a common run uses "PSM". Their
+    # raw-data identities and hashes are independently verified by the contract.
+    return bool(source_task and common_task
+                and Path(source_task).stem == Path(common_task).stem)
+
+
 def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
              catch_threshold=None, boundary_path=None, split_paths=None,
              common_manifest=None, strict_common=None):
@@ -449,6 +464,15 @@ def evaluate(probe_path, catch_path, labels_path, probe_threshold=None,
     requested_strict = strict_common
     if strict_common is None:
         strict_common = bool(common_manifest)
+    if strict_common:
+        if not np.array_equal(probe["time_indices"], catch["time_indices"]):
+            raise ValueError("strict common evaluation requires identical complete score coordinates")
+        probe_times = probe.get("time_values_ns")
+        catch_times = catch.get("time_values_ns")
+        if probe_times is None or catch_times is None:
+            raise ValueError("strict common evaluation requires canonical time coordinates in both score files")
+        if not np.array_equal(probe_times, catch_times):
+            raise ValueError("strict common evaluation time coordinates differ")
     if strict_common and not evidence_ok:
         raise ValueError(f"strict CATCH-common evidence rejected: {evidence_reason}")
     if strict_common:

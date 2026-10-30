@@ -1,0 +1,80 @@
+{
+  "calibration_count": 1082,
+  "coordinate_count": 4225,
+  "dataset": "NYC",
+  "methods": {
+    "CATCH-common": {
+      "archive_params": {
+        "Mlr": 1e-05,
+        "batch_size": 128,
+        "cf_dim": 64,
+        "d_ff": 256,
+        "d_model": 256,
+        "e_layers": 3,
+        "head_dim": 64,
+        "inference_patch_size": 32,
+        "inference_patch_stride": 1,
+        "lr": 0.0001,
+        "n_heads": 2,
+        "num_epochs": 2,
+        "patch_size": 16,
+        "patch_stride": 8,
+        "seq_len": 192,
+        "temperature": 0.07
+      },
+      "fit_and_pipeline_seconds": 227.06338391453028,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/CATCH-common",
+      "status": "complete",
+      "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/CATCH-common/results/common_evaluation.json"
+    },
+    "IsolationForest": {
+      "fit_seconds": 1.0958942715078592,
+      "inference_seconds": 0.01656806282699108,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/IsolationForest",
+      "parameters": {
+        "contamination": "auto",
+        "max_samples": 256,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "random_state": 2021,
+        "score": "negative score_samples"
+      },
+      "status": "complete"
+    },
+    "PCA": {
+      "fit_seconds": 0.001191701740026474,
+      "inference_seconds": 0.0007362049072980881,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/PCA",
+      "parameters": {
+        "n_components": 0.95,
+        "score": "per-row mean squared reconstruction error",
+        "selected_components": 3,
+        "svd_solver": "full"
+      },
+      "status": "complete"
+    }
+  },
+  "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+  "source_run_id": "full_gmm-full-20261020T211341Z-1931786",
+  "source_validation": {
+    "artifact_type": "probe_head",
+    "auc_pr": 0.04408917284828918,
+    "auc_roc": 0.6913389836317612,
+    "head_type": "gmm",
+    "mode": "pretrained",
+    "normalized_cache_validation": {
+      "bytes": 210368,
+      "dtype": "float32",
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/cache/normalized_values.npy",
+      "sha256": "66efb73189a78eafe52aba76d4af4eb377e267479a2936944a442ce4243e4a68",
+      "shape": [
+        17520,
+        3
+      ]
+    },
+    "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+    "status": "complete",
+    "task_name": "NYC.csv"
+  },
+  "status": "complete"
+}

@@ -1,0 +1,79 @@
+{
+  "calibration_count": 8283,
+  "coordinate_count": 84925,
+  "dataset": "CICIDS",
+  "methods": {
+    "CATCH-common": {
+      "archive_params": {
+        "Mlr": 1e-05,
+        "batch_size": 128,
+        "cf_dim": 64,
+        "d_ff": 128,
+        "d_model": 128,
+        "e_layers": 3,
+        "head_dim": 16,
+        "inference_patch_size": 16,
+        "lr": 0.0001,
+        "n_heads": 16,
+        "num_epochs": 5,
+        "patch_size": 16,
+        "patch_stride": 16,
+        "seq_len": 192,
+        "temperature": 0.07
+      },
+      "fit_and_pipeline_seconds": 9269.000237355009,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/CATCH-common",
+      "status": "complete",
+      "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/CATCH-common/results/common_evaluation.json"
+    },
+    "IsolationForest": {
+      "fit_seconds": 1.6510536707937717,
+      "inference_seconds": 0.6259719133377075,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/IsolationForest",
+      "parameters": {
+        "contamination": "auto",
+        "max_samples": 256,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "random_state": 2021,
+        "score": "negative score_samples"
+      },
+      "status": "complete"
+    },
+    "PCA": {
+      "fit_seconds": 0.7705991733819246,
+      "inference_seconds": 1.899797698482871,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/PCA",
+      "parameters": {
+        "n_components": 0.95,
+        "score": "per-row mean squared reconstruction error",
+        "selected_components": 21,
+        "svd_solver": "full"
+      },
+      "status": "complete"
+    }
+  },
+  "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319",
+  "source_run_id": "full_gmm-full-20261024T115157Z-3980319",
+  "source_validation": {
+    "artifact_type": "probe_head",
+    "auc_pr": 0.0009173981247266992,
+    "auc_roc": 0.5388251328959158,
+    "head_type": "gmm",
+    "mode": "pretrained",
+    "normalized_cache_validation": {
+      "bytes": 49026656,
+      "dtype": "float32",
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319/cache/normalized_values.npy",
+      "sha256": "a683593179ebafa44d4626b564d57d3f98533d6ac9e8eac187bb9d2667fe423c",
+      "shape": [
+        170231,
+        72
+      ]
+    },
+    "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319",
+    "status": "complete",
+    "task_name": "CICIDS.csv"
+  },
+  "status": "complete"
+}

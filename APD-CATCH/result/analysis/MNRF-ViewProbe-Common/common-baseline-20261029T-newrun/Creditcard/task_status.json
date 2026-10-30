@@ -1,0 +1,78 @@
+{
+  "calibration_count": 14012,
+  "coordinate_count": 142213,
+  "dataset": "Creditcard",
+  "methods": {
+    "CATCH-common": {
+      "archive_params": {
+        "Mlr": 1e-05,
+        "batch_size": 128,
+        "cf_dim": 64,
+        "d_ff": 128,
+        "d_model": 128,
+        "e_layers": 3,
+        "head_dim": 64,
+        "inference_patch_size": 16,
+        "lr": 0.0001,
+        "n_heads": 16,
+        "num_epochs": 5,
+        "patch_size": 32,
+        "patch_stride": 32,
+        "seq_len": 192
+      },
+      "fit_and_pipeline_seconds": 6838.093682235107,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/CATCH-common",
+      "status": "complete",
+      "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/CATCH-common/results/common_evaluation.json"
+    },
+    "IsolationForest": {
+      "fit_seconds": 0.7829540725797415,
+      "inference_seconds": 2.026134293526411,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/IsolationForest",
+      "parameters": {
+        "contamination": "auto",
+        "max_samples": 256,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "random_state": 2021,
+        "score": "negative score_samples"
+      },
+      "status": "complete"
+    },
+    "PCA": {
+      "fit_seconds": 0.25007827393710613,
+      "inference_seconds": 2.101383673027158,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/PCA",
+      "parameters": {
+        "n_components": 0.95,
+        "score": "per-row mean squared reconstruction error",
+        "selected_components": 25,
+        "svd_solver": "full"
+      },
+      "status": "complete"
+    }
+  },
+  "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864",
+  "source_run_id": "full_gmm-full-20261024T115131Z-3977864",
+  "source_validation": {
+    "artifact_type": "probe_head",
+    "auc_pr": 0.0510074536414816,
+    "auc_roc": 0.920187986500546,
+    "head_type": "gmm",
+    "mode": "pretrained",
+    "normalized_cache_validation": {
+      "bytes": 33037740,
+      "dtype": "float32",
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864/cache/normalized_values.npy",
+      "sha256": "a7a14e2e0ec5ddad62980b5714101075c4465ca60858843fb12ebb5b51907732",
+      "shape": [
+        284807,
+        29
+      ]
+    },
+    "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864",
+    "status": "complete",
+    "task_name": "Creditcard.csv"
+  },
+  "status": "complete"
+}

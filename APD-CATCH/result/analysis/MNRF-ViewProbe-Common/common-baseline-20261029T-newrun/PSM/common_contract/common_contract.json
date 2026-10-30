@@ -1,0 +1,294 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": null,
+  "boundary_ids": null,
+  "catch_seq_len": 192,
+  "catch_splits": {
+    "calibration": {
+      "count": 13020,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/catch_calibration_indices.npy",
+      "sha256": "0dfea2d1bad91c6e09b709fb45cac7c461c1a46e9fd46b3979677221cb774d6c"
+    },
+    "train": {
+      "count": 105488,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/catch_train_indices.npy",
+      "sha256": "c6aaabb91268ad8eab23387bbf9541af5b9739af69603170d2d2d1a2183d7d59"
+    },
+    "validation": {
+      "count": 13018,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/catch_validation_indices.npy",
+      "sha256": "302e63ba819b1ea3192abf43cadef84366bee2d79332c6a6fb3ad370c5388c51"
+    }
+  },
+  "catch_test": {
+    "count": 87650,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/catch_test_indices.npy",
+    "sha256": "25215e6895960e3605605963ecfbf98a10a41406b4bbd59b2bfea6216bb9e4cf"
+  },
+  "data_csv_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/PSM.csv",
+  "data_csv_sha256": "38e446209e82df94b82c11aa43d87e3671da86167ed794c1b7be5eb91fc0e8ac",
+  "data_identity": "37bdb5839f655c938fec3384b8e1f8e76da34b2f07e5888b1f4879390bee4407",
+  "input_length": 220322,
+  "labels": {
+    "count": 220322,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/labels.npy",
+    "sha256": "c27e283630a393a2204d0c0523aa4029d2fd78388df1cfe1a4c797cd4f84c7bb"
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "probe_manifest_sha256": "9bb6b1c45bc3ee4c8710e7d36fecbacf1d5d706094c296178862652f15884cb1",
+  "probe_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+  "probe_source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "37bdb5839f655c938fec3384b8e1f8e76da34b2f07e5888b1f4879390bee4407",
+    "input_length": 220322,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        119270,
+        132481
+      ],
+      "train": [
+        0,
+        105679
+      ],
+      "validation": [
+        105870,
+        119079
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          119270,
+          132481
+        ]
+      ],
+      "train": [
+        [
+          0,
+          105679
+        ]
+      ],
+      "validation": [
+        [
+          105870,
+          119079
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        220322
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "PSM.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        105679
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 87650,
+    "test_endpoints_sha256": "9f5600c48142c568d2bd7b0772b64304c5ec06e1ffedd5dbcd8c826ea113cb9f",
+    "test_segments": [
+      [
+        132481,
+        220322
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "b894a9b86b1c8ab7039d21ea48699a434b8e28c16fcfddec6c5b07511ba59ecc"
+    },
+    "train_length": 132481,
+    "variable_names": [
+      "feature_0",
+      "feature_1",
+      "feature_2",
+      "feature_3",
+      "feature_4",
+      "feature_5",
+      "feature_6",
+      "feature_7",
+      "feature_8",
+      "feature_9",
+      "feature_10",
+      "feature_11",
+      "feature_12",
+      "feature_13",
+      "feature_14",
+      "feature_15",
+      "feature_16",
+      "feature_17",
+      "feature_18",
+      "feature_19",
+      "feature_20",
+      "feature_21",
+      "feature_22",
+      "feature_23",
+      "feature_24"
+    ]
+  },
+  "ranges": {
+    "calibration": [
+      119270,
+      132481
+    ],
+    "train": [
+      0,
+      105679
+    ],
+    "validation": [
+      105870,
+      119079
+    ]
+  },
+  "raw_training_range": [
+    0,
+    105679
+  ],
+  "schema": "mnrf-view-probe-common-export-v2",
+  "segment_ranges": {
+    "calibration": [
+      [
+        119270,
+        132481
+      ]
+    ],
+    "train": [
+      [
+        0,
+        105679
+      ]
+    ],
+    "validation": [
+      [
+        105870,
+        119079
+      ]
+    ]
+  },
+  "seq_len": 192,
+  "source_timezone": null,
+  "splits": {
+    "calibration": {
+      "count": 13020,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/calibration_indices.npy",
+      "sha256": "0dfea2d1bad91c6e09b709fb45cac7c461c1a46e9fd46b3979677221cb774d6c"
+    },
+    "train": {
+      "count": 105488,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/train_indices.npy",
+      "sha256": "c6aaabb91268ad8eab23387bbf9541af5b9739af69603170d2d2d1a2183d7d59"
+    },
+    "validation": {
+      "count": 13018,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/validation_indices.npy",
+      "sha256": "302e63ba819b1ea3192abf43cadef84366bee2d79332c6a6fb3ad370c5388c51"
+    }
+  },
+  "status": "complete",
+  "task_name": "PSM.csv",
+  "temporal_rule": {
+    "entity_boundary_columns": [],
+    "expected_interval_ns": 1,
+    "fit_range": [
+      0,
+      105679
+    ],
+    "time_kind": "timestamp_naive_ns",
+    "tolerance": 0.05,
+    "version": "train-frozen-cadence-v1"
+  },
+  "test_segments": [
+    [
+      132481,
+      220322
+    ]
+  ],
+  "time_identity": "b894a9b86b1c8ab7039d21ea48699a434b8e28c16fcfddec6c5b07511ba59ecc",
+  "time_kind": "timestamp_naive_ns",
+  "time_values_ns": {
+    "count": 220322,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/time_values_ns.npy",
+    "sha256": "7fd9f3edcf62491631d4007cdb4f2e1d53e626750876618f843a68263779acf4"
+  },
+  "train_length": 132481,
+  "train_rows": {
+    "count": 105679,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/train_rows.npy",
+    "sha256": "774901a920ac8e9aaba37ecee9ad9a3dc8e898c774eae1e6a9e9da5b9a0b348c"
+  },
+  "variable_names": [
+    "feature_0",
+    "feature_1",
+    "feature_2",
+    "feature_3",
+    "feature_4",
+    "feature_5",
+    "feature_6",
+    "feature_7",
+    "feature_8",
+    "feature_9",
+    "feature_10",
+    "feature_11",
+    "feature_12",
+    "feature_13",
+    "feature_14",
+    "feature_15",
+    "feature_16",
+    "feature_17",
+    "feature_18",
+    "feature_19",
+    "feature_20",
+    "feature_21",
+    "feature_22",
+    "feature_23",
+    "feature_24"
+  ]
+}

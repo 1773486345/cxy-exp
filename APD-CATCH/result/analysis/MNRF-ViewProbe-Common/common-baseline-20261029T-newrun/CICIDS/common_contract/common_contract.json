@@ -1,0 +1,388 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": null,
+  "boundary_ids": null,
+  "catch_seq_len": 192,
+  "catch_splits": {
+    "calibration": {
+      "count": 8283,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/catch_calibration_indices.npy",
+      "sha256": "6fbd9dce7726dc83ae26551e44ff085a5438b612e9eb8c52498882c46e4ec4d8"
+    },
+    "train": {
+      "count": 67595,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/catch_train_indices.npy",
+      "sha256": "cb8683fd7663c6a1172aa954d4fed92344c3efd7c5423e1ef092d8af68fb8872"
+    },
+    "validation": {
+      "count": 8282,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/catch_validation_indices.npy",
+      "sha256": "672d78f4c301be091a0dad4c8e8ef4ef1de8a4e0bcae6dc4fd38beb635d6d023"
+    }
+  },
+  "catch_test": {
+    "count": 84925,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/catch_test_indices.npy",
+    "sha256": "1465492587cb083b0facd93dc93d21c9ebf378bab04f527feb9a48bb369538d6"
+  },
+  "data_csv_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/CICIDS.csv",
+  "data_csv_sha256": "63a49c887f64aa02df01ae8cd3c0d4488a62f7ff8c0f762801c554a8c4f0c137",
+  "data_identity": "a4222ec14aaef06be8eb5d99d7bdbea614beef00259b139a4a96bfd89fd12e77",
+  "input_length": 170231,
+  "labels": {
+    "count": 170231,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/labels.npy",
+    "sha256": "e9761ba2ae8f8a0f8f9e5a79a21bf6dfcf0d12d42a88bf756c075a3665199e0e"
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "probe_manifest_sha256": "8cdf4d090c6f3a73b454f49102edba0d8c8e028601ae55e86581d372adfc8d8a",
+  "probe_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319",
+  "probe_source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "a4222ec14aaef06be8eb5d99d7bdbea614beef00259b139a4a96bfd89fd12e77",
+    "input_length": 170231,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        76641,
+        85115
+      ],
+      "train": [
+        0,
+        67786
+      ],
+      "validation": [
+        67977,
+        76450
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          76641,
+          85115
+        ]
+      ],
+      "train": [
+        [
+          0,
+          67786
+        ]
+      ],
+      "validation": [
+        [
+          67977,
+          76450
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        170231
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "CICIDS.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        67786
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 84925,
+    "test_endpoints_sha256": "45867bec7f701ec04a2a5f163723c326a3f98a85a500d9792aa40fb63fcff012",
+    "test_segments": [
+      [
+        85115,
+        170231
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "90395e9b5370403341d6bb89a0a87a748c9286d455394669404baf5d3105ec6c"
+    },
+    "train_length": 85115,
+    "variable_names": [
+      "Total Length of Bwd Packets",
+      "Fwd Packet Length Min",
+      "Fwd Packet Length Mean",
+      "Fwd Packet Length Std",
+      "Bwd Packet Length Max",
+      "Bwd Packet Length Min",
+      "Bwd Packet Length Mean",
+      "Bwd Packet Length Std",
+      "Flow Bytes/s",
+      "Flow Packets/s",
+      "Flow IAT Mean",
+      "Flow IAT Std",
+      "Flow IAT Max",
+      "Flow IAT Min",
+      "Fwd IAT Total",
+      "Fwd IAT Mean",
+      "Fwd IAT Std",
+      "Fwd IAT Max",
+      "Fwd IAT Min",
+      "Bwd IAT Total",
+      "Bwd IAT Mean",
+      "Bwd IAT Std",
+      "Bwd IAT Max",
+      "Bwd IAT Min",
+      "Fwd PSH Flags",
+      "Bwd PSH Flags",
+      "Fwd URG Flags",
+      "Bwd URG Flags",
+      "Fwd Header Length",
+      "Bwd Header Length",
+      "Fwd Packets/s",
+      "Bwd Packets/s",
+      "Min Packet Length",
+      "Max Packet Length",
+      "Packet Length Mean",
+      "Packet Length Std",
+      "Packet Length Variance",
+      "FIN Flag Count",
+      "SYN Flag Count",
+      "RST Flag Count",
+      "PSH Flag Count",
+      "ACK Flag Count",
+      "URG Flag Count",
+      "CWE Flag Count",
+      "ECE Flag Count",
+      "Down/Up Ratio",
+      "Average Packet Size",
+      "Avg Fwd Segment Size",
+      "Avg Bwd Segment Size",
+      "Fwd Header Length.1",
+      "Fwd Avg Bytes/Bulk",
+      "Fwd Avg Packets/Bulk",
+      "Fwd Avg Bulk Rate",
+      "Bwd Avg Bytes/Bulk",
+      "Bwd Avg Packets/Bulk",
+      "Bwd Avg Bulk Rate",
+      "Subflow Fwd Packets",
+      "Subflow Fwd Bytes",
+      "Subflow Bwd Packets",
+      "Subflow Bwd Bytes",
+      "Init_Win_bytes_forward",
+      "Init_Win_bytes_backward",
+      "act_data_pkt_fwd",
+      "min_seg_size_forward",
+      "Active Mean",
+      "Active Std",
+      "Active Max",
+      "Active Min",
+      "Idle Mean",
+      "Idle Std",
+      "Idle Max",
+      "Idle Min"
+    ]
+  },
+  "ranges": {
+    "calibration": [
+      76641,
+      85115
+    ],
+    "train": [
+      0,
+      67786
+    ],
+    "validation": [
+      67977,
+      76450
+    ]
+  },
+  "raw_training_range": [
+    0,
+    67786
+  ],
+  "schema": "mnrf-view-probe-common-export-v2",
+  "segment_ranges": {
+    "calibration": [
+      [
+        76641,
+        85115
+      ]
+    ],
+    "train": [
+      [
+        0,
+        67786
+      ]
+    ],
+    "validation": [
+      [
+        67977,
+        76450
+      ]
+    ]
+  },
+  "seq_len": 192,
+  "source_timezone": null,
+  "splits": {
+    "calibration": {
+      "count": 8283,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/calibration_indices.npy",
+      "sha256": "6fbd9dce7726dc83ae26551e44ff085a5438b612e9eb8c52498882c46e4ec4d8"
+    },
+    "train": {
+      "count": 67595,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/train_indices.npy",
+      "sha256": "cb8683fd7663c6a1172aa954d4fed92344c3efd7c5423e1ef092d8af68fb8872"
+    },
+    "validation": {
+      "count": 8282,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/validation_indices.npy",
+      "sha256": "672d78f4c301be091a0dad4c8e8ef4ef1de8a4e0bcae6dc4fd38beb635d6d023"
+    }
+  },
+  "status": "complete",
+  "task_name": "CICIDS.csv",
+  "temporal_rule": {
+    "entity_boundary_columns": [],
+    "expected_interval_ns": 1,
+    "fit_range": [
+      0,
+      67786
+    ],
+    "time_kind": "timestamp_naive_ns",
+    "tolerance": 0.05,
+    "version": "train-frozen-cadence-v1"
+  },
+  "test_segments": [
+    [
+      85115,
+      170231
+    ]
+  ],
+  "time_identity": "90395e9b5370403341d6bb89a0a87a748c9286d455394669404baf5d3105ec6c",
+  "time_kind": "timestamp_naive_ns",
+  "time_values_ns": {
+    "count": 170231,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/time_values_ns.npy",
+    "sha256": "8e0c955fef10df7a56bf48b0256f00ce6bcb7d660691432f968ff5088536c697"
+  },
+  "train_length": 85115,
+  "train_rows": {
+    "count": 67786,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/train_rows.npy",
+    "sha256": "66b9f3d90c4f8e013221849b6afcc4a42a8fe351f33ed4ad63824fa1637ef223"
+  },
+  "variable_names": [
+    "Total Length of Bwd Packets",
+    "Fwd Packet Length Min",
+    "Fwd Packet Length Mean",
+    "Fwd Packet Length Std",
+    "Bwd Packet Length Max",
+    "Bwd Packet Length Min",
+    "Bwd Packet Length Mean",
+    "Bwd Packet Length Std",
+    "Flow Bytes/s",
+    "Flow Packets/s",
+    "Flow IAT Mean",
+    "Flow IAT Std",
+    "Flow IAT Max",
+    "Flow IAT Min",
+    "Fwd IAT Total",
+    "Fwd IAT Mean",
+    "Fwd IAT Std",
+    "Fwd IAT Max",
+    "Fwd IAT Min",
+    "Bwd IAT Total",
+    "Bwd IAT Mean",
+    "Bwd IAT Std",
+    "Bwd IAT Max",
+    "Bwd IAT Min",
+    "Fwd PSH Flags",
+    "Bwd PSH Flags",
+    "Fwd URG Flags",
+    "Bwd URG Flags",
+    "Fwd Header Length",
+    "Bwd Header Length",
+    "Fwd Packets/s",
+    "Bwd Packets/s",
+    "Min Packet Length",
+    "Max Packet Length",
+    "Packet Length Mean",
+    "Packet Length Std",
+    "Packet Length Variance",
+    "FIN Flag Count",
+    "SYN Flag Count",
+    "RST Flag Count",
+    "PSH Flag Count",
+    "ACK Flag Count",
+    "URG Flag Count",
+    "CWE Flag Count",
+    "ECE Flag Count",
+    "Down/Up Ratio",
+    "Average Packet Size",
+    "Avg Fwd Segment Size",
+    "Avg Bwd Segment Size",
+    "Fwd Header Length.1",
+    "Fwd Avg Bytes/Bulk",
+    "Fwd Avg Packets/Bulk",
+    "Fwd Avg Bulk Rate",
+    "Bwd Avg Bytes/Bulk",
+    "Bwd Avg Packets/Bulk",
+    "Bwd Avg Bulk Rate",
+    "Subflow Fwd Packets",
+    "Subflow Fwd Bytes",
+    "Subflow Bwd Packets",
+    "Subflow Bwd Bytes",
+    "Init_Win_bytes_forward",
+    "Init_Win_bytes_backward",
+    "act_data_pkt_fwd",
+    "min_seg_size_forward",
+    "Active Mean",
+    "Active Std",
+    "Active Max",
+    "Active Min",
+    "Idle Mean",
+    "Idle Std",
+    "Idle Max",
+    "Idle Min"
+  ]
+}

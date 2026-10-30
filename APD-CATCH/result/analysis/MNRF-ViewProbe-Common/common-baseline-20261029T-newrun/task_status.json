@@ -1,0 +1,670 @@
+{
+  "batch": "common-baseline-20261029T-newrun",
+  "calibration_quantile": 0.995,
+  "completed_tasks": 8,
+  "device": "cuda:0",
+  "environment": {
+    "numpy": "1.24.4",
+    "pandas": "1.5.3",
+    "python": "3.8.20",
+    "scikit_learn": "1.3.2",
+    "torch": "2.4.1+cu121"
+  },
+  "expected_tasks": [
+    "PSM",
+    "MSL",
+    "GECCO",
+    "Genesis",
+    "NYC",
+    "CalIt2",
+    "Creditcard",
+    "CICIDS"
+  ],
+  "seed": 2021,
+  "task_records": [
+    {
+      "calibration_count": 13020,
+      "coordinate_count": 87650,
+      "dataset": "PSM",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 0.001,
+            "auxi_lambda": 0.01,
+            "batch_size": 128,
+            "cf_dim": 16,
+            "d_ff": 32,
+            "d_model": 16,
+            "dc_lambda": 0.05,
+            "dropout": 0.3,
+            "e_layers": 1,
+            "head_dim": 32,
+            "inference_patch_size": 96,
+            "lr": 0.005,
+            "n_heads": 4,
+            "num_epochs": 3,
+            "patch_size": 16,
+            "patch_stride": 8,
+            "score_lambda": 0.5,
+            "seq_len": 192
+          },
+          "fit_and_pipeline_seconds": 3707.5863185282797,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 2.8995856028050184,
+          "inference_seconds": 3.200852431356907,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.6014378014951944,
+          "inference_seconds": 2.696456214413047,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 12,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+      "source_run_id": "full_gmm-full-20261024T115119Z-3976714",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.437281131313489,
+        "auc_roc": 0.7449263160543438,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 22032328,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714/cache/normalized_values.npy",
+          "sha256": "eb4ff37bc5f2767c44911978e14a8faa5875ff0b50798de9996769dbe39a5f5b",
+          "shape": [
+            220322,
+            25
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+        "status": "complete",
+        "task_name": "PSM.csv"
+      },
+      "status": "complete"
+    },
+    {
+      "calibration_count": 5603,
+      "coordinate_count": 73538,
+      "dataset": "MSL",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 5e-05,
+            "batch_size": 128,
+            "cf_dim": 64,
+            "d_ff": 256,
+            "d_model": 128,
+            "e_layers": 3,
+            "head_dim": 64,
+            "lr": 0.0005,
+            "n_heads": 2,
+            "num_epochs": 5,
+            "patch_size": 16,
+            "patch_stride": 8,
+            "seq_len": 192
+          },
+          "fit_and_pipeline_seconds": 8644.13193509914,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/MSL/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/MSL/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 0.7963512782007456,
+          "inference_seconds": 0.33559635654091835,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/MSL/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.15972811169922352,
+          "inference_seconds": 1.4957004934549332,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/MSL/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 32,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/MSL/full_gmm-full-20261021T112147Z-2470335",
+      "source_run_id": "full_gmm-full-20261021T112147Z-2470335",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.1590062828565859,
+        "auc_roc": 0.602445207747461,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 29050248,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/MSL/full_gmm-full-20261021T112147Z-2470335/cache/normalized_values.npy",
+          "sha256": "6d4d32a7faf5f68017a61f508fd01cb524f8015eaff2a937f2193224eaf01dbe",
+          "shape": [
+            132046,
+            55
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/MSL/full_gmm-full-20261021T112147Z-2470335",
+        "status": "complete",
+        "task_name": "MSL.csv"
+      },
+      "status": "complete"
+    },
+    {
+      "calibration_count": 6812,
+      "coordinate_count": 69166,
+      "dataset": "GECCO",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 0.0001,
+            "anomaly_ratio": 1,
+            "batch_size": 128,
+            "cf_dim": 64,
+            "d_ff": 256,
+            "d_model": 128,
+            "dropout": 0.2,
+            "e_layers": 2,
+            "head_dim": 64,
+            "head_dropout": 0.1,
+            "itr": 1,
+            "lr": 0.0001,
+            "n_heads": 2,
+            "num_epochs": 1,
+            "patch_size": 16,
+            "patch_stride": 8,
+            "patience": 10,
+            "seq_len": 96,
+            "small_kernel_merged": "False",
+            "temperature": 0.1,
+            "use_multi_scale": "False"
+          },
+          "fit_and_pipeline_seconds": 727.1091227773577,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 0.7158016078174114,
+          "inference_seconds": 0.663066191598773,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.008417749777436256,
+          "inference_seconds": 0.7807759325951338,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 8,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+      "source_run_id": "full_gmm-full-20261020T204951Z-1642355",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.22330328601085492,
+        "auc_roc": 0.4424521821007449,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 4986884,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355/cache/normalized_values.npy",
+          "sha256": "47a902e0efcbdbb0f94c91968da812efc1928388c4fac3ed7900e39f8f8bf930",
+          "shape": [
+            138521,
+            9
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+        "status": "complete",
+        "task_name": "GECCO.csv"
+      },
+      "status": "complete"
+    },
+    {
+      "calibration_count": 132,
+      "coordinate_count": 12425,
+      "dataset": "Genesis",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 0.0001,
+            "batch_size": 4,
+            "cf_dim": 64,
+            "d_ff": 128,
+            "d_model": 128,
+            "e_layers": 3,
+            "head_dim": 64,
+            "inference_patch_size": 32,
+            "inference_patch_stride": 1,
+            "lr": 0.0001,
+            "n_heads": 16,
+            "num_epochs": 10,
+            "patch_size": 8,
+            "patch_stride": 8,
+            "score_lambda": 1,
+            "seq_len": 192,
+            "temperature": 0.07
+          },
+          "fit_and_pipeline_seconds": 4003.5110389217734,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 0.5141962021589279,
+          "inference_seconds": 0.03282684646546841,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.0657935868948698,
+          "inference_seconds": 0.1022968702018261,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 12,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522",
+      "source_run_id": "full_gmm-full-20261020T205005Z-1645522",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.04680510216819125,
+        "auc_roc": 0.8995684848484848,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 1167968,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522/cache/normalized_values.npy",
+          "sha256": "b44d28ce386a450e54d1ac6c9ad4fb3289aeb246e8fe4b21e8ea2b136dbc246d",
+          "shape": [
+            16220,
+            18
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522",
+        "status": "complete",
+        "task_name": "Genesis.csv"
+      },
+      "status": "complete"
+    },
+    {
+      "calibration_count": 1082,
+      "coordinate_count": 4225,
+      "dataset": "NYC",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 1e-05,
+            "batch_size": 128,
+            "cf_dim": 64,
+            "d_ff": 256,
+            "d_model": 256,
+            "e_layers": 3,
+            "head_dim": 64,
+            "inference_patch_size": 32,
+            "inference_patch_stride": 1,
+            "lr": 0.0001,
+            "n_heads": 2,
+            "num_epochs": 2,
+            "patch_size": 16,
+            "patch_stride": 8,
+            "seq_len": 192,
+            "temperature": 0.07
+          },
+          "fit_and_pipeline_seconds": 227.06338391453028,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 1.0958942715078592,
+          "inference_seconds": 0.01656806282699108,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.001191701740026474,
+          "inference_seconds": 0.0007362049072980881,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/NYC/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 3,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+      "source_run_id": "full_gmm-full-20261020T211341Z-1931786",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.04408917284828918,
+        "auc_roc": 0.6913389836317612,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 210368,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/cache/normalized_values.npy",
+          "sha256": "66efb73189a78eafe52aba76d4af4eb377e267479a2936944a442ce4243e4a68",
+          "shape": [
+            17520,
+            3
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+        "status": "complete",
+        "task_name": "NYC.csv"
+      },
+      "status": "complete"
+    },
+    {
+      "calibration_count": 24,
+      "coordinate_count": 2329,
+      "dataset": "CalIt2",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 1e-05,
+            "auxi_lambda": 0.1,
+            "batch_size": 128,
+            "cf_dim": 128,
+            "d_ff": 128,
+            "d_model": 128,
+            "dc_lambda": 0.5,
+            "e_layers": 2,
+            "head_dim": 32,
+            "inference_patch_size": 16,
+            "lr": 0.0001,
+            "n_heads": 8,
+            "num_epochs": 10,
+            "patch_size": 16,
+            "patch_stride": 16,
+            "score_lambda": 0.5,
+            "seq_len": 192,
+            "temperature": 0.07
+          },
+          "fit_and_pipeline_seconds": 61.063130620867014,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CalIt2/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CalIt2/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 0.12692742608487606,
+          "inference_seconds": 0.011661898344755173,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CalIt2/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.0006161406636238098,
+          "inference_seconds": 0.0005184747278690338,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CalIt2/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 2,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004",
+      "source_run_id": "full_gmm-full-20261021T112212Z-2474004",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.0539712685708693,
+        "auc_roc": 0.7130399038765574,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 40448,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004/cache/normalized_values.npy",
+          "sha256": "ca0bb3ff26922258b11988a00ce5af1c2f2cdd7cfbb62c0bd352610998ffd263",
+          "shape": [
+            5040,
+            2
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004",
+        "status": "complete",
+        "task_name": "CalIt2.csv"
+      },
+      "status": "complete"
+    },
+    {
+      "calibration_count": 14012,
+      "coordinate_count": 142213,
+      "dataset": "Creditcard",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 1e-05,
+            "batch_size": 128,
+            "cf_dim": 64,
+            "d_ff": 128,
+            "d_model": 128,
+            "e_layers": 3,
+            "head_dim": 64,
+            "inference_patch_size": 16,
+            "lr": 0.0001,
+            "n_heads": 16,
+            "num_epochs": 5,
+            "patch_size": 32,
+            "patch_stride": 32,
+            "seq_len": 192
+          },
+          "fit_and_pipeline_seconds": 6838.093682235107,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 0.7829540725797415,
+          "inference_seconds": 2.026134293526411,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.25007827393710613,
+          "inference_seconds": 2.101383673027158,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Creditcard/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 25,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864",
+      "source_run_id": "full_gmm-full-20261024T115131Z-3977864",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.0510074536414816,
+        "auc_roc": 0.920187986500546,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 33037740,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864/cache/normalized_values.npy",
+          "sha256": "a7a14e2e0ec5ddad62980b5714101075c4465ca60858843fb12ebb5b51907732",
+          "shape": [
+            284807,
+            29
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864",
+        "status": "complete",
+        "task_name": "Creditcard.csv"
+      },
+      "status": "complete"
+    },
+    {
+      "calibration_count": 8283,
+      "coordinate_count": 84925,
+      "dataset": "CICIDS",
+      "methods": {
+        "CATCH-common": {
+          "archive_params": {
+            "Mlr": 1e-05,
+            "batch_size": 128,
+            "cf_dim": 64,
+            "d_ff": 128,
+            "d_model": 128,
+            "e_layers": 3,
+            "head_dim": 16,
+            "inference_patch_size": 16,
+            "lr": 0.0001,
+            "n_heads": 16,
+            "num_epochs": 5,
+            "patch_size": 16,
+            "patch_stride": 16,
+            "seq_len": 192,
+            "temperature": 0.07
+          },
+          "fit_and_pipeline_seconds": 9269.000237355009,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/CATCH-common",
+          "status": "complete",
+          "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/CATCH-common/results/common_evaluation.json"
+        },
+        "IsolationForest": {
+          "fit_seconds": 1.6510536707937717,
+          "inference_seconds": 0.6259719133377075,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/IsolationForest",
+          "parameters": {
+            "contamination": "auto",
+            "max_samples": 256,
+            "n_estimators": 100,
+            "n_jobs": 1,
+            "random_state": 2021,
+            "score": "negative score_samples"
+          },
+          "status": "complete"
+        },
+        "PCA": {
+          "fit_seconds": 0.7705991733819246,
+          "inference_seconds": 1.899797698482871,
+          "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/PCA",
+          "parameters": {
+            "n_components": 0.95,
+            "score": "per-row mean squared reconstruction error",
+            "selected_components": 21,
+            "svd_solver": "full"
+          },
+          "status": "complete"
+        }
+      },
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319",
+      "source_run_id": "full_gmm-full-20261024T115157Z-3980319",
+      "source_validation": {
+        "artifact_type": "probe_head",
+        "auc_pr": 0.0009173981247266992,
+        "auc_roc": 0.5388251328959158,
+        "head_type": "gmm",
+        "mode": "pretrained",
+        "normalized_cache_validation": {
+          "bytes": 49026656,
+          "dtype": "float32",
+          "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319/cache/normalized_values.npy",
+          "sha256": "a683593179ebafa44d4626b564d57d3f98533d6ac9e8eac187bb9d2667fe423c",
+          "shape": [
+            170231,
+            72
+          ]
+        },
+        "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319",
+        "status": "complete",
+        "task_name": "CICIDS.csv"
+      },
+      "status": "complete"
+    }
+  ]
+}

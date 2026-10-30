@@ -8,7 +8,6 @@ from pathlib import Path
 import sys
 
 import numpy as np
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -19,6 +18,7 @@ from ts_benchmark.baselines.mnrf_view_probe.probe import (
     _all_boundary_ids, _chunked_array_hash, _hash_strings, load_probe,
 )
 from ts_benchmark.baselines.mnrf_view_probe.common_contract import endpoints_for_ranges
+from scripts.mnrf_common_data import load_task_frame
 
 
 def _sha256(path):
@@ -38,10 +38,7 @@ def export(probe_run, data_csv, output_dir, catch_seq_len=None):
     probe = load_probe(run, device="cpu")
     manifest = json.loads((run / "probe_manifest.json").read_text(encoding="utf-8"))
     source = manifest.get("source_identity") or {}
-    frame = pd.read_csv(data_csv)
-    label_column = next((column for column in frame.columns if str(column).lower() == "label"), None)
-    if label_column is None:
-        raise ValueError("source CSV must contain a label column for full-coordinate evaluation")
+    frame, label_column = load_task_frame(data_csv)
     values, columns = MNRFLiteV2._features_from_frame(frame)
     if list(map(str, columns)) != source.get("variable_names"):
         raise ValueError("source CSV variable order differs from the frozen Probe run")
@@ -58,9 +55,7 @@ def export(probe_run, data_csv, output_dir, catch_seq_len=None):
         raise ValueError("source CSV entity/session values differ from the frozen Probe run")
     if len(frame) != int(source.get("input_length", -1)):
         raise ValueError("source CSV row count differs from the frozen Probe run")
-    labels = frame[label_column].to_numpy()
-    if labels.ndim != 1 or labels.dtype.kind not in "iu":
-        raise ValueError("source CSV labels must be one-dimensional integers")
+    labels = frame[label_column].to_numpy(dtype=np.int8, copy=True)
     root = Path(output_dir).resolve()
     if root == run or root in run.parents or run in root.parents:
         raise ValueError("common export output must be outside the read-only Probe source tree")
@@ -108,12 +103,24 @@ def export(probe_run, data_csv, output_dir, catch_seq_len=None):
     np.save(rows_path, raw_rows)
     labels_path = root / "labels.npy"
     np.save(labels_path, labels)
+    time_values_path = root / "time_values_ns.npy"
+    np.save(time_values_path, np.asarray(time_index.values_ns, dtype=np.int64))
+    boundary_record = None
+    if boundary_ids is not None:
+        boundary_path = root / "boundary_ids.npy"
+        np.save(boundary_path, np.asarray(boundary_ids, dtype=str))
+        boundary_record = {"path": str(boundary_path), "sha256": _sha256(boundary_path),
+                           "count": int(len(boundary_ids))}
     contract = {
         "schema": "mnrf-view-probe-common-export-v2", "status": "complete",
         "task_name": source.get("task_name"), "probe_run": str(run),
         "probe_manifest_sha256": _sha256(run / "probe_manifest.json"),
         "probe_source_identity": source,
         "data_identity": source.get("feature_data_sha256"),
+        "data_csv_path": str(Path(data_csv).resolve()),
+        "data_csv_sha256": _sha256(data_csv),
+        "metadata_path": str(ROOT / "dataset" / "anomaly_detect" / "DETECT_META.csv"),
+        "metadata_sha256": _sha256(ROOT / "dataset" / "anomaly_detect" / "DETECT_META.csv"),
         "time_identity": source.get("time_index", {}).get("values_sha256"),
         "time_kind": source.get("time_index", {}).get("kind"),
         "source_timezone": source.get("time_index", {}).get("source_timezone"),
@@ -132,6 +139,9 @@ def export(probe_run, data_csv, output_dir, catch_seq_len=None):
         "catch_test": {"path": str(catch_test_path), "sha256": _sha256(catch_test_path), "count": int(len(catch_test))},
         "train_rows": {"path": str(rows_path), "sha256": _sha256(rows_path), "count": int(len(raw_rows))},
         "labels": {"path": str(labels_path), "sha256": _sha256(labels_path), "count": int(len(labels))},
+        "time_values_ns": {"path": str(time_values_path), "sha256": _sha256(time_values_path),
+                           "count": int(len(time_index.values_ns))},
+        "boundary_ids": boundary_record,
     }
     (root / "common_contract.json").write_text(
         json.dumps(contract, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")

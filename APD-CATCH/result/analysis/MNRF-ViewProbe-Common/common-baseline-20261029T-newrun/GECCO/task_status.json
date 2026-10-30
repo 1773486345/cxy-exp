@@ -1,0 +1,85 @@
+{
+  "calibration_count": 6812,
+  "coordinate_count": 69166,
+  "dataset": "GECCO",
+  "methods": {
+    "CATCH-common": {
+      "archive_params": {
+        "Mlr": 0.0001,
+        "anomaly_ratio": 1,
+        "batch_size": 128,
+        "cf_dim": 64,
+        "d_ff": 256,
+        "d_model": 128,
+        "dropout": 0.2,
+        "e_layers": 2,
+        "head_dim": 64,
+        "head_dropout": 0.1,
+        "itr": 1,
+        "lr": 0.0001,
+        "n_heads": 2,
+        "num_epochs": 1,
+        "patch_size": 16,
+        "patch_stride": 8,
+        "patience": 10,
+        "seq_len": 96,
+        "small_kernel_merged": "False",
+        "temperature": 0.1,
+        "use_multi_scale": "False"
+      },
+      "fit_and_pipeline_seconds": 727.1091227773577,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/CATCH-common",
+      "status": "complete",
+      "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/CATCH-common/results/common_evaluation.json"
+    },
+    "IsolationForest": {
+      "fit_seconds": 0.7158016078174114,
+      "inference_seconds": 0.663066191598773,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/IsolationForest",
+      "parameters": {
+        "contamination": "auto",
+        "max_samples": 256,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "random_state": 2021,
+        "score": "negative score_samples"
+      },
+      "status": "complete"
+    },
+    "PCA": {
+      "fit_seconds": 0.008417749777436256,
+      "inference_seconds": 0.7807759325951338,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/GECCO/PCA",
+      "parameters": {
+        "n_components": 0.95,
+        "score": "per-row mean squared reconstruction error",
+        "selected_components": 8,
+        "svd_solver": "full"
+      },
+      "status": "complete"
+    }
+  },
+  "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+  "source_run_id": "full_gmm-full-20261020T204951Z-1642355",
+  "source_validation": {
+    "artifact_type": "probe_head",
+    "auc_pr": 0.22330328601085492,
+    "auc_roc": 0.4424521821007449,
+    "head_type": "gmm",
+    "mode": "pretrained",
+    "normalized_cache_validation": {
+      "bytes": 4986884,
+      "dtype": "float32",
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355/cache/normalized_values.npy",
+      "sha256": "47a902e0efcbdbb0f94c91968da812efc1928388c4fac3ed7900e39f8f8bf930",
+      "shape": [
+        138521,
+        9
+      ]
+    },
+    "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+    "status": "complete",
+    "task_name": "GECCO.csv"
+  },
+  "status": "complete"
+}

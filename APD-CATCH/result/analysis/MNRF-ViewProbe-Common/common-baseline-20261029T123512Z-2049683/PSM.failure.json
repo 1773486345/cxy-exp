@@ -1,0 +1,9 @@
+{
+  "dataset": "PSM",
+  "error": "AttributeError: 'NoneType' object has no attribute 'open'",
+  "methods": {},
+  "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+  "source_run_id": "full_gmm-full-20261024T115119Z-3976714",
+  "status": "failed",
+  "traceback": "Traceback (most recent call last):\n  File \"scripts/run_mnrf_common_baselines.py\", line 700, in run_all\n    _task_pipeline(task, batch_name, analysis_root, score_root,\n  File \"scripts/run_mnrf_common_baselines.py\", line 514, in _task_pipeline\n    if \"predictions\" in probe_payload.files and not np.array_equal(probe_payload[\"predictions\"].astype(np.int64), full_predictions):\n  File \"/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/numpy/lib/npyio.py\", line 248, in __getitem__\n    bytes = self.zip.open(key)\nAttributeError: 'NoneType' object has no attribute 'open'\n"
+}

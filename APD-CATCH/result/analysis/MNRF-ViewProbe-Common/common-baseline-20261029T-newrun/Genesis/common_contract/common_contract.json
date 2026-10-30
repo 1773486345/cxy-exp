@@ -1,0 +1,280 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": null,
+  "boundary_ids": null,
+  "catch_seq_len": 192,
+  "catch_splits": {
+    "calibration": {
+      "count": 132,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/catch_calibration_indices.npy",
+      "sha256": "e463e07ce8fc61e9ab1b68fc860b9dfb2e3e17ec9bd7cba253deaa36715f53ea"
+    },
+    "train": {
+      "count": 2386,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/catch_train_indices.npy",
+      "sha256": "a799ee2e3181f38833f79cde88153f6fcb87ef5a43c4d4b63cdf4fa24d85af40"
+    },
+    "validation": {
+      "count": 131,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/catch_validation_indices.npy",
+      "sha256": "df806ac436df47f341ce2d49dca93820b25a8d5afe40f78ac22a40cc05d812c2"
+    }
+  },
+  "catch_test": {
+    "count": 12425,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/catch_test_indices.npy",
+    "sha256": "76808f27ff7aee518ebc3d6b15184e728d257988146806bf8e15eb3af9eb22ee"
+  },
+  "data_csv_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/Genesis.csv",
+  "data_csv_sha256": "fcc840cd2f8d8a64792c1f8ae95422f6c6bb2d0c7420487c1f8352a643bde672",
+  "data_identity": "cbc812eabd653e945f37c2005316654ce836d26138e6d091565296348bc62e88",
+  "input_length": 16220,
+  "labels": {
+    "count": 16220,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/labels.npy",
+    "sha256": "14db1a8238116068fa4deb920388a4760abb6f10a88fb9308d5e8916276ece7d"
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "probe_manifest_sha256": "d9c790772ba682c7d298e626da9744e01591429da03fa51d130b34313d2bc020",
+  "probe_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522",
+  "probe_source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "cbc812eabd653e945f37c2005316654ce836d26138e6d091565296348bc62e88",
+    "input_length": 16220,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        3281,
+        3604
+      ],
+      "train": [
+        0,
+        2577
+      ],
+      "validation": [
+        2768,
+        3090
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          3281,
+          3604
+        ]
+      ],
+      "train": [
+        [
+          0,
+          2577
+        ]
+      ],
+      "validation": [
+        [
+          2768,
+          3090
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        16220
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "Genesis.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1,
+      "fit_range": [
+        0,
+        2577
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 12425,
+    "test_endpoints_sha256": "2f8d6c5b72ddc74c22b87963ae5921d819e6be80dbd017ddf9877fac955af615",
+    "test_segments": [
+      [
+        3604,
+        16220
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "35b03ab6a1ec09a1845fad934e57a6e72997b9bd5851d1b769a1b267b79452bb"
+    },
+    "train_length": 3604,
+    "variable_names": [
+      "MotorData.ActCurrent",
+      "MotorData.ActPosition",
+      "MotorData.ActSpeed",
+      "MotorData.IsAcceleration",
+      "MotorData.IsForce",
+      "MotorData.Motor_Pos1reached",
+      "MotorData.Motor_Pos2reached",
+      "MotorData.Motor_Pos3reached",
+      "MotorData.Motor_Pos4reached",
+      "NVL_Recv_Ind.GL_Metall",
+      "NVL_Recv_Ind.GL_NonMetall",
+      "NVL_Recv_Storage.GL_I_ProcessStarted",
+      "NVL_Recv_Storage.GL_I_Slider_IN",
+      "NVL_Recv_Storage.GL_I_Slider_OUT",
+      "NVL_Recv_Storage.GL_LightBarrier",
+      "NVL_Send_Storage.ActivateStorage",
+      "PLC_PRG.Gripper",
+      "PLC_PRG.MaterialIsMetal"
+    ]
+  },
+  "ranges": {
+    "calibration": [
+      3281,
+      3604
+    ],
+    "train": [
+      0,
+      2577
+    ],
+    "validation": [
+      2768,
+      3090
+    ]
+  },
+  "raw_training_range": [
+    0,
+    2577
+  ],
+  "schema": "mnrf-view-probe-common-export-v2",
+  "segment_ranges": {
+    "calibration": [
+      [
+        3281,
+        3604
+      ]
+    ],
+    "train": [
+      [
+        0,
+        2577
+      ]
+    ],
+    "validation": [
+      [
+        2768,
+        3090
+      ]
+    ]
+  },
+  "seq_len": 192,
+  "source_timezone": null,
+  "splits": {
+    "calibration": {
+      "count": 132,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/calibration_indices.npy",
+      "sha256": "e463e07ce8fc61e9ab1b68fc860b9dfb2e3e17ec9bd7cba253deaa36715f53ea"
+    },
+    "train": {
+      "count": 2386,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/train_indices.npy",
+      "sha256": "a799ee2e3181f38833f79cde88153f6fcb87ef5a43c4d4b63cdf4fa24d85af40"
+    },
+    "validation": {
+      "count": 131,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/validation_indices.npy",
+      "sha256": "df806ac436df47f341ce2d49dca93820b25a8d5afe40f78ac22a40cc05d812c2"
+    }
+  },
+  "status": "complete",
+  "task_name": "Genesis.csv",
+  "temporal_rule": {
+    "entity_boundary_columns": [],
+    "expected_interval_ns": 1,
+    "fit_range": [
+      0,
+      2577
+    ],
+    "time_kind": "timestamp_naive_ns",
+    "tolerance": 0.05,
+    "version": "train-frozen-cadence-v1"
+  },
+  "test_segments": [
+    [
+      3604,
+      16220
+    ]
+  ],
+  "time_identity": "35b03ab6a1ec09a1845fad934e57a6e72997b9bd5851d1b769a1b267b79452bb",
+  "time_kind": "timestamp_naive_ns",
+  "time_values_ns": {
+    "count": 16220,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/time_values_ns.npy",
+    "sha256": "876872226e45cdf5faf4927a9f463699828609e9abe0b9628246e511c964aefc"
+  },
+  "train_length": 3604,
+  "train_rows": {
+    "count": 2577,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/Genesis/common_contract/train_rows.npy",
+    "sha256": "feb6e5d36e0db4e1e19fb7fc89e31a38624422ecbca9e5ec79e8ecfa12e9c946"
+  },
+  "variable_names": [
+    "MotorData.ActCurrent",
+    "MotorData.ActPosition",
+    "MotorData.ActSpeed",
+    "MotorData.IsAcceleration",
+    "MotorData.IsForce",
+    "MotorData.Motor_Pos1reached",
+    "MotorData.Motor_Pos2reached",
+    "MotorData.Motor_Pos3reached",
+    "MotorData.Motor_Pos4reached",
+    "NVL_Recv_Ind.GL_Metall",
+    "NVL_Recv_Ind.GL_NonMetall",
+    "NVL_Recv_Storage.GL_I_ProcessStarted",
+    "NVL_Recv_Storage.GL_I_Slider_IN",
+    "NVL_Recv_Storage.GL_I_Slider_OUT",
+    "NVL_Recv_Storage.GL_LightBarrier",
+    "NVL_Send_Storage.ActivateStorage",
+    "PLC_PRG.Gripper",
+    "PLC_PRG.MaterialIsMetal"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "calibration_count": 13020,
+  "coordinate_count": 87650,
+  "dataset": "PSM",
+  "methods": {
+    "CATCH-common": {
+      "archive_params": {
+        "Mlr": 0.001,
+        "auxi_lambda": 0.01,
+        "batch_size": 128,
+        "cf_dim": 16,
+        "d_ff": 32,
+        "d_model": 16,
+        "dc_lambda": 0.05,
+        "dropout": 0.3,
+        "e_layers": 1,
+        "head_dim": 32,
+        "inference_patch_size": 96,
+        "lr": 0.005,
+        "n_heads": 4,
+        "num_epochs": 3,
+        "patch_size": 16,
+        "patch_stride": 8,
+        "score_lambda": 0.5,
+        "seq_len": 192
+      },
+      "fit_and_pipeline_seconds": 3707.5863185282797,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/CATCH-common",
+      "status": "complete",
+      "strict_evaluation": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/CATCH-common/results/common_evaluation.json"
+    },
+    "IsolationForest": {
+      "fit_seconds": 2.8995856028050184,
+      "inference_seconds": 3.200852431356907,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/IsolationForest",
+      "parameters": {
+        "contamination": "auto",
+        "max_samples": 256,
+        "n_estimators": 100,
+        "n_jobs": 1,
+        "random_state": 2021,
+        "score": "negative score_samples"
+      },
+      "status": "complete"
+    },
+    "PCA": {
+      "fit_seconds": 0.6014378014951944,
+      "inference_seconds": 2.696456214413047,
+      "output": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/PCA",
+      "parameters": {
+        "n_components": 0.95,
+        "score": "per-row mean squared reconstruction error",
+        "selected_components": 12,
+        "svd_solver": "full"
+      },
+      "status": "complete"
+    }
+  },
+  "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+  "source_run_id": "full_gmm-full-20261024T115119Z-3976714",
+  "source_validation": {
+    "artifact_type": "probe_head",
+    "auc_pr": 0.437281131313489,
+    "auc_roc": 0.7449263160543438,
+    "head_type": "gmm",
+    "mode": "pretrained",
+    "normalized_cache_validation": {
+      "bytes": 22032328,
+      "dtype": "float32",
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714/cache/normalized_values.npy",
+      "sha256": "eb4ff37bc5f2767c44911978e14a8faa5875ff0b50798de9996769dbe39a5f5b",
+      "shape": [
+        220322,
+        25
+      ]
+    },
+    "run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+    "status": "complete",
+    "task_name": "PSM.csv"
+  },
+  "status": "complete"
+}
