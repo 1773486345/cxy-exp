@@ -90,3 +90,28 @@ An improvement from diagonal covariance supports covariance complexity/fitting a
 Failures, if any, are preserved in `failures.json`; no failed configuration is treated as complete.
 
 The diagonal MSL head failed under the fixed K=4, `reg_covar=0.001`, `n_init=1`, `max_iter=100` protocol because sklearn reported a collapsed/ill-defined component covariance. No retry, K reduction, regularization change, or parameter search was performed. Both original full-covariance MSL rows remain included and verified.
+
+## 排序与报警损失定位
+
+本节是只读事后诊断：没有重训编码器、重新编码、重拟合 GMM、重新校准或改变阈值。四种 GMM 配置和 CATCH-common、IF、PCA 均从已保存分数/NLL 计算；正式报警仍使用各自既有 calibration q=0.995 阈值及严格 `score > threshold`。`loss_decomposition.csv` 保留每种配置的 Recall@FPR、分布分位数及 Affiliation 指标；`calibration_tail_context.csv` 记录校准上尾点的原始标签、冻结窗口上下文及时间四分位；`variable_error_attribution.csv` 对 TP、FP、FN 和测试正常点分数最高 1% 做并列最大值分摊。
+
+| 数据集 | 已确认的损失环节 | 支持证据 | 尚未解释 | 优先修改方向（待独立检验） |
+|---|---|---|---|---|
+| PSM | 报警误报及变量最大值集中 | Full/max AUC/AP=0.745/0.437；q995 FPR=27.35%、Recall=60.28%。q995 校准尾 66 点中无标签异常或异常上下文；正常误报最高 1% 的主导分数 100% 来自 feature_3，FN 最大项 feature_1 占 32.2%。 | max 排序 AP 低于 PCA 0.535；这些通道归因不是因果证据。 | 先评估有界、训练/校准冻结的跨变量稳健聚合；mean 提高 AP 0.0365 但 AUC 降 0.0125，不能直接替换正式结果。 |
+| MSL | 排序弱，且对角头在协方差初始化阶段数值失败 | Full/max AUC/AP=0.602/0.159、Recall=7.75%；校准尾 29 点全在最后时间四分位，标签及窗口上下文均正常。col_51/col_37 有输入尺度触底标记且多维特征低于 feature floor；但 MSL 初始化失败变量 col_17 的输入有限、范围 [-179.95,214.84]。float32 同一初始化在单样本分量上得到最小经验协方差 -1.09e-4，float64 为 0.001 并可初始化。Full/max 测试分数校准中位数/99th/99.5th 为 77.5/537/2,202，测试正常点 99th/最大值为 65,128/1.02e18，异常点中位数/95th/99th 为 84.8/44,991/5.06e17；最大分数点在全局端点 104405、变量 col_37，标签为异常。该通道训练 scale 被 floor 到 1e-6，标准化缓存里稀有值达到 1e6，冻结前向特征窗口达到约 [-599531, 1000000]，明显超出训练该变量特征范围 [-64.8,72.8]。 | 对角初始化失败的直接证据是 float32 经验方差消减；Full/max 超大值与低基数通道的 scale-floor 放大和测试特征外推相符，但缓存不足以证明底层原始传感器值/数据拼接是否合理，也不能排除 GMM 对极端特征的数值敏感。异常分数在校准分布的中位百分位仅 55.9%，95th 已到 99.98%，显示排序并非所有异常都整体偏高。 | 优先为协方差统计实现稳定的高精度累积，并在保留 K/正则/seed 的受控独立运行验证；另独立审查 col_37 的低基数输入与 floor 语义。不得将本次 float64 初始化探针记作成功模型。 |
+| GECCO | 排序与校准阈值均受异常污染风险影响 | Full/max AUC/AP=0.442/0.223，但 CATCH-common 为 0.971/0.467。校准 q995 的 35/35 个尾分数对应标签异常，且 35/35 窗口上下文包含异常。对角头 AUC 升至 0.847，但 AP 仅 0.246。 | 校准污染是阈值解释的重要证据，不能单独解释 AUC 排序分歧；源数据/标注语义仍需核实。 | 先审计数据的异常标注、purge 和校准假设；保留当前阈值作原协议结果，不用测试集重选。 |
+| Genesis | 高 AUC 与低 AP 并存，报警强度受小校准集影响 | Full/max AUC/AP=0.900/0.0468；mean 为 0.976/0.1005，q995 Recall 从 46% 到 76%，FPR 从 3.03% 到 4.11%。校准仅 132 点，q995 尾只有 1 点。FN 最大变量为 IsAcceleration（70.4%）；最高分正常点主要由二值 Motor_Pos2reached 主导（81.5%）。 | PCA 的 AUC/AP 为 0.988/0.516，差距不由聚合单独解释；单个尾点使阈值尾部估计敏感。 | 先核对离散状态通道及事件/窗口语义，再评估对离散变量稳定的密度头；增加校准数据只可作为后续协议研究，不在此调分位数。 |
+| NYC | 报警端未检出真阳性，max/mean 都未修复 | Full/max AUC/AP=0.691/0.0441，但 q995 TP=0、FN=99；mean 仍 TP=0。FN 的 63.6% 和高分正常点的 78.6% 都由 channnel3 主导，该通道有 7 个采样取值。 | 单变量稀疏/离散现象与记录的原始传感器含义是否一致尚未证实；排序和报警落差原因未定。 | 优先检查 channnel3 的测量、离散化和时间聚合语义；不能仅凭归因删除变量或分支。 |
+| CalIt2 | 报警召回低且校准尾样本极少 | Full/max AUC/AP=0.713/0.0540，TP=3、FN=67、FPR=4.21%；校准仅 24 点、q995 尾 1 点（该点标签/上下文正常）。两输入变量样本取值数均为 10；FN 主要由变量 9（62.7%）与 7（37.3%）主导。 | 校准分位数方差、低基数输入和表示能力的相对影响无法由现有单次运行分开。 | 优先核对输入量化和极小校准切分对阈值的影响；不缩窗、不合并 split、不针对测试调阈值。 |
+| Creditcard | 排序总体较好但极不平衡；报警阈值与召回权衡显著 | Full/max AUC/AP=0.920/0.0510，Recall=24.4%、FPR=1.04%；mean AP=0.1065、Recall=83.3%，但 FPR=2.01%。校准尾 71 点含 3 个标签异常、9 个异常上下文。FN 主导变量 V11 占 53.3%；正常高分主要由 V20/V25/V12 分担。 | 高分标签及上下文污染对阈值偏移的定量因果影响未知；对照头的 AP 受极低异常率影响。 | 先研究稳健校准/跨变量聚合对误报-召回曲线的影响；mean 结果是敏感性证据，不按测试结果替换 max。 |
+| CICIDS | 排序接近随机且 q995 无真阳性，测试正常误报仍多 | Full/max AUC/AP=0.539/0.000917、TP=0、FN=74、FPR=1.66%；q995 校准尾 42 点标签全正常，但每个点的窗口上下文均覆盖标注异常。mean AUC/AP 升至 0.622/0.001085，仍无 TP。FN 主导为 Fwd IAT Min（28.4%）；正常高分主导为 Flow IAT Min（52.2%）。 | 上下文含异常不等于校准端点自身异常；标注边界、网络流量行序连续性和特征漂移仍需上游核实。 | 优先核查流量会话/时间拼接和异常窗口污染定义；本轮没有裁剪尺度或更改数据。 |
+
+变量归因同时与尺度底板、低基数和特征尺度底板并列保存。它们提供可检验线索：例如 MSL 有若干低尺度/低方差通道，Genesis、NYC、CalIt2 的主要归因通道呈低基数；Creditcard、CICIDS 的错误变量并未普遍触发输入 scale floor 或 score MAD floor。因此“尺度极大/触底”不能作为八组共同根因。诊断使用的归因集合包括漏报和高分正常点，并对并列最大值平均分摊，不是删除/裁剪特征的依据。
+
+Recall@FPR=0.1/0.5/1/5% 的四列值均逐个保存在 `loss_decomposition.csv`。Full/max 的对应召回依次为：PSM 0.07/0.76/1.38/12.27%，MSL 1.16/2.33/3.88/10.22%，GECCO 25.48/27.26/27.40/27.67%，Genesis 0/6/22/56%，NYC 0/0/3.03/10.10%，CalIt2 0/0/1.43/4.29%，Creditcard 10.41/20.81/24.43/68.78%，CICIDS 0/0/0/2.70%。GECCO 在低 FPR 区间的召回主要反映测试异常占比及排序点集，仍需结合其校准污染解释；不能将 FPR 曲线用于正式阈值选择。
+
+Full/max 校准量分别为：PSM 13,020（q995 尾 66、无异常标签/窗口）；MSL 5,603（尾 29、集中在末四分位且均正常）；GECCO 6,812（尾 35、35 个端点及其上下文均含异常）；Genesis 132（尾 1、正常）；NYC 1,082（尾 6、正常）；CalIt2 24（尾 1、正常）；Creditcard 14,012（尾 71，其中 3 个尾端点标签为异常、9 个窗口上下文含异常）；CICIDS 8,283（尾 42 标签均正常，但 42 个上下文均覆盖异常标签）。上下文含异常不等于该 calibration 端点自身异常。
+
+### 下一步优先项
+
+优先修正 MSL 对角协方差初始化的数值稳定性：在相同 float32 输入值、分量分配、K=4、`reg_covar=0.001` 和 seed 下，仅让协方差矩统计使用 float64 或稳定的两遍累积；预期是消除负经验方差导致的非法初始化，而不是保证改善 AUC/AP。必须作为新独立诊断头验证，不改写当前失败状态。其次针对 GECCO/CICIDS 先核实异常标签与校准窗口语义，再做冻结协议下的校准稳健性实验。PSM/Creditcard 的 mean 对照显示跨变量 max 会影响排序/报警折衷；它不能解释 NYC、CalIt2 的低召回，也不能把所有差距归因为编码器表示。

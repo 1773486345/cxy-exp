@@ -115,6 +115,25 @@ def _effect_deltas(by_config, task):
     return values
 
 
+def _diagnostic_output_paths(reuse_batch, timestamp=None, pid=None):
+    timestamp = timestamp or time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    pid = os.getpid() if pid is None else pid
+    score_parent = ROOT / "result" / "score" / "MNRF-ViewProbe-FullDiagnostic"
+    analysis_parent = ROOT / "result" / "analysis" / "MNRF-ViewProbe-FullDiagnostic"
+    if reuse_batch:
+        name = Path(reuse_batch).name
+        if name != reuse_batch or not name.startswith("full-head-diagnostic-"):
+            raise ValueError("--reuse-batch must be an existing diagnostic batch directory name")
+        score_root = score_parent / name
+        if not score_root.is_dir():
+            raise FileNotFoundError("reusable diagnostic score directory is missing: {}".format(score_root))
+        analysis_root = analysis_parent / "full-head-diagnostic-reuse-{}-{}-{}".format(
+            name.rsplit("-", 1)[-1], timestamp, time.time_ns())
+        return analysis_root, score_root, True
+    name = "full-head-diagnostic-{}-{}".format(timestamp, pid)
+    return analysis_parent / name, score_parent / name, False
+
+
 def _result_row(task, config_name, covariance, aggregation, run_path, data, aligned,
                 source, source_manifest, axes, fit_seconds=0.0, status="reused"):
     if aggregation == "max":
@@ -231,7 +250,7 @@ def _feature_scale_summary(source, source_manifest):
             "feature_summary_sampling": {"split": "train", "rows": sample_n, "seed_rule": "linspace endpoints"}}
 
 
-def run_diagnostic():
+def run_diagnostic(reuse_batch=None):
     plan_path = ROOT / BATCH / "plan.json"
     plan = _json(plan_path)
     if int(plan.get("head_seed", -1)) != SEED or set(plan.get("tasks", ())) != set(TASKS):
@@ -240,11 +259,10 @@ def run_diagnostic():
         raise FileNotFoundError(AGGREGATION_INPUT)
     with AGGREGATION_INPUT.open(newline="", encoding="utf-8") as handle:
         aggregation_rows = list(csv.DictReader(handle))
-    batch_name = "full-head-diagnostic-{}-{}".format(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()), os.getpid())
-    analysis_root = ROOT / "result" / "analysis" / "MNRF-ViewProbe-FullDiagnostic" / batch_name
-    score_root = ROOT / "result" / "score" / "MNRF-ViewProbe-FullDiagnostic" / batch_name
+    analysis_root, score_root, reuse_only = _diagnostic_output_paths(reuse_batch)
     analysis_root.mkdir(parents=True, exist_ok=False)
-    score_root.mkdir(parents=True, exist_ok=False)
+    if not reuse_only:
+        score_root.mkdir(parents=True, exist_ok=False)
     rows, contribution_rows, scale_rows, failures = [], [], [], []
     baseline_metrics_path = COMMON_BATCH / "common_protocol_metrics.csv"
     baseline_by_task = {}
@@ -330,8 +348,9 @@ def run_diagnostic():
             task_output.mkdir(parents=True, exist_ok=True)
             frame, train_length, labels, _, _, _ = _read_task(task, "large_detect")
             output_path = task_output
-            diag_path = old_diag_path or (output_path / "heads" / "FULL_CONCAT")
-            if old_diag_path is not None:
+            diag_path = (output_path / "heads" / "FULL_CONCAT") if reuse_only else (
+                old_diag_path or (output_path / "heads" / "FULL_CONCAT"))
+            if old_diag_path is not None and not reuse_only:
                 diag_data, diag_aligned = old_data, old_aligned
                 diag_status, diag_elapsed, diag_reused_path = "reused", 0.0, old_diag_path
             elif diag_path.exists():
@@ -339,6 +358,8 @@ def run_diagnostic():
                                                            ("S", "E", "P", "R"), axes)
                 diag_status, diag_elapsed, diag_reused_path = "reused", 0.0, diag_path
             else:
+                if reuse_only:
+                    raise FileNotFoundError("reuse-only diagnostic head is missing: {}".format(diag_path))
                 config = _config_for(task, source, source_manifest, ("S", "E", "P", "R"), diag_path)
                 started = time.perf_counter()
                 probe = MNRFViewProbe(**config)
@@ -409,6 +430,7 @@ def run_diagnostic():
             dimension = len(contract["variable_names"])
             selected = int(old_model["estimator"].n_components_)
             frame, values, labels, times = _verify_frame_for_contract(task, DATASET_FILES[task], contract)
+            corrected_output = score_root / task / "PCA-residual"
             if selected < dimension:
                 with np.load(old_score, allow_pickle=False) as old_payload:
                     old_scores = np.asarray(old_payload["scores"])
@@ -424,7 +446,8 @@ def run_diagnostic():
                                  "roc_auc": old_metrics["roc_auc"],
                                  "average_precision": old_metrics["average_precision"]})
             else:
-                corrected_output = score_root / task / "PCA-residual"
+                if reuse_only:
+                    raise FileNotFoundError("reuse-only PCA residual result is missing: {}".format(corrected_output))
                 score_path, evidence = _fit_light_method("PCA", corrected_output, values, labels, times, contract)
                 with np.load(score_path, allow_pickle=False) as scored:
                     scores = np.asarray(scored["scores"])
@@ -525,7 +548,8 @@ def run_diagnostic():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
-    out, errors = run_diagnostic()
+    parser.add_argument("--reuse-batch", help="validate and reuse heads from an existing diagnostic batch; never fit a missing head")
+    args = parser.parse_args()
+    out, errors = run_diagnostic(reuse_batch=args.reuse_batch)
     if errors:
         raise SystemExit(1)

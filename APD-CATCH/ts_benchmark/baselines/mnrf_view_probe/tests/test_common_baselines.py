@@ -38,7 +38,7 @@ def test_benchmark_long_csv_loader_preserves_variable_order_time_and_binary_labe
     np.testing.assert_array_equal(frame["label"].to_numpy(), [0, 0, 1, 0, 1])
 
 
-def test_light_baselines_use_fixed_fit_rows_and_calibration_coordinates(tmp_path):
+def test_light_baselines_use_fixed_fit_rows_and_calibration_coordinates(tmp_path, monkeypatch):
     rng = np.random.default_rng(2021)
     values = rng.normal(size=(160, 3)).astype(np.float32)
     labels = np.zeros(160, dtype=np.int64)
@@ -58,6 +58,7 @@ def test_light_baselines_use_fixed_fit_rows_and_calibration_coordinates(tmp_path
         "probe_run": str(tmp_path / "probe"), "probe_manifest_sha256": "source-manifest",
         "data_csv_path": str(tmp_path / "source.csv"), "data_csv_sha256": "source-bytes",
         "data_identity": "data", "time_identity": "time", "variable_names": ["a", "b", "c"],
+        "input_length": len(values),
         "boundary_identity": None, "train_rows": train_record,
         "catch_splits": {"calibration": calibration_record}, "catch_test": test_record,
         "probe_source_identity": {"test_segments": [[120, 160]]},
@@ -77,6 +78,24 @@ def test_light_baselines_use_fixed_fit_rows_and_calibration_coordinates(tmp_path
         assert manifest["training_protocol"].endswith("no internal split")
         assert manifest["seed"] == 2021
         assert evidence["parameters"]
+        before = (score_path.read_bytes(), (tmp_path / method / "model.joblib").read_bytes(),
+                  (tmp_path / method / "evidence" / "baseline.json").read_bytes())
+
+        def forbid_refit(*args, **kwargs):
+            raise AssertionError("complete IF/PCA output should be validated and reused")
+
+        monkeypatch.setattr(common.StandardScaler, "fit", forbid_refit)
+        if method == "IsolationForest":
+            monkeypatch.setattr(common.IsolationForest, "fit", forbid_refit)
+        else:
+            monkeypatch.setattr(common.PCA, "fit", forbid_refit)
+        reused_path, reused_evidence = _fit_light_method(
+            method, tmp_path / method, values, labels, times, contract)
+        assert reused_path == score_path
+        assert reused_evidence["status"] == "complete"
+        assert before == (score_path.read_bytes(), (tmp_path / method / "model.joblib").read_bytes(),
+                          (tmp_path / method / "evidence" / "baseline.json").read_bytes())
+        monkeypatch.undo()
 
 
 def test_metrics_keep_coordinate_gaps_and_report_segment_coverage():

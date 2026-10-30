@@ -1,0 +1,66 @@
+[
+  {
+    "dataset": "PSM",
+    "source_run_id": "full_gmm-full-20261024T115119Z-3976714",
+    "test_points": 87650,
+    "test_anomaly_points": 24378,
+    "calibration_points": 13020,
+    "diag_status": "reused"
+  },
+  {
+    "dataset": "MSL",
+    "source_run_id": "full_gmm-full-20261021T112147Z-2470335",
+    "test_points": 73538,
+    "test_anomaly_points": 7766,
+    "calibration_points": 5603,
+    "diag_status": "failed"
+  },
+  {
+    "dataset": "GECCO",
+    "source_run_id": "full_gmm-full-20261020T204951Z-1642355",
+    "test_points": 69166,
+    "test_anomaly_points": 730,
+    "calibration_points": 6812,
+    "diag_status": "reused"
+  },
+  {
+    "dataset": "Genesis",
+    "source_run_id": "full_gmm-full-20261020T205005Z-1645522",
+    "test_points": 12425,
+    "test_anomaly_points": 50,
+    "calibration_points": 132,
+    "diag_status": "complete"
+  },
+  {
+    "dataset": "NYC",
+    "source_run_id": "full_gmm-full-20261020T211341Z-1931786",
+    "test_points": 4225,
+    "test_anomaly_points": 99,
+    "calibration_points": 1082,
+    "diag_status": "complete"
+  },
+  {
+    "dataset": "CalIt2",
+    "source_run_id": "full_gmm-full-20261021T112212Z-2474004",
+    "test_points": 2329,
+    "test_anomaly_points": 70,
+    "calibration_points": 24,
+    "diag_status": "complete"
+  },
+  {
+    "dataset": "Creditcard",
+    "source_run_id": "full_gmm-full-20261024T115131Z-3977864",
+    "test_points": 142213,
+    "test_anomaly_points": 221,
+    "calibration_points": 14012,
+    "diag_status": "reused"
+  },
+  {
+    "dataset": "CICIDS",
+    "source_run_id": "full_gmm-full-20261024T115157Z-3980319",
+    "test_points": 84925,
+    "test_anomaly_points": 74,
+    "calibration_points": 8283,
+    "diag_status": "complete"
+  }
+]

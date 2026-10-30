@@ -1,0 +1,98 @@
+{
+  "dataset": "MSL",
+  "failed_variable_index": 17,
+  "variable_name": "col_17",
+  "sample_count": 20000,
+  "feature_count": 25,
+  "source_feature_dtype": "float32",
+  "standardized_fit_input_dtype": "float32",
+  "fit_input_finite": true,
+  "fit_input_min": -179.94747924804688,
+  "fit_input_max": 214.8394775390625,
+  "fit_input_abs_max": 214.8394775390625,
+  "parameters": {
+    "n_components": 4,
+    "covariance_type": "diag",
+    "reg_covar": 0.001,
+    "n_init": 1,
+    "max_iter": 100,
+    "random_state": 2021,
+    "init_params": "kmeans"
+  },
+  "prior_completed_variables": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "note": "Only sklearn initialization was replayed for this variable; no alternate fitted head is accepted as the original result.",
+  "dtype_float32": {
+    "state": "initialization_failed",
+    "error": "ValueError: Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, or increase reg_covar.",
+    "min_component_samples": 1.0,
+    "min_initial_diagonal_covariance": -0.00010925724584376437,
+    "max_initial_diagonal_covariance": 3478.3577704010186,
+    "components": {
+      "component_sample_mass": [
+        4695.0,
+        15293.0,
+        1.0,
+        11.0
+      ],
+      "component_covariance_min": [
+        0.000999999980651668,
+        0.0010000000004233764,
+        -0.00010925724584376437,
+        0.0010000000004233764
+      ],
+      "component_covariance_max": [
+        1.4167708824775656,
+        0.5822787472982545,
+        0.0014153988156758715,
+        3478.3577704010186
+      ],
+      "component_covariance_finite": true
+    }
+  },
+  "dtype_float64": {
+    "state": "initialized",
+    "error": null,
+    "min_component_samples": 1.0,
+    "min_initial_diagonal_covariance": 0.0009999999999999983,
+    "max_initial_diagonal_covariance": 3478.357655363029,
+    "components": {
+      "component_sample_mass": [
+        4695.0,
+        15293.0,
+        1.0,
+        11.0
+      ],
+      "component_covariance_min": [
+        0.0009999999999999983,
+        0.001,
+        0.001,
+        0.001
+      ],
+      "component_covariance_max": [
+        1.4167708839843287,
+        0.5822787460184567,
+        0.001000000094587449,
+        3478.357655363029
+      ],
+      "component_covariance_finite": true
+    }
+  }
+}

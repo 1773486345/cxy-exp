@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from scripts.run_mnrf_full_head_diagnostic import _aggregate, _check_equal, _effect_deltas
+from scripts.run_mnrf_full_head_diagnostic import (
+    _aggregate, _check_equal, _diagnostic_output_paths, _effect_deltas,
+)
+from scripts.analyze_mnrf_full_loss import _distribution, _full_axis_context, _recall_at_fpr
 
 
 def test_aggregate_standardizes_variables_before_max_or_mean_and_calibrates_separately():
@@ -59,3 +62,39 @@ def test_effects_keep_valid_full_aggregation_when_diagonal_fit_failed():
     assert effects["aggregation_auc"] == "+0.01000/n/a"
     assert effects["covariance_ap"] == "n/a/n/a"
     assert effects["interaction_ap"] == "n/a"
+
+
+def test_explicit_reuse_batch_uses_existing_score_tree_without_allocating_new_score_tree():
+    name = "full-head-diagnostic-20261030T062555Z-3226097"
+    analysis, scores, reuse_only = _diagnostic_output_paths(name, timestamp="fixed", pid=7)
+    assert scores.name == name
+    assert scores.is_dir()
+    assert analysis.name.startswith("full-head-diagnostic-reuse-3226097-fixed-")
+    assert not analysis.exists()
+    assert reuse_only
+    with pytest.raises((ValueError, FileNotFoundError)):
+        _diagnostic_output_paths("../other", timestamp="fixed", pid=7)
+
+
+def test_recall_at_fixed_fpr_is_posthoc_and_returns_undefined_for_single_class():
+    labels = np.asarray([0, 0, 0, 1, 1, 1], dtype=np.int8)
+    scores = np.asarray([0.1, 0.2, 0.3, 0.25, 0.5, 0.9])
+    # At zero empirical FPR, thresholds can still recover the two highest
+    # anomaly scores (0.5 and 0.9) above the largest normal score (0.3).
+    assert _recall_at_fpr(labels, scores, 0.0) == pytest.approx(2.0 / 3.0)
+    assert _recall_at_fpr(labels, scores, 0.5) >= _recall_at_fpr(labels, scores, 0.0)
+    assert _recall_at_fpr(np.zeros(3, dtype=np.int8), np.arange(3), 0.1) is None
+
+
+def test_calibration_context_respects_frozen_segment_boundary():
+    labels = np.asarray([0, 0, 0, 0, 1, 0, 0, 0, 0, 0], dtype=np.int8)
+    global_indices = np.arange(10, dtype=np.int64)
+    endpoints = np.asarray([3, 5, 8], dtype=np.int64)
+    context = _full_axis_context(labels, global_indices, [[0, 5], [5, 10]], endpoints, 4)
+    np.testing.assert_array_equal(context[:, 1], [0, 0, 0])
+    assert context[1, 2] == 1
+
+
+def test_distribution_reports_empty_population_as_undefined():
+    assert _distribution(np.asarray([]))["undefined_reason"] == "empty_or_nonfinite"
+    assert _distribution(np.asarray([1.0, 2.0]))["q0.5"] == 1.5

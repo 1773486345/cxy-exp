@@ -393,16 +393,16 @@ def _full_axis_metrics(labels, endpoints, scores, threshold, test_segments, boun
 
 def _fit_light_method(method, output, values, labels, times, contract):
     output = Path(output)
-    if output.exists():
-        raise FileExistsError("baseline output already exists: {}".format(output))
+    if output.exists() or output.is_symlink():
+        # A complete, identity-bound run is reusable; never replace partial or
+        # mismatched evidence in place.
+        return _existing_light_run(output, method, contract)
     train_rows = strict_integer_indices(np.load(contract["train_rows"]["path"], allow_pickle=False),
                                        "raw train rows", upper_bound=len(values), require_sorted=True)
     test_indices = strict_integer_indices(np.load(contract["catch_test"]["path"], allow_pickle=False),
                                           "test endpoints", upper_bound=len(values), require_sorted=True)
     calibration_indices = strict_integer_indices(np.load(contract["catch_splits"]["calibration"]["path"], allow_pickle=False),
                                                  "calibration endpoints", upper_bound=len(values), require_sorted=True)
-    if output.exists():
-        return _existing_light_run(output, method, contract)
     scaler = StandardScaler().fit(values[train_rows])
     normalized = scaler.transform(values).astype(np.float32, copy=False)
     fit_start = time.perf_counter()
