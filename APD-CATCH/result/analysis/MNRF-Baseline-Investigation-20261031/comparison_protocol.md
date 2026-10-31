@@ -10,7 +10,7 @@ Preserve original row order, labels, and known train-side contamination. Use the
 
 ## Native models and information flow
 
-Each method keeps its native detector, head, loss, and score definition. Reconstruction methods score reconstruction error; discrepancy methods retain their association/discrepancy term; density and classic detectors retain their native decision score. A window may use only the explicit past/current receptive field ending at the scored timestamp. No future value, test label, or hidden label-derived cleaning is allowed. Overlap, cold start, tail, and missing-score behavior is recorded per adapter and then mapped to the common valid point set; no implicit zero fill may create an evaluated point.
+Each method keeps its native detector, head, loss, and score definition. Reconstruction methods score reconstruction error; discrepancy methods retain their association/discrepancy term; density and classic detectors retain their native decision score. A common causal endpoint rule would change native full-window methods, so native and causal-adapted variants must be named separately. No test label or hidden label-derived cleaning is allowed. Overlap, cold start, tail, and missing-score behavior is recorded per adapter and then mapped to the common valid point set; no implicit zero fill may create an evaluated point. The native CATCH mode=thre example is a full non-overlap window flattened to all positions, whereas MNRF is an endpoint score; this is an alignment difference, not a generic no-future assertion.
 
 ## Fitting and thresholding
 
@@ -26,4 +26,4 @@ The scored coordinates, labels, threshold source, comparison symbol, metric defi
 
 ## Required evidence before execution
 
-Resolve the anomaly-ratio selection rule from the existing report-generation path and obtain an explicit boundary decision for Creditcard/CICIDS. The smallest useful execution is one seed over the eight datasets for methods whose native server settings are fixed; preserve the paper table as a separate reference and expand only after threshold semantics are documented.
+Resolve the anomaly-ratio selection rule from the existing report-generation path and obtain an explicit boundary decision for Creditcard/CICIDS. The smallest useful execution is a frozen auxiliary-decoder/score-head diagnostic on the registered sources plus the corrected CalIt2 RawCount comparison. Preserve the paper table as a separate reference and expand only after threshold semantics and native-versus-causal alignment are documented; this is not a default eight-dataset x 16-method rerun.
