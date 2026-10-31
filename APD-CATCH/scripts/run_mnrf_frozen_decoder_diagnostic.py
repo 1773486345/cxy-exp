@@ -187,18 +187,35 @@ def validate_source_contract(run: Path) -> dict:
         all_segments = np.asarray(axes["all_segment_ids"])
         test_global = np.asarray(axes["test_global_indices"])
         test_labels = np.asarray(axes["test_labels"])
+        test_times = np.asarray(axes["test_time_values_ns"])
+        test_segments = np.asarray(axes["test_segment_ids"])
     if not (all_global.ndim == all_labels.ndim == all_times.ndim == all_segments.ndim == 1):
         raise ValueError("analysis axis arrays must be one-dimensional")
     if not (len(all_global) == len(all_labels) == len(all_times) == len(all_segments)):
         raise ValueError("analysis axis arrays have inconsistent lengths")
-    if test_global.ndim != 1 or test_labels.shape != test_global.shape:
+    if test_global.ndim != 1 or any(
+            values.ndim != 1 or values.shape != test_global.shape
+            for values in (test_labels, test_times, test_segments)):
         raise ValueError("test analysis axis is malformed")
     if (all_global.dtype.kind not in "iu" or test_global.dtype.kind not in "iu"
             or (len(all_global) > 1 and np.any(np.diff(all_global.astype(np.int64)) <= 0))
             or (len(test_global) > 1 and np.any(np.diff(test_global.astype(np.int64)) <= 0))):
         raise ValueError("analysis global coordinates must be sorted unique integer axes")
+    if (all_segments.dtype.kind not in "iu" or test_segments.dtype.kind not in "iu"
+            or all_times.dtype.kind not in "iu" or test_times.dtype.kind not in "iu"):
+        raise ValueError("analysis times and segment IDs must have integer dtypes")
     if not np.isin(all_labels, (0, 1)).all() or not np.isin(test_labels, (0, 1)).all():
         raise ValueError("analysis labels are not binary")
+    full_positions = np.searchsorted(all_global, test_global)
+    if (np.any(full_positions >= len(all_global))
+            or not np.array_equal(all_global[full_positions], test_global)):
+        raise ValueError("test coordinates are not a subset of the complete source axis")
+    if not np.array_equal(test_labels, all_labels[full_positions]):
+        raise ValueError("test labels differ from the complete source axis mapping")
+    if not np.array_equal(test_times, all_times[full_positions]):
+        raise ValueError("test times differ from the complete source axis mapping")
+    if not np.array_equal(test_segments, all_segments[full_positions]):
+        raise ValueError("test_segment_ids differ from the complete source axis mapping")
     test_endpoints = np.asarray(endpoints["test"], dtype=np.int64)
     if not np.isin(test_endpoints, test_global).all():
         raise ValueError("test feature endpoints are outside the frozen test axis")
@@ -223,7 +240,8 @@ def validate_source_contract(run: Path) -> dict:
     return {"run": run, "manifest": manifest, "config": config, "layout": layout,
             "variables": variables, "normalized": normalized, "endpoints": endpoints,
             "axes": {"all_global": all_global, "all_labels": all_labels, "all_times": all_times,
-                     "all_segments": all_segments, "test_global": test_global, "test_labels": test_labels}}
+                     "all_segments": all_segments, "test_global": test_global, "test_labels": test_labels,
+                     "test_times": test_times, "test_segments": test_segments}}
 
 
 def load_decoder(source: dict):
@@ -417,15 +435,37 @@ def _boundary_metrics(source, scores, threshold):
     full_prediction[local] = predictions
     labels = np.asarray(axes["test_labels"], dtype=np.int8)
     boundaries = np.asarray(axes["test_segments"], dtype=np.int64)
-    aff = affiliation_f_segment_macro(labels, full_prediction, valid, boundaries)
+    # A source segment is authoritative; a jump in original row coordinates is
+    # also a hard boundary even if adjacent entries carry the same segment ID.
+    boundary_ids = np.empty(len(test_axis), dtype=np.int64)
+    boundary_id = -1
+    for index in range(len(test_axis)):
+        if (index == 0 or boundaries[index] != boundaries[index - 1]
+                or test_axis[index] != test_axis[index - 1] + 1):
+            boundary_id += 1
+        boundary_ids[index] = boundary_id
+    aff = affiliation_f_segment_macro(labels, full_prediction, valid, boundary_ids)
+    defined = [segment for segment in aff["segments"] if segment["defined"]]
+    precision = (float(np.mean([segment["precision"] for segment in defined]))
+                 if defined else None)
+    recall = (float(np.mean([segment["recall"] for segment in defined]))
+              if defined else None)
+    undefined = [
+        {"start": int(segment["start"]), "end": int(segment["end"]),
+         "reason": segment["undefined_reason"]}
+        for segment in aff["segments"] if not segment["defined"]
+    ]
     segments = segment_counts_from_axis(
         axes["all_labels"], axes["all_global"], axes["all_segments"], test_axis,
         endpoints, predictions, axes["all_times"])
     return {
-        "affiliation_precision_valid_segment_macro": aff.get("affiliation_precision"),
-        "affiliation_recall_valid_segment_macro": aff.get("affiliation_recall"),
-        "affiliation_f_valid_segment_macro": aff.get("affiliation_f"),
-        "affiliation_undefined_reason": ";".join(aff.get("undefined_reasons", [])) or None,
+        "affiliation_precision_valid_segment_macro": precision,
+        "affiliation_recall_valid_segment_macro": recall,
+        "affiliation_f_valid_segment_macro": aff["affiliation_f_segment_macro"],
+        "affiliation_defined_segments": aff["defined_segment_count"],
+        "affiliation_total_segments": aff["total_segment_count"],
+        "affiliation_undefined_segments": undefined,
+        "affiliation_aggregation": "macro mean of per-segment precision, recall, and F over defined segments",
         "anomaly_segments_total": segments["total"],
         "anomaly_segments_scored": segments["scored"],
         "anomaly_segments_hit": segments["hit"],
@@ -443,7 +483,8 @@ def _write_csv(path, rows):
         writer.writeheader(); writer.writerows(rows)
 
 
-def run_task(task: str, output_dir: Path | None = None, chunk_size: int = DEFAULT_CHUNK):
+def _run_task_impl(task: str, output_dir: Path | None = None, chunk_size: int = DEFAULT_CHUNK,
+                   thread_record: dict | None = None):
     source_run, registration = source_path(task)
     source = validate_source_contract(source_run)
     trainer, checkpoint_sha256 = load_decoder(source)
@@ -456,6 +497,7 @@ def run_task(task: str, output_dir: Path | None = None, chunk_size: int = DEFAUL
     rows = []
     evidence = {"task": task, "source_run": str(source_run), "source_registration": registration,
                 "checkpoint_sha256": checkpoint_sha256, "chunk_size": chunk_size,
+                "cpu_threads": thread_record,
                 "calibration_quantile": Q, "test_labels_used_only_for_metrics": True,
                 "encoder_forward_called": False, "gmm_fit_called": False}
     evidence["variable_names"] = source["manifest"]["variable_names"]
@@ -577,15 +619,54 @@ def run_task(task: str, output_dir: Path | None = None, chunk_size: int = DEFAUL
     return output
 
 
+def run_task(task: str, output_dir: Path | None = None, chunk_size: int = DEFAULT_CHUNK,
+             cpu_threads: int = 1):
+    """Run one diagnostic with process-local CPU library limits."""
+    if isinstance(cpu_threads, bool) or not isinstance(cpu_threads, int) or cpu_threads < 1:
+        raise ValueError("cpu_threads must be a positive integer")
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be positive")
+    import torch
+    from threadpoolctl import threadpool_info, threadpool_limits
+
+    torch.set_num_threads(cpu_threads)
+    try:
+        torch.set_num_interop_threads(cpu_threads)
+    except RuntimeError:
+        # PyTorch only permits setting inter-op threads before its first work;
+        # record the effective value instead of claiming the requested value.
+        pass
+    limiter = threadpool_limits(limits=cpu_threads)
+    try:
+        thread_record = {
+            "requested": cpu_threads,
+            "torch_intraop": int(torch.get_num_threads()),
+            "torch_interop": int(torch.get_num_interop_threads()),
+            "native_threadpools": [
+                {key: pool.get(key) for key in ("user_api", "internal_api", "num_threads", "prefix")}
+                for pool in threadpool_info()
+            ],
+        }
+        if thread_record["torch_intraop"] != cpu_threads or any(
+                pool["num_threads"] != cpu_threads for pool in thread_record["native_threadpools"]):
+            raise RuntimeError("requested CPU thread limit did not take effect")
+        return _run_task_impl(task, output_dir, chunk_size, thread_record)
+    finally:
+        limiter.restore_original_limits()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", required=True, choices=sorted(TASKS))
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK)
+    parser.add_argument("--cpu-threads", type=int, default=1)
     args = parser.parse_args(argv)
     if args.chunk_size < 1:
         parser.error("--chunk-size must be positive")
-    run_task(args.task, args.output_dir, args.chunk_size)
+    if args.cpu_threads < 1:
+        parser.error("--cpu-threads must be positive")
+    run_task(args.task, args.output_dir, args.chunk_size, args.cpu_threads)
 
 
 if __name__ == "__main__":

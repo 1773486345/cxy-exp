@@ -270,7 +270,14 @@ def _effective_fields(method, entry_mode, command):
         patch = params.get("inference_patch_size", "not applicable")
         weight = "1.0 + 1.0 after branch normalization"
         aggregation = "normalized time_score + normalized fre_score"
-    elif method in {"Anomaly Transformer", "DCdetector", "TFAD"}:
+    elif method == "TFAD":
+        # TFAD's adapter copies n_window into config.window_length; seq_len and
+        # win_size are not consulted by its native configuration path.
+        window = params.get("n_window", 192)
+        patch = "not applicable (native window)"
+        weight = "native objective weights; no extra score weight"
+        aggregation = "native provider/window alignment"
+    elif method in {"Anomaly Transformer", "DCdetector"}:
         window = params.get("win_size", params.get("seq_len", 100))
         patch = "not applicable (native window)"
         weight = "native objective weights; no extra score weight"
