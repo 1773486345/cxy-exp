@@ -1,0 +1,248 @@
+{
+  "boundary_columns": [],
+  "boundary_identity": null,
+  "boundary_ids": null,
+  "catch_seq_len": 192,
+  "catch_splits": {
+    "calibration": {
+      "count": 24,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/catch_calibration_indices.npy",
+      "sha256": "0d2a34e442fc98645c7cf22cf2fab1e930515674a47a418524213c48dbad7773"
+    },
+    "train": {
+      "count": 1519,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/catch_train_indices.npy",
+      "sha256": "b9ddaa4e9e13556a70ac97af0eb45fb153dd8466b1637452dd8feeaa0f79484c"
+    },
+    "validation": {
+      "count": 22,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/catch_validation_indices.npy",
+      "sha256": "0e32a00cd353e54b89f8a1a20040df66e01c7306ffd9760653690482d7b2611f"
+    }
+  },
+  "catch_test": {
+    "count": 2329,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/catch_test_indices.npy",
+    "sha256": "11489782a2e3f34edbd6a5b41b039f535d694ba0f9985fcbe24bdd6e962e2be4"
+  },
+  "data_csv_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root/data/CalIt2.csv",
+  "data_csv_sha256": "44b650e4d6d617d441df87b6bf1f4546729a4663367c71de0e295f24634b625f",
+  "data_identity": "62c88d9994e17dfe98845603aa47d71de5c5bf4ccca1424791cbd2311c229cdc",
+  "input_length": 5040,
+  "labels": {
+    "count": 5040,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/labels.npy",
+    "sha256": "4d9da25b6f44929850e7794782eb70e0286ab8505596da7d9d92306d58cf4897"
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+  "metadata_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "probe_manifest_sha256": "dbc90fea278cebee5d281de1ea89efd2adfaeae145be128b03da0b3cefcb4584",
+  "probe_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-RawCount/CalIt2/rawcount-full-20261031T20261031T092320Z-1093827",
+  "probe_source_identity": {
+    "boundary_columns": [],
+    "boundary_values_sha256": null,
+    "data_source": "large_detect",
+    "feature_data_sha256": "62c88d9994e17dfe98845603aa47d71de5c5bf4ccca1424791cbd2311c229cdc",
+    "input_length": 5040,
+    "layout": {
+      "F": 25,
+      "dimensions": {
+        "E": 8,
+        "P": 8,
+        "R": 8,
+        "S": 1
+      },
+      "order": [
+        "S",
+        "E",
+        "P",
+        "R"
+      ],
+      "slices": {
+        "E": [
+          1,
+          9
+        ],
+        "P": [
+          9,
+          17
+        ],
+        "R": [
+          17,
+          25
+        ],
+        "S": [
+          0,
+          1
+        ]
+      }
+    },
+    "pattern_len": 32,
+    "ranges": {
+      "calibration": [
+        2305,
+        2520
+      ],
+      "train": [
+        0,
+        1710
+      ],
+      "validation": [
+        1901,
+        2114
+      ]
+    },
+    "schema": "mnrf-view-probe-source-identity-v2",
+    "segment_ranges": {
+      "calibration": [
+        [
+          2305,
+          2520
+        ]
+      ],
+      "train": [
+        [
+          0,
+          1710
+        ]
+      ],
+      "validation": [
+        [
+          1901,
+          2114
+        ]
+      ]
+    },
+    "segments": [
+      [
+        0,
+        5040
+      ]
+    ],
+    "seq_len": 192,
+    "task_name": "CalIt2.csv",
+    "temporal_rule": {
+      "entity_boundary_columns": [],
+      "expected_interval_ns": 1800000000000,
+      "fit_range": [
+        0,
+        1710
+      ],
+      "time_kind": "timestamp_naive_ns",
+      "tolerance": 0.05,
+      "version": "train-frozen-cadence-v1"
+    },
+    "test_endpoints_count": 2329,
+    "test_endpoints_sha256": "d1026661376393908e117f69252badd6aa1a52ea007ce95971cd45b5edee35db",
+    "test_segments": [
+      [
+        2520,
+        5040
+      ]
+    ],
+    "time_index": {
+      "kind": "timestamp_naive_ns",
+      "source_timezone": null,
+      "values_sha256": "1b68c2cf5221a257066765ca3035a946c2af3dd4419fcc0e2d952dcf95993cb8"
+    },
+    "train_length": 2520,
+    "variable_names": [
+      "9",
+      "7"
+    ]
+  },
+  "ranges": {
+    "calibration": [
+      2305,
+      2520
+    ],
+    "train": [
+      0,
+      1710
+    ],
+    "validation": [
+      1901,
+      2114
+    ]
+  },
+  "raw_training_range": [
+    0,
+    1710
+  ],
+  "schema": "mnrf-view-probe-common-export-v2",
+  "segment_ranges": {
+    "calibration": [
+      [
+        2305,
+        2520
+      ]
+    ],
+    "train": [
+      [
+        0,
+        1710
+      ]
+    ],
+    "validation": [
+      [
+        1901,
+        2114
+      ]
+    ]
+  },
+  "seq_len": 192,
+  "source_timezone": null,
+  "splits": {
+    "calibration": {
+      "count": 24,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/calibration_indices.npy",
+      "sha256": "0d2a34e442fc98645c7cf22cf2fab1e930515674a47a418524213c48dbad7773"
+    },
+    "train": {
+      "count": 1519,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/train_indices.npy",
+      "sha256": "b9ddaa4e9e13556a70ac97af0eb45fb153dd8466b1637452dd8feeaa0f79484c"
+    },
+    "validation": {
+      "count": 22,
+      "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/validation_indices.npy",
+      "sha256": "0e32a00cd353e54b89f8a1a20040df66e01c7306ffd9760653690482d7b2611f"
+    }
+  },
+  "status": "complete",
+  "task_name": "CalIt2.csv",
+  "temporal_rule": {
+    "entity_boundary_columns": [],
+    "expected_interval_ns": 1800000000000,
+    "fit_range": [
+      0,
+      1710
+    ],
+    "time_kind": "timestamp_naive_ns",
+    "tolerance": 0.05,
+    "version": "train-frozen-cadence-v1"
+  },
+  "test_segments": [
+    [
+      2520,
+      5040
+    ]
+  ],
+  "time_identity": "1b68c2cf5221a257066765ca3035a946c2af3dd4419fcc0e2d952dcf95993cb8",
+  "time_kind": "timestamp_naive_ns",
+  "time_values_ns": {
+    "count": 5040,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/time_values_ns.npy",
+    "sha256": "2a7fb27fa7433c715d01c180855081d4ca77aedc2b5f362bf09cec1b12c11f6e"
+  },
+  "train_length": 2520,
+  "train_rows": {
+    "count": 1710,
+    "path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/baselines-v2/common_contract/train_rows.npy",
+    "sha256": "084dc1175fe4313962d61041494500b158287f611bfa426e040a9d6664590771"
+  },
+  "variable_names": [
+    "9",
+    "7"
+  ]
+}

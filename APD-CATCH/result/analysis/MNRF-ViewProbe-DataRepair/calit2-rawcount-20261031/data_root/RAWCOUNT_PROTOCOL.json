@@ -1,0 +1,24 @@
+{
+  "conversion": "UCI integer counts retained; historical CSV equals count modulo 10",
+  "data_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root/data/CalIt2.csv",
+  "historical_csv_sha256": "2a60825e112d4e80eeaa6aba1e554420db7cd04755e9bb3b7dccd618cd64ff8a",
+  "historical_metadata_sha256": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+  "label_source": "UCI CalIt2.events inclusive half-hour endpoints; exact match to historical binary label axis",
+  "max_counts": {
+    "7": 54,
+    "9": 62
+  },
+  "metadata_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root/DETECT_META.csv",
+  "rows": 5040,
+  "schema": "calit2-raw-count-v1",
+  "source_url": "https://archive.ics.uci.edu/static/public/156/calit2+building+people+counts.zip",
+  "timestamp_rule": "UCI date/time parsed as 30-minute DatetimeIndex",
+  "event_label_match": true,
+  "train_length": 2520,
+  "uci_data_sha256": "7c5b1d6af36488ba42b6fd89d8d0c63721cdc13143be2acdc4c9da0f5d83d12a",
+  "uci_events_sha256": "74b06ec08f52805b9066cc9e5f5cc74b9e7c7463b18c93e9c17c5dbca2912978",
+  "variables": [
+    "9",
+    "7"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "condition_variables": [
+    "col_1..col_54"
+  ],
+  "metrics": {
+    "affiliation": {
+      "affiliation_f_segment_macro": 0.6602803533097643,
+      "affiliation_precision_segment_macro": 0.6695731720391899,
+      "affiliation_recall_segment_macro": 0.6512419485032994,
+      "defined_segment_count": 1,
+      "normal_false_positive_points": 1480,
+      "segments": [
+        {
+          "defined": true,
+          "end": 132046,
+          "f": 0.6602803533097643,
+          "ground_truth_event_count": 36,
+          "precision": 0.6695731720391899,
+          "predicted_event_count": 370,
+          "recall": 0.6512419485032994,
+          "start": 58508,
+          "undefined_reason": null
+        }
+      ],
+      "total_segment_count": 1
+    },
+    "average_precision": 0.27921250065778985,
+    "fn": 6796,
+    "fp": 1480,
+    "fpr": 0.02250197652496503,
+    "hit_anomaly_segments": 20,
+    "point_f1": 0.1898981989036805,
+    "precision": 0.39591836734693875,
+    "recall": 0.12490342518671131,
+    "roc_auc": 0.7679623054264876,
+    "scored_anomaly_segments": 36,
+    "threshold": 21.253882783055555,
+    "tn": 64292,
+    "total_anomaly_segments": 36,
+    "tp": 970,
+    "valid_points": 73538
+  },
+  "protocol": "post-hoc target-only aggregation; source four-view features and all inputs retained; no refit",
+  "quantile": 0.995,
+  "run_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/MSL/full_gmm-full-20261021T112147Z-2470335",
+  "saved_full_threshold": 2201.669311523398,
+  "schema": "msl-target-only-aggregation-v1",
+  "target_center": -38.67057418823242,
+  "target_scale": 2.280384063720703,
+  "target_threshold": 21.253882783055555,
+  "target_variable": "col_0"
+}

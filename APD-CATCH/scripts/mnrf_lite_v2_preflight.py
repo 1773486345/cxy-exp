@@ -86,9 +86,10 @@ def _disk_estimate(counts, variables, total_dim, rows, output_dir, root,
 def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
               encoding_batch_size: int = 0, evolution_dim: int = None,
               pattern_dim: int = None, relation_dim: int = None, view_dim: int = 8,
-              root: Path = ROOT, output_dir: str = "", mode: str = "full_gmm"):
+              root: Path = ROOT, output_dir: str = "", mode: str = "full_gmm",
+              data_root: str = ""):
     if source == "large_detect":
-        folder = root / "dataset/anomaly_detect"
+        folder = Path(data_root).expanduser().resolve() if data_root else root / "dataset/anomaly_detect"
         meta_path = folder / "DETECT_META.csv"
     elif source == "external_detect":
         folder = root / "dataset/external_validation"
@@ -215,11 +216,12 @@ def main():
     parser.add_argument("--pattern-dim", type=int)
     parser.add_argument("--relation-dim", type=int)
     parser.add_argument("--output-dir", default="", help="target run path used only for volume estimation")
+    parser.add_argument("--data-root", default="", help="optional isolated large_detect root containing data/ and DETECT_META.csv")
     parser.add_argument("--mode", default="full_gmm", choices=("stage1", "full_gmm", "random_gmm", "select_gmm", "s_only", "flow"))
     args = parser.parse_args()
     preflight(args.task, args.data_source, args.batch_size, args.seq_len, args.encoding_batch_size,
               args.evolution_dim, args.pattern_dim, args.relation_dim, args.view_dim,
-              output_dir=args.output_dir, mode=args.mode)
+              output_dir=args.output_dir, mode=args.mode, data_root=args.data_root)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,2 @@
+file_name,trend,seasonal,stationary,pattern,shifting,dataset_name,train_lens,test_lens,time_steps,if_univariate,size,type_value,anomaly_rate
+CalIt2.csv,,,,,,CalIt2,2520,2520,5040,False,large,,0.040873016

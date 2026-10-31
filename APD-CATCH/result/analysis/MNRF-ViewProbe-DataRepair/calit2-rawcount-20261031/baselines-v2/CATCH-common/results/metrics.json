@@ -1,0 +1,13 @@
+{
+  "calibration_and_inference_time_seconds": 87.49894127598964,
+  "calibration_windows": 24,
+  "protocol": "CATCH-common",
+  "status": "complete",
+  "task_name": "CalIt2",
+  "test_count": 2329,
+  "threshold": 3.225272030830384,
+  "train_rows": 1710,
+  "train_windows": 1519,
+  "training_time_seconds": 1937.60854483,
+  "validation_windows": 22
+}
