@@ -12,6 +12,7 @@ import csv
 import hashlib
 import json
 import platform
+import re
 import shutil
 import sys
 from importlib import metadata
@@ -88,7 +89,7 @@ def method_rows(root: Path):
         "AutoEncoder": ("Merlion multivariate autoencoder", "Merlion AEModule: MLP encoder -> latent hidden_size -> mirrored MLP decoder; sequence input [k,C] is reconstructed and one scalar is returned per timestamp", "Adam minimizes the module reconstruction loss on unlabeled training windows; no labels are passed to the Merlion adapter", "Merlion model output is reconstruction loss/anomaly score, higher is abnormal; the wrapper returns get_anomaly_score", "sequence scores are indexed back to the requested timestamps; the project wrapper fills missing returned timestamps with 0", "Merlion backend threshold/post-process; no local anomaly-ratio sweep is exposed", "direct-code/current-version", "ts_benchmark/baselines/merlion/merlion_models.py:43-121; merlion/models/anomaly/autoencoder.py:64-180; scripts/multivariate_detection/detect_score/PSM_script/AutoEncoder.sh"),
         "OCSVM": ("one-class density boundary", "TODS OCSVMSKI wrapping the bundled PyOD OCSVM primitive; fit returns one score per adapter row/window", "unsupervised fit on unlabeled input", "PyOD OCSVM decision score, higher is abnormal", "row/window adapter output; exact temporal grouping is provider-defined", "benchmark label strategy", "direct-code; top-level runtime import unavailable", "ts_benchmark/baselines/tods/tods_models.py:18-50,96-118; ts_benchmark/baselines/tods/third_party/tods/sk_interface/detection_algorithm/OCSVM_skinterface.py:1-10; ts_benchmark/baselines/tods/third_party/tods/detection_algorithm/PyodOCSVM.py:128-208; scripts/multivariate_detection/detect_score/PSM_script/ocsvmski.sh"),
         "Isolation Forest": ("tree isolation outlier detector", "Merlion IsolationForest wraps sklearn IsolationForest with DifferenceTransform + Shingle(size=2,stride=1) by default; common protocol uses direct sklearn rows", "unsupervised tree fit; Merlion backend uses random_state=0", "legacy and common adapters negate sklearn score_samples so larger values are more abnormal", "legacy Merlion transform/shingle context and reindexing differ from common row-aligned scores", "common q=.995; legacy backend label path", "direct-code/direct-record/current-version", "ts_benchmark/baselines/merlion/merlion_models.py:43-121; merlion/models/anomaly/isolation_forest.py:25-106; scripts/run_mnrf_common_baselines.py:121-176"),
-        "PCA": ("reconstruction residual outlier detector", "project-local TODS PCAODetectorSKI wrapping PCAODetectorPrimitive; common protocol uses sklearn residual PCA", "unsupervised PCA fit", "PCA reconstruction residual from the backend; common path uses mean squared residual", "common row-aligned endpoints; legacy TODS windows", "common q=.995; legacy backend strategy", "direct-code/direct-record", "ts_benchmark/baselines/tods/tods_models.py:18-50,96-118; ts_benchmark/baselines/tods/third_party/tods/sk_interface/detection_algorithm/PCAODetector_skinterface.py:1-10; ts_benchmark/baselines/tods/third_party/tods/detection_algorithm/PCAODetect.py:151-220; scripts/run_mnrf_common_baselines.py:121-176"),
+        "PCA": ("principal-component outlier detector", "project-local TODS PCAODetectorSKI wrapping PCAODetectorPrimitive; common protocol uses sklearn residual PCA", "unsupervised PCA fit", "PyOD 2.1.0 PCA score = sum_j cdist(X_scaled, selected_component_j) / selected_explained_variance_ratio_j; larger is more abnormal. This is not reconstruction MSE. The common sklearn diagnostic is a separate residual-MSE implementation.", "common row-aligned endpoints; legacy TODS windows", "common q=.995; legacy TODS threshold strategy", "direct-code/direct-record", "ts_benchmark/baselines/tods/tods_models.py:18-50,96-118; ts_benchmark/baselines/tods/third_party/tods/sk_interface/detection_algorithm/PCAODetector_skinterface.py:1-10; ts_benchmark/baselines/tods/third_party/tods/detection_algorithm/PCAODetect.py:151-220; catch_env pyod/models/pca.py:PCA.fit,decision_function; scripts/run_mnrf_common_baselines.py:121-176"),
         "HBOS": ("histogram density outlier detector", "project-local TODS HBOSSKI wrapping the bundled PyOD HBOS primitive", "unsupervised histogram fit", "independent histogram negative log-density/decision score, higher abnormal", "row/window adapter output; exact temporal grouping is provider-defined", "benchmark label strategy", "direct-code; top-level runtime import unavailable", "ts_benchmark/baselines/tods/tods_models.py:18-50,96-118; ts_benchmark/baselines/tods/third_party/tods/sk_interface/detection_algorithm/HBOS_skinterface.py:1-10; ts_benchmark/baselines/tods/third_party/tods/detection_algorithm/PyodHBOS.py:76-145; scripts/multivariate_detection/detect_score/PSM_script/hbosski.sh"),
         "TFAD": ("window-level supervised anomaly classifier with synthetic anomaly injection", "one sigmoid/logit per multivariate window, repeated over suspect-window tail", "BCELoss against reduced true/injected window labels; training uses input labels and configured spike injection", "sigmoid window probability folded/averaged over suspect tails, higher is abnormal", "unfolded windows with configured stride; only suspect tail is voted; detect_score converts NaN gaps to zero", "train+test percentile in label path", "direct-code", "ts_benchmark/baselines/self_impl/TFAD/TFAD.py:63-218,300-396; ts_benchmark/baselines/self_impl/TFAD/model/tfad_datamodule.py"),
     }
@@ -240,6 +241,74 @@ def _script_command(path: Path):
     return ""
 
 
+def _command_hyperparams(command):
+    """Decode the literal JSON passed by a task launcher, if present."""
+    match = re.search(r"--model-hyper-params\s+'([^']*)'", command)
+    if not match:
+        return {}
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _effective_fields(method, entry_mode, command):
+    """Concrete effective settings used by the launcher or native default."""
+    params = _command_hyperparams(command)
+    if method == "CATCH":
+        window = params.get("seq_len", 192)
+        patch = params.get("inference_patch_size", 32)
+        weight = params.get("score_lambda", 0.05)
+        aggregation = "mean variable reconstruction + score_lambda * frequency error"
+    elif method in {"ModernTCN", "iTransformer", "TimesNet", "PatchTST", "DLinear", "NLinear"}:
+        window = params.get("seq_len", 100)
+        patch = params.get("inference_patch_size", params.get("patch_size", params.get("patch_len", 16)))
+        weight = "1.0 (MSE)"
+        aggregation = "mean squared reconstruction error over variables"
+    elif method == "DualTF":
+        window = params.get("seq_len", 100)
+        patch = params.get("inference_patch_size", "not applicable")
+        weight = "1.0 + 1.0 after branch normalization"
+        aggregation = "normalized time_score + normalized fre_score"
+    elif method in {"Anomaly Transformer", "DCdetector", "TFAD"}:
+        window = params.get("win_size", params.get("seq_len", 100))
+        patch = "not applicable (native window)"
+        weight = "native objective weights; no extra score weight"
+        aggregation = "native provider/window alignment"
+    elif method == "AutoEncoder":
+        window = params.get("sequence_len", 1)
+        patch = "not applicable"
+        weight = "1.0 reconstruction loss"
+        aggregation = "Merlion timestamp score"
+    elif method in {"OCSVM", "Isolation Forest", "PCA", "HBOS"}:
+        window = params.get("window_size", params.get("shingle_size", 1))
+        patch = "not applicable (tabular/TODS window)"
+        weight = "1.0 native decision score"
+        aggregation = ("PyOD weighted component-distance sum: "
+                       "sum(cdist(X_scaled, selected_components)/selected_explained_variance_ratio)"
+                       if method == "PCA" else "native row/window decision score")
+    else:
+        window = params.get("seq_len", "unknown")
+        patch = "not applicable"
+        weight = "native"
+        aggregation = "native"
+    if entry_mode == "detect_score":
+        threshold = "not applied by score entry (continuous score)"
+    elif method in {"CATCH", "ModernTCN", "iTransformer", "DualTF", "Anomaly Transformer",
+                    "DCdetector", "TimesNet", "PatchTST", "DLinear", "NLinear", "TFAD"}:
+        ratios = params.get("anomaly_ratio", "class default [0.1,0.5,1,2,3,5,10,15,20,25]")
+        threshold = "percentile(combined train+test score, 100-ratio); strict score > threshold; ratio={}".format(ratios)
+    else:
+        threshold = "native backend/detector label threshold; adapter command provides no anomaly_ratio override"
+    return {
+        "effective_score_weight": str(weight),
+        "effective_window": str(window),
+        "effective_inference_patch": str(patch),
+        "effective_aggregation": aggregation,
+        "effective_threshold": threshold,
+    }
+
+
 def build_baseline_settings(root: Path):
     common_dir = root / "result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun"
     common = read_csv(common_dir / "common_protocol_metrics.csv")
@@ -307,6 +376,7 @@ def build_baseline_settings(root: Path):
                     archive_aff = archive.get("reproduced_label_affiliation_f", "")
                 else:
                     archive_score = archive_aff = ""
+                effective_fields = _effective_fields(method, entry_mode, command)
                 rows.append({
                     "method": method,
                     "dataset": dataset,
@@ -317,8 +387,12 @@ def build_baseline_settings(root: Path):
                     "server_command": command,
                     "implementation_or_adapter": adapter,
                     "explicit_parameters": model_params,
-                    "inherited_parameters_or_defaults": "config={}; {}".format(config_name, inherited_defaults[method]),
+                    "inherited_parameters_or_defaults": "{}; score_weight={}; window={}; inference_patch={}; aggregation={}; threshold={}".format(
+                        inherited_defaults[method], effective_fields["effective_score_weight"],
+                        effective_fields["effective_window"], effective_fields["effective_inference_patch"],
+                        effective_fields["effective_aggregation"], effective_fields["effective_threshold"]),
                     "effective_configuration_notes": effective,
+                    **effective_fields,
                     "score_label_difference": difference,
                     "data_file": dataset + ".csv",
                     "special_handling": "Paper dataset name is 'Credit' for this row." if dataset == "Creditcard" else "",
@@ -459,7 +533,7 @@ The scored coordinates, labels, threshold source, comparison symbol, metric defi
 
 ## Required evidence before execution
 
-Resolve the anomaly-ratio selection rule from the existing report-generation path and obtain an explicit boundary decision for Creditcard/CICIDS. The smallest useful execution is a frozen auxiliary-decoder/score-head diagnostic on the registered sources plus the corrected CalIt2 RawCount comparison. Preserve the paper table as a separate reference and expand only after threshold semantics and native-versus-causal alignment are documented; this is not a default eight-dataset x 16-method rerun.
+The final selection rule for some historical anomaly-ratio candidate lists remains unknown and is recorded as such; recovering it is not a prerequisite for an independent frozen auxiliary-decoder/score-head diagnostic. The smallest useful execution is that diagnostic plus the corrected CalIt2 RawCount comparison. Preserve the paper table as a separate reference; this is not a default eight-dataset x 16-method rerun.
 """
 
 
@@ -489,6 +563,8 @@ def main():
         "method", "dataset", "entry_mode", "entry_script", "script_exists", "script_sha256",
         "server_command", "implementation_or_adapter", "explicit_parameters",
         "inherited_parameters_or_defaults", "effective_configuration_notes",
+        "effective_score_weight", "effective_window", "effective_inference_patch",
+        "effective_aggregation", "effective_threshold",
         "score_label_difference", "data_file", "special_handling", "paper_dataset_name",
         "paper_reference_version", "paper_reference_url", "paper_table", "paper_auc_roc",
         "paper_affiliation_f", "original_archive_score_run", "original_archive_label_run",

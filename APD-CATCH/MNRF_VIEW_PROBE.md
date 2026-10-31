@@ -395,3 +395,37 @@ task's fixed retired residual Run ID; it never removes the new source or any
 other historical run. Refreshing the all-dataset 72-cell plan also prunes
 older plan-only inventory batches and their matching review ZIPs, but preserves
 any batch containing executed, failed, or running cells.
+
+## Frozen E/R auxiliary-decoder diagnostic
+
+`scripts/run_mnrf_frozen_decoder_diagnostic.py --task TASK` is a read-only,
+single-dataset diagnostic for the registered Full source. It restores the
+serialized `best_stage1.pt` encoder/auxiliary identity, then reads raw cached
+E/R latent slices and normalized current-value targets in bounded CPU chunks.
+It does not call the encoder, train, fit a GMM, rebuild a cache, or alter the
+source. It reports decoder MAE/MSE, sigma, squared-residual and Gaussian-NLL
+rankings, validation-MAD/calibration thresholds, and persistence/training-mean
+references. `decoder_latent_train_mean` is an intervention for diagnosing
+whether the auxiliary decoder uses conditional coordinates, not a new model.
+P is intentionally deferred: an occlusion diagnostic requires a new masked
+input and re-encoding rather than reusing the existing P cache. The planned
+P check is a fixed, per-target-variable 8-step contiguous mask inside the
+32-step pattern context, using the pretraining zero-fill/invalid-mask rule.
+Compare reconstruction against the target variable's training mean and a
+previous-value persistence reference; the target's own masked values must not
+enter the P input. Use at most 256 train, 128 validation, 128 calibration and
+512 test endpoints, selected deterministically and identically across target
+variables. Re-encode those windows one target variable at a time in CPU chunks;
+cost is bounded by at most 1,024 windows per variable plus the original
+context-window encoder work. This is a future diagnostic protocol only; no P
+masking or encoding is run by the current command.
+
+After manually activating `catch_env`, run one dataset at a time, for example:
+
+```bash
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task PSM
+```
+
+Output is under `result/analysis/MNRF-FrozenDecoder/<TASK>/<source-run>`.
+Missing or mismatched auxiliary weights/layouts are errors; the tool never
+falls back to random initialization.

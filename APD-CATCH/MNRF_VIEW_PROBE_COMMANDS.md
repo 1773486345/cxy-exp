@@ -272,3 +272,46 @@ not reuse the historical inventory batch for these three tasks. A newly
 saved all-dataset plan removes older plan-only inventory folders and matching
 review ZIPs only when their rows contain no executed `complete`, `failed`, or
 `running` cells; executed batches are retained.
+
+## Frozen E/R decoder diagnostic
+
+Run one registered Full source at a time. This is a CPU, read-only diagnostic;
+it restores `best_stage1.pt` and consumes raw cached E/R coordinates without
+encoder forward, training, GMM fitting, or cache writes:
+
+```bash
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task PSM
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task MSL
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task GECCO
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task Genesis
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task NYC
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task CalIt2
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task Creditcard
+python scripts/run_mnrf_frozen_decoder_diagnostic.py --task CICIDS
+```
+
+The diagnostic output is stored below
+`result/analysis/MNRF-FrozenDecoder/<TASK>/<source-run>`. P masking is not
+silently approximated from an existing cache; it is reserved for a later
+masked-input/re-encoding experiment.
+
+For the existing RawCount CalIt2 source, the S-only head can be launched by
+the existing frozen-source CLI. Verify the explicitly registered RawCount run
+before using the illustrative path:
+
+```bash
+python scripts/run_mnrf_view_probe.py --task CalIt2 --mode select_gmm --views S \
+  --source-dir result/score/MNRF-ViewProbe-RawCount/CalIt2/rawcount-full-20261031T20261031T092320Z-1093827 \
+  --output-dir result/score/MNRF-ViewProbe-RawCount/CalIt2/s-only-$(date -u +%Y%m%dT%H%M%SZ)-$$ \
+  --seed 2021 --seq-len 192 --pattern-len 32 --hidden-dim 32 --batch-size 128 \
+  --stage1-epochs 50 --stage2-epochs 30 --patience 5 --learning-rate 0.001 --weight-decay 0.0001 \
+  --feature-std-floor 0.05 --device cpu --cache-chunk-size 256 --encoding-batch-size 128 \
+  --view-dim 8 --evolution-dim 8 --pattern-dim 8 --relation-dim 8 \
+  --gmm-components 4 --gmm-covariance-type full --gmm-reg-covar 0.001 \
+  --gmm-n-init 1 --gmm-max-iter 100 --gmm-fit-max-windows 20000 \
+  --cpu-threads 1 --train-noise-std 0.01 --noise-seed 20261013 \
+  --calibration-quantile 0.995 --score-mad-floor 0.001 --artifact-policy full
+```
+
+This reuses the RawCount source cache and fits only its S head; it does not
+retrain or overwrite the RawCount Full source.

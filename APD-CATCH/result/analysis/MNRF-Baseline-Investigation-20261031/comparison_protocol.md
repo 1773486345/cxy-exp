@@ -26,4 +26,4 @@ The scored coordinates, labels, threshold source, comparison symbol, metric defi
 
 ## Required evidence before execution
 
-Resolve the anomaly-ratio selection rule from the existing report-generation path and obtain an explicit boundary decision for Creditcard/CICIDS. The smallest useful execution is a frozen auxiliary-decoder/score-head diagnostic on the registered sources plus the corrected CalIt2 RawCount comparison. Preserve the paper table as a separate reference and expand only after threshold semantics and native-versus-causal alignment are documented; this is not a default eight-dataset x 16-method rerun.
+The final selection rule for some historical anomaly-ratio candidate lists remains unknown and is recorded as such; recovering it is not a prerequisite for an independent frozen auxiliary-decoder/score-head diagnostic. The smallest useful execution is that diagnostic plus the corrected CalIt2 RawCount comparison. Preserve the paper table as a separate reference; this is not a default eight-dataset x 16-method rerun.

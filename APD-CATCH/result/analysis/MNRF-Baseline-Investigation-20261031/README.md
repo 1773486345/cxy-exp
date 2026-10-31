@@ -1,6 +1,6 @@
 # MNRF baseline investigation
 
-This is a read-only investigation generated on e7532c231f046cf844e43afa4ac65c878c3112c9 with `/media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python` (Python 3.8.20). Current catch_env packages: numpy=1.24.4, pandas=1.5.3, scikit-learn=1.3.2, torch=2.4.1, salesforce-merlion=1.3.1, pyod=2.1.0, tods=not-importable. It did not train, encode, fit a head, recalculate a cache, or modify an existing result. Evidence labels are `direct-code`, `direct-record`, `inference`, and `unknown`.
+This is a read-only investigation generated on 26dc5a35f5dfc0ac52d5b0206ac140cb8a854142 with `/media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python` (Python 3.8.20). Current catch_env packages: numpy=1.24.4, pandas=1.5.3, scikit-learn=1.3.2, torch=2.4.1, salesforce-merlion=1.3.1, pyod=2.1.0, tods=not-importable. It did not train, encode, fit a head, recalculate a cache, or modify an existing result. Evidence labels are `direct-code`, `direct-record`, `inference`, and `unknown`.
 
 ## Scientific conclusion and comparison boundary
 
