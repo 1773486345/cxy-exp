@@ -1,0 +1,97 @@
+{
+  "generated_utc": "2026-11-01T16:24:59.821556+00:00",
+  "git_head": "06080b4515c45a35b13351e0193373a018c40a61",
+  "git_status_short": " M scripts/generate_mnrf_comparison_diagnosis.py\n?? result/analysis/MNRF-Comparison-Diagnosis-20261102T120000Z/\n?? result/analysis/MNRF-Comparison-Diagnosis-20261102T123000Z/\n?? ts_benchmark/baselines/mnrf_view_probe/tests/test_comparison_report_generator.py\n",
+  "baseline_settings": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-Baseline-Investigation-20261031/baseline_settings.csv",
+  "frozen_analysis": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-FrozenDecoder-Analysis-20261102-final",
+  "datasets": [
+    "PSM",
+    "MSL",
+    "GECCO",
+    "Genesis",
+    "NYC",
+    "CalIt2",
+    "Creditcard",
+    "CICIDS"
+  ],
+  "baseline_rows": 256,
+  "full_rows": 8,
+  "source_validation": {
+    "PSM": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261024T115119Z-3976714",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+      "reason": ""
+    },
+    "MSL": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261021T112147Z-2470335",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/MSL/full_gmm-full-20261021T112147Z-2470335",
+      "reason": ""
+    },
+    "GECCO": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261020T204951Z-1642355",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355",
+      "reason": ""
+    },
+    "Genesis": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261020T205005Z-1645522",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522",
+      "reason": ""
+    },
+    "NYC": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261020T211341Z-1931786",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786",
+      "reason": ""
+    },
+    "CalIt2": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261021T112212Z-2474004",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004",
+      "reason": ""
+    },
+    "Creditcard": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261024T115131Z-3977864",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864",
+      "reason": ""
+    },
+    "CICIDS": {
+      "status": "verified",
+      "presence_checked": true,
+      "run_status": "complete",
+      "validation_basis": "run_status complete + manifest/source_identity and registered binding match",
+      "source_run_id": "full_gmm-full-20261024T115157Z-3980319",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319",
+      "reason": ""
+    }
+  },
+  "model_execution": false,
+  "encoder_forward": false,
+  "new_head_fit": false,
+  "new_calibration": false
+}

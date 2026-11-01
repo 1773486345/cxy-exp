@@ -21,8 +21,8 @@ FROZEN = ROOT / "result/analysis/MNRF-FrozenDecoder-Analysis-20261102-final"
 FULL_DIAGNOSTIC = ROOT / "result/analysis/MNRF-ViewProbe-FullDiagnostic/full-head-diagnostic-20261030T062555Z-3226097"
 CONDITIONAL = ROOT / "result/analysis/MNRF-ViewProbe-ConditionalScore/conditional-score-20261030T-run2"
 DATA_REPAIR = ROOT / "result/analysis/MNRF-ViewProbe-DataRepair"
+COMMON_PROTOCOL = ROOT / "result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/common_protocol_metrics.csv"
 TASKS = ("PSM", "MSL", "GECCO", "Genesis", "NYC", "CalIt2", "Creditcard", "CICIDS")
-COMMON_METHODS = {"CATCH", "Isolation Forest", "PCA"}
 REQUIRED_SOURCE_FILES = (
     "probe_manifest.json", "run_status.json", "input_statistics.npz",
     "results/test_nll.npy", "results/aligned_scores.npz",
@@ -99,6 +99,19 @@ def write_csv(path, rows):
         writer.writerows(rows)
 
 
+def canonical(value):
+    """Canonical form for comparing stored identity dictionaries."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def common_protocol_records():
+    """Index actual common-protocol artifacts; do not infer them by name."""
+    if not COMMON_PROTOCOL.is_file():
+        return {}
+    return {(row.get("dataset", ""), row.get("method", "")): row
+            for row in read_csv(COMMON_PROTOCOL)}
+
+
 def source_contract(full_rows, full_reference_rows):
     """Return only source records that are unique and materially complete.
 
@@ -137,15 +150,45 @@ def source_contract(full_rows, full_reference_rows):
                           "fixed_noise_sha256", "input_statistics_sha256", "cache_sha256"):
                 if not value(reference, field):
                     reasons.append(f"source record field {field} is missing")
+        run_status = {}
+        manifest = {}
         if source_path and source_path.is_dir():
             for relative in REQUIRED_SOURCE_FILES + REQUIRED_SPLIT_FILES:
                 if not (source_path / relative).is_file():
                     reasons.append(f"missing {relative}")
+            try:
+                run_status = json.loads((source_path / "run_status.json").read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                reasons.append("run_status.json is unreadable")
+            try:
+                manifest = json.loads((source_path / "probe_manifest.json").read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                reasons.append("probe_manifest.json is unreadable")
+            if run_status.get("status") != "complete":
+                reasons.append(f"run_status.status={run_status.get('status', 'missing')!r}, not complete")
         identity = structured(value(reference, "source_identity")) if reference else None
         if not isinstance(identity, dict):
             reasons.append("source_identity is not parseable")
+        manifest_identity = manifest.get("source_identity") if isinstance(manifest, dict) else None
+        if isinstance(identity, dict) and isinstance(manifest_identity, dict):
+            if canonical(identity) != canonical(manifest_identity):
+                reasons.append("manifest source_identity does not match registered source record")
+        elif source_path and source_path.is_dir():
+            reasons.append("manifest source_identity is missing or not parseable")
+        if isinstance(manifest, dict) and manifest.get("config", {}).get("task_name"):
+            if manifest["config"].get("task_name") != f"{task}.csv":
+                reasons.append("manifest task_name does not match dataset")
+        if isinstance(manifest, dict) and reference:
+            if value(reference, "feature_fingerprint") and manifest.get("feature_fingerprint") != value(reference, "feature_fingerprint"):
+                reasons.append("manifest feature_fingerprint does not match source record")
+            if value(reference, "fixed_noise_sha256") and manifest.get("fixed_noise_sha256") != value(reference, "fixed_noise_sha256"):
+                reasons.append("manifest fixed_noise_sha256 does not match source record")
         result[task] = {
-            "status": "verified" if not reasons else "blocked",
+            "status": "verified" if not reasons else "presence_checked",
+            "presence_checked": True,
+            "run_status": run_status.get("status", "missing"),
+            "manifest_checked": bool(manifest),
+            "validation_basis": "run_status complete + manifest/source_identity and registered binding match" if not reasons else "file presence checked; complete source binding not established",
             "reason": "; ".join(reasons),
             "source_id": source_id,
             "source_path": str(source_path.resolve()) if source_path and source_path.exists() else str(source_path or ""),
@@ -165,7 +208,7 @@ def mnrf_settings(context):
             "validation median/MAD and independent calibration q=0.995; strict score > threshold")
 
 
-def alignment_detail(row, context):
+def alignment_detail(row, context, common_record=None):
     method = row.get("method", "")
     mode = row.get("entry_mode", "")
     explicit = value(row, "explicit_parameters") or "none recorded"
@@ -192,12 +235,25 @@ def alignment_detail(row, context):
         differences.append(f"native window={window} and patch={patch} are not MNRF endpoint-causal source settings")
     if aggregation and aggregation != "unknown":
         differences.append("native aggregation is retained; MNRF uses per-variable normalized NLL max")
+    common_method = {"CATCH": "CATCH-common", "Isolation Forest": "IsolationForest", "PCA": "PCA"}.get(method)
+    common_status = "not_bound"
+    common_binding = "no common-protocol artifact bound"
+    if common_record:
+        common_status = "source_id_match" if common_record.get("source_full_run_id") == context.get("source_id") else "source_id_mismatch"
+        common_binding = (f"method={common_record.get('method')}; source_full_run_id={common_record.get('source_full_run_id')}; "
+                          f"protocol={common_record.get('protocol')}; parameter_summary={common_record.get('parameter_summary')}")
     if context["status"] != "verified":
         judgement = "缺少明确细节：MNRF Full 源绑定未验证"
         action = "do not claim direct comparison; repair source evidence before using an MNRF row (probe.py source validation)"
-    elif method in COMMON_METHODS:
-        judgement = "已有分数可重算：共同协议诊断可在共享有效点核对"
-        action = "keep native baseline score; compare ranking on shared points; report alarms in separate native/common columns (probe.py::_calibrate/_write_scores)"
+    elif method == "PCA":
+        judgement = "需要后续调整 MNRF 报告：native PyOD/TODS PCA 与 common sklearn residual PCA 非同一实现"
+        action = "keep paper/native PCA separate; common residual-PCA evidence may be reported only in a named common-protocol column"
+    elif method == "Isolation Forest":
+        judgement = "需要后续调整 MNRF 报告：native Merlion IF 与 common sklearn IF 非同一实现"
+        action = "keep paper/native Merlion score separate; common sklearn IF is an explicitly different diagnostic"
+    elif method == "CATCH" and mode == "detect_score" and common_status == "source_id_match":
+        judgement = "已有绑定的共同协议 CATCH 分数可重算/核对"
+        action = "compare only the bound CATCH-common artifact on its exact coordinates; retain paper/native score and label rows separately"
     elif mode == "detect_score":
         judgement = "paper/native ranking reference only; common-point score is required for a direct score comparison"
         action = "do not change the baseline; if direct common comparison is needed, obtain its score on MNRF exact valid coordinates; retain MNRF probe.py::_gmm_scores"
@@ -215,16 +271,20 @@ def alignment_detail(row, context):
         "judgement": judgement,
         "alignment_judgement": judgement,
         "mnrf_action": action,
-        "code_or_record_basis": f"{value(row, 'entry_script')}; baseline_settings.csv; MNRF probe.py and registered source record",
+        "common_protocol_binding": common_binding,
+        "common_protocol_status": common_status,
+        "code_or_record_basis": f"{value(row, 'entry_script')}; baseline_settings.csv; common_protocol_metrics.csv; MNRF probe.py and registered source record",
     }
 
 
 def alignment_rows(settings, full_rows, contexts):
     result = []
+    common_records = common_protocol_records()
     for row in settings:
         task = row.get("dataset")
         full = first(full_rows, task, "FULL", "saved_full_gmm_reference", "saved_original_aggregate")
-        detail = alignment_detail(row, contexts[task])
+        common_method = {"CATCH": "CATCH-common", "Isolation Forest": "IsolationForest", "PCA": "PCA"}.get(row.get("method"))
+        detail = alignment_detail(row, contexts[task], common_records.get((task, common_method)))
         result.append({
             "dataset": task, "method": row.get("method"), "entry_mode": row.get("entry_mode"),
             "paper_auc_roc": row.get("paper_auc_roc"), "paper_affiliation_f": row.get("paper_affiliation_f"),
@@ -233,7 +293,8 @@ def alignment_rows(settings, full_rows, contexts):
             "effective_threshold": row.get("effective_threshold"),
             "baseline_evidence": row.get("evidence_status"),
             "mnrf_source_run_id": value(full, "source_run_id") if contexts[task]["status"] == "verified" else "",
-            "mnrf_common_status": "common-protocol Full verified" if contexts[task]["status"] == "verified" else "blocked",
+            "mnrf_common_status": "common-protocol Full verified" if contexts[task]["status"] == "verified" else "presence_checked_only",
+            "mnrf_presence_checked": str(contexts[task].get("presence_checked", False)).lower(),
             "mnrf_auc_roc": value(full, "auc_roc"),
             "mnrf_average_precision": value(full, "average_precision"),
             "mnrf_precision": value(full, "precision"),
@@ -242,6 +303,8 @@ def alignment_rows(settings, full_rows, contexts):
             "mnrf_fpr": value(full, "fpr"),
             "mnrf_affiliation_f": value(full, "affiliation_f_valid_segment_macro"),
             **detail,
+            "common_protocol_status": detail.get("common_protocol_status", "not_bound"),
+            "common_protocol_binding": detail.get("common_protocol_binding", "no common-protocol artifact bound"),
             "comparison_class": "paper reference; native baseline vs MNRF common diagnostic",
         })
     for task in TASKS:
@@ -277,32 +340,38 @@ def alignment_rows(settings, full_rows, contexts):
 
 def protocol_report(out, settings, contexts):
     method_rows = []
-    seen = set()
+    common_records = common_protocol_records()
     for row in settings:
-        key = (row.get("method"), row.get("entry_mode"))
-        if key in seen:
-            continue
-        seen.add(key)
-        detail = alignment_detail(row, contexts[TASKS[0]])
+        task = row.get("dataset")
+        common_method = {"CATCH": "CATCH-common", "Isolation Forest": "IsolationForest", "PCA": "PCA"}.get(row.get("method"))
+        detail = alignment_detail(row, contexts[task], common_records.get((task, common_method)))
         method_rows.append((row, detail))
     method_table = [
         "## Per-entry alignment decisions", "",
         "The following table is generated from each method's `detect_score`/`detect_label` settings. It is intentionally not a single generic judgement: window, aggregation, threshold and native configuration are retained per entry.", "",
-        "| Method | Entry | Confirmed baseline conditions | MNRF current setting | Consistent items | Differences | Judgement | MNRF action |", "|---|---|---|---|---|---|---|---|"
+        "| Dataset | Method | Entry | Confirmed baseline conditions | MNRF current setting | Consistent items | Differences | Common binding | Judgement | MNRF action |", "|---|---|---|---|---|---|---|---|---|---|"
     ]
     for row, detail in method_rows:
         def cell(value):
             return str(value or "").replace("|", "\\|").replace("\n", " ")
         method_table.append("| " + " | ".join(cell(x) for x in (
-            row.get("method"), row.get("entry_mode"), detail["baseline_confirmed_conditions"],
-            "registered dataset-specific Full source; source seq_len/variables and endpoint mask are inherited; Full GMM, max, validation median/MAD, calibration q=0.995, strict score > threshold",
-            detail["consistent_items"], detail["difference_items"],
+            row.get("dataset"), row.get("method"), row.get("entry_mode"), detail["baseline_confirmed_conditions"],
+            mnrf_settings(contexts[row.get("dataset")]),
+            detail["consistent_items"], detail["difference_items"], detail["common_protocol_binding"],
             detail["judgement"], detail["mnrf_action"])) + " |")
-    source_lines = ["## MNRF source binding", "", "| Dataset | Status | Source Run ID | Source path | Reason |", "|---|---|---|---|---|"]
+    source_lines = ["## MNRF source binding", "", "| Dataset | Binding status | run_status | Source Run ID | Source path | Reason |", "|---|---|---|---|---|---|"]
     for task in TASKS:
         c = contexts[task]
-        source_lines.append(f"| {task} | {c['status']} | {c['source_id']} | `{c['source_path']}` | {c['reason'] or 'all required source records/files present'} |")
+        source_lines.append(f"| {task} | {c['status']} | {c['run_status']} | {c['source_id']} | `{c['source_path']}` | {c['reason'] or 'complete status and registered binding match'} |")
     text = """# MNRF and Baseline Comparison Protocol
+
+## Formal comparison settings to use
+
+For the already-confirmed 16-method paper table, retain each method's confirmed native data version, train/test split, target/condition fields, window context, score formula and native alarm rule. Do not replace a native result with a common-protocol score. For a directly comparable MNRF row, use the registered Full source's train/validation/calibration/test split, original row order and entity/segment boundaries; score only the source's valid test endpoints and preserve its invalid/cold-start mask. Report ROC-AUC and average precision on those exact points. Report point precision/recall/F1/FPR and Affiliation values in separate columns with their threshold and segment definitions.
+
+MNRF's common alarm setting is the saved independent calibration set, q=0.995, strict `score > threshold`, with no test-label threshold selection or point adjustment. This is a common-protocol diagnostic, not a replacement for a baseline's native percentile, anomaly-ratio or backend threshold. The paper/native alarm is reported under its own protocol; a threshold change may affect alarm metrics but cannot change ROC-AUC/AP.
+
+Existing MNRF aligned scores can be used to recalculate ranking and common-alarm metrics without new fitting: the eight registered Full GMM rows, their saved `aligned_scores.npz`, labels, masks and calibration records are the reusable set. Existing CATCH-common/IF/PCA artifacts can only be compared when their implementation, source Run ID, configuration and score coordinates are explicitly bound in `common_protocol_metrics.csv`. Native Merlion IF and PyOD/TODS PCA are not interchangeable with common sklearn IF or residual PCA. Other baseline methods have paper/native values but no bound common score in this checkout; they need a separately named adapter or score artifact before a direct common-coordinate comparison. The independent q=.995 MNRF alarm belongs in the common-protocol diagnostic block/appendix, never in the paper Table 2 or native-baseline column.
 
 ## Scope and evidence classes
 
@@ -418,30 +487,28 @@ def diagnosis_report(out, full_rows, refs, attrs, scales, neighborhoods,
                      full_diagnostic, loss_rows, conditional_rows,
                      msl_target, msl_boundary, raw_rows):
     findings = {
-        "PSM": ("Full ranking is useful (" + metric_line(first(full_rows, "PSM", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
-                "R squared-residual is a stronger diagnostic ranking than E, but its calibrated alarm still has high FPR; E/R residuals do not explain the Full score by themselves. "
-                "Evidence-supported adjustment: inspect calibration upper tail and max-variable attribution before changing the head. A fixed-threshold recalibration on the same scores is the smallest test; it cannot be used to claim an AUC/AP change."),
-        "MSL": ("Full is moderate in ranking and low in recall at its fixed threshold (" + metric_line(first(full_rows, "MSL", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
-                "E/R residual diagnostics are close to simple references, while the prior audit records 27 telemetry sequences concatenated into 55 fields. The sequence-boundary effect and mixed target/condition roles are supported concerns, not proven causal causes. "
-                "Minimum test: score the existing frozen outputs on non-cross-sequence coordinates, then separately report col_0; a boundary-aware retrain would be a later experiment."),
-        "GECCO": ("The Full GMM ranking is poor while E/R residual rankings are high (Full " + metric_line(first(full_rows, "GECCO", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "; R residual " + metric_line(first(refs, "GECCO", "R", "decoder", "squared_residual")) + "). "
-                  "This separates a density/aggregation/calibration issue from a lack of information in the frozen readout; calibration contamination is possible because the source audit records labeled anomalies in fitting ranges, but it is not proved as the sole cause. "
-                  "Minimum test: replay the same cached NLL with a fixed non-max diagnostic only for analysis, and compare calibration-tail composition without selecting a test-optimal threshold."),
-        "Genesis": ("Full has strong AUC but weak AP and alarm precision (" + metric_line(first(full_rows, "Genesis", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
-                    "R residual improves over persistence in ranking but its fixed threshold still produces false positives; only three scored anomaly segments limit generalization. "
-                    "Minimum test: inspect normal high-score variable attribution and calibration-tail windows; any threshold change must be a predeclared calibration protocol, not a test optimization."),
-        "NYC": ("Full ranking is above random but its fixed alarm has no true positives (" + metric_line(first(full_rows, "NYC", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
-                "The frozen E/R report has one scored event and k=8 neighborhood summaries; lower prediction error in calendar/target readout does not establish anomaly information. Passenger target and calendar context must be kept distinct. "
-                "Minimum test: one predeclared target-only/context-only scoring comparison on the same event boundaries, explicitly marked as single-event evidence."),
-        "CalIt2": ("The historical modulo-10 source has low Full AP (" + metric_line(first(full_rows, "CalIt2", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
+        "PSM": ("[已完成] Full ranking is useful (" + metric_line(first(full_rows, "PSM", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
+                "[已完成] FullDiagnostic 的协方差/max-mean 对照和正常高分变量归因已保存；R squared-residual 的排序较强但固定阈值 FPR 较高。 "
+                "[尚未证实] E/R 是否解释 Full 的增益仍没有因果证据。 [真正新增验证] 只需在同一分数上预注册校准尾部审计，不改变 AUC/AP。"),
+        "MSL": ("[已完成] Full 的排序和固定阈值指标为 " + metric_line(first(full_rows, "MSL", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + ". "
+                "[已完成] 27 条序列边界排除诊断及 col_0 目标列事后聚合均已保存（目标列 AP 0.1590→0.2792）；这不是按边界重新训练。 "
+                "[尚未证实] 拼接边界与目标/条件混合对训练表示的因果影响。 [真正新增验证] 如需确认，应进行保留序列身份的边界感知重训，而不是把已完成排除诊断写成待完成。"),
+        "GECCO": ("[已完成] Full GMM 排序较弱而 E/R residual 排序较高（Full " + metric_line(first(full_rows, "GECCO", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "; R residual " + metric_line(first(refs, "GECCO", "R", "decoder", "squared_residual")) + "). "
+                  "[已完成] FullDiagnostic 已比较 full/diag 与 max/mean，并保存校准上尾和变量归因。 [支持但未证实] 校准污染可能影响报警，不等于已证明是唯一原因。 [真正新增验证] 仅需预注册校准标签审计或边界控制。"),
+        "Genesis": ("[已完成] Full has strong AUC but weak AP and alarm precision (" + metric_line(first(full_rows, "Genesis", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
+                    "FullDiagnostic 的正常高分变量归因、校准尾部和 R/persistence 对照已保存；仅三个 scored anomaly segments 限制外推。 "
+                    "[尚未证实] 工况变化是否导致正常高分；[真正新增验证] 仅复核预注册的正常尾部窗口，不以测试标签改阈值。"),
+        "NYC": ("[已完成] Full ranking is above random but its fixed alarm has no true positives (" + metric_line(first(full_rows, "NYC", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
+                "单一有评分事件的 k=8 neighborhood summaries 已保存，并区分客流目标与日历条件。 [尚未证实] 预测误差降低是否包含异常信息；[真正新增验证] 只可做预注册 target-only/context-only 诊断。"),
+        "CalIt2": ("[已完成] The historical modulo-10 source has low Full AP (" + metric_line(first(full_rows, "CalIt2", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
                    "The completed RawCount report is a separate data version: MNRF AUC/AP changes to 0.853538/0.170287, while CATCH, IF and PCA are 0.881578/0.281496, 0.890166/0.253774 and 0.822361/0.146648. These four-method results must not be mixed into the old eight-task average; RawCount S-only is not a prerequisite for this conclusion. E/R residuals exceed persistence in some rankings but do not constitute a branch gain over the target-mean reference. "
-                   "The supported adjustment is to preserve RawCount as a separate data-version protocol and investigate the remaining gap to CATCH/IF; the role of each representation branch remains unproven."),
-        "Creditcard": ("Full ranking is high but AP and calibrated precision are low relative to its AUC (" + metric_line(first(full_rows, "Creditcard", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
+                   "[尚未证实] E/R 是否提供稳定 target-mean 以上增量；RawCount 与旧版本不得混合。"),
+        "Creditcard": ("[已完成] Full ranking is high but AP and calibrated precision are low relative to its AUC (" + metric_line(first(full_rows, "Creditcard", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
                        "R squared-residual AP is 0.356110 while R auxiliary NLL AP is 0.001756; the ranking loss is already present at the single-variable NLL layer, and cross-variable scaling/max aggregation can worsen it. Pointwise mu/sigma are not saved, so high-variance masking is not established. "
-                       "Minimum test: export fixed pointwise mu/sigma for a predeclared sample and compare per-variable residual/NLL ranks without choosing variables from test AP."),
-        "CICIDS": ("Full ranking is near random and the fixed alarm has no true positives (" + metric_line(first(full_rows, "CICIDS", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
+                       "[尚未证实] 没有逐点 mu/sigma，不能断言高 sigma 掩盖异常；[真正新增验证] 仅导出预注册 mu/sigma 样本。"),
+        "CICIDS": ("[已完成] Full ranking is near random and the fixed alarm has no true positives (" + metric_line(first(full_rows, "CICIDS", "FULL", "saved_full_gmm_reference", "saved_original_aggregate")) + "). "
                    "E/R residuals are also weak at the alarm threshold, although their ranking can exceed Full. The source lacks verified entity/session continuity, so row adjacency and event interpretation remain unknown. "
-                   "Minimum test: obtain a source-level session/flow boundary mapping; until then, treat boundary-sensitive Affiliation and window interpretation as limited rather than changing the score."),
+                   "[尚未证实] E/R 与 Full 的差异是否来自表示或边界；源没有可验证 entity/session 连续性。 [真正新增验证] 获取 flow/session 边界映射，不改变评分。"),
     }
     lines = ["# Dataset Diagnosis", "", "This is a read-only synthesis of the existing Full GMM and frozen E/R CSVs. No model, encoder, decoder, GMM or calibration was run. All values below retain the source dataset version and valid-score protocol.", "", "## Cross-dataset score snapshot", "", "| Dataset | Full AUC | Full AP | Full P/R/F1 | Full FPR | R residual AP/AUC | E residual AP/AUC |", "|---|---:|---:|---|---:|---:|---:|"]
     for task in TASKS:
@@ -518,8 +585,9 @@ def main():
                 "baseline_settings": str((BASELINE / "baseline_settings.csv").resolve()),
                 "frozen_analysis": str(FROZEN.resolve()), "datasets": list(TASKS),
                 "baseline_rows": len(baseline_settings), "full_rows": len(full_rows),
-                "source_validation": {task: {"status": item["status"], "source_run_id": item["source_id"],
-                                              "source_path": item["source_path"], "reason": item["reason"]}
+                "source_validation": {task: {"status": item["status"], "presence_checked": item["presence_checked"],
+                                              "run_status": item["run_status"], "validation_basis": item["validation_basis"],
+                                              "source_run_id": item["source_id"], "source_path": item["source_path"], "reason": item["reason"]}
                                       for task, item in contexts.items()},
                 "model_execution": False, "encoder_forward": False, "new_head_fit": False,
                 "new_calibration": False}
