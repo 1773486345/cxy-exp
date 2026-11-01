@@ -89,7 +89,11 @@ def _ranking_pair(values, labels):
         return None, None
     recall = tps / positives
     precision = tps / np.maximum(tps + fps, 1.0)
-    auc = float(np.trapz(tps / positives, fps / negatives))
+    # ROC integration must include the classifier's (0, 0) origin.  Without
+    # it, a tied score ordering can report AUC=0 for a genuinely random
+    # ranking (the correct value is 0.5).
+    auc = float(np.trapz(np.r_[0.0, tps / positives],
+                         np.r_[0.0, fps / negatives]))
     ap = float(np.sum(np.diff(np.r_[0.0, recall]) * precision))
     return auc, ap
 
@@ -114,7 +118,8 @@ def _ranking_matrix(values, labels):
         fps = np.cumsum(1.0 - y)[distinct]
         recall = tps / positives
         precision = tps / np.maximum(tps + fps, 1.0)
-        result.append((float(np.trapz(tps / positives, fps / negatives)),
+        result.append((float(np.trapz(np.r_[0.0, tps / positives],
+                                      np.r_[0.0, fps / negatives])),
                        float(np.sum(np.diff(np.r_[0.0, recall]) * precision))))
     return result
 
@@ -364,6 +369,84 @@ def _nyc_event_rows(task, source_axis, evidence_by_view, names):
     return rows
 
 
+def _nyc_event_neighborhood_rows(task, source_axis, evidence_by_view, names, k=8):
+    """Summarize a fixed, boundary-safe k-point event neighborhood.
+
+    The phase labels are based only on scored event endpoints.  Normal
+    neighbors are selected from the complete axis only when they remain in
+    the same source segment, have consecutive global coordinates, and have a
+    saved score for the corresponding diagnostic view.
+    """
+    if task != "NYC":
+        return []
+    full_globals = np.asarray(source_axis["all_global_indices"], dtype=np.int64)
+    full_labels = np.asarray(source_axis["all_labels"], dtype=np.int8)
+    full_segments = np.asarray(source_axis["all_segment_ids"], dtype=np.int64)
+    full_times = np.asarray(source_axis["all_time_values_ns"])
+    full_pos = {int(g): i for i, g in enumerate(full_globals)}
+    rows = []
+    for event in _event_rows(source_axis):
+        event_globals = list(event["scored_globals"])
+        if not event_globals:
+            continue
+        before = []
+        after = []
+        start_pos = full_pos[event["start_global"]]
+        end_pos = full_pos[event["end_global"]]
+        for pos in range(start_pos - 1, -1, -1):
+            if (full_labels[pos] != 0 or full_segments[pos] != event["segment_id"]
+                    or pos + 1 >= len(full_globals)
+                    or full_globals[pos + 1] - full_globals[pos] != 1):
+                break
+            before.append(int(full_globals[pos]))
+            if len(before) == k:
+                break
+        before.reverse()
+        for pos in range(end_pos + 1, len(full_globals)):
+            if (full_labels[pos] != 0 or full_segments[pos] != event["segment_id"]
+                    or pos == 0 or full_globals[pos] - full_globals[pos - 1] != 1):
+                break
+            after.append(int(full_globals[pos]))
+            if len(after) == k:
+                break
+        for view, evidence in evidence_by_view.items():
+            endpoint_globals = np.asarray(evidence["endpoints"], dtype=np.int64)
+            endpoint_pos = {int(g): i for i, g in enumerate(endpoint_globals)}
+            values_by_score = {
+                "squared_residual": np.asarray(evidence["residual"], dtype=np.float64) ** 2,
+                "nll": np.asarray(evidence["nll"], dtype=np.float64),
+            }
+            phase_globals = {
+                "event_first8": event_globals[:k],
+                "event_last8": event_globals[-k:],
+                "event_interior": event_globals[k:-k] if len(event_globals) > 2 * k else [],
+                "normal_before8": [g for g in before if g in endpoint_pos],
+                "normal_after8": [g for g in after if g in endpoint_pos],
+            }
+            for score_name, values in values_by_score.items():
+                for phase, globals_for_phase in phase_globals.items():
+                    indices = [endpoint_pos[g] for g in globals_for_phase if g in endpoint_pos]
+                    if not indices:
+                        continue
+                    selected = values[np.asarray(indices, dtype=np.int64), 0]
+                    finite = selected[np.isfinite(selected)]
+                    if not len(finite):
+                        continue
+                    quantiles = _finite_quantiles(finite)
+                    rows.append({
+                        "dataset": task, "event_index": event["event_index"],
+                        "segment_id": event["segment_id"], "view": view,
+                        "score": score_name, "phase": phase, "k": k,
+                        "n": int(len(finite)), "mean": float(np.mean(finite)),
+                        "median": float(np.median(finite)), **quantiles,
+                        "global_start": int(min(globals_for_phase)),
+                        "global_end": int(max(globals_for_phase)),
+                        "time_start_ns": int(full_times[full_pos[min(globals_for_phase)]]),
+                        "time_end_ns": int(full_times[full_pos[max(globals_for_phase)]]),
+                    })
+    return rows
+
+
 def analyze_task(task, diagnostic_root):
     dirs = sorted((diagnostic_root / task).glob("*/"))
     if len(dirs) != 1:
@@ -431,7 +514,8 @@ def analyze_task(task, diagnostic_root):
                                "normal_points": int(np.sum(labels == 0)),
                                "anomaly_points": int(np.sum(labels == 1)),
                                "anomaly_fraction": float(np.mean(labels == 1))})
-            evidence_by_view.setdefault(view, {"residual": residual, "nll": nll})
+            evidence_by_view.setdefault(view, {"residual": residual, "nll": nll,
+                                               "endpoints": endpoints})
             summary_rows.append({"dataset": task, "view": view, "score": score_name,
                                  "source_run_id": source_run.name, "diagnostic_run_id": out.name,
                                  "variable_count": len(names), "test_points": len(labels),
@@ -453,6 +537,7 @@ def analyze_task(task, diagnostic_root):
                                  "affiliation_total_segments": row.get("affiliation_total_segments"),
                                  "threshold": threshold})
     nyc_rows = _nyc_event_rows(task, axis, evidence_by_view, names)
+    nyc_neighborhood_rows = _nyc_event_neighborhood_rows(task, axis, evidence_by_view, names, k=8)
     full_reference = _source_reference(source_run, source_manifest, axis, metrics, names)
     reference_metrics = []
     for metric in metrics:
@@ -461,6 +546,7 @@ def analyze_task(task, diagnostic_root):
     return {"summary": summary_rows, "reference_metrics": reference_metrics,
             "distribution": distribution_rows, "variable_metrics": metric_rows,
             "attribution": attribution_rows, "scale": scale_rows, "nyc_events": nyc_rows,
+            "nyc_neighborhood": nyc_neighborhood_rows,
             "full_reference": full_reference,
             "source": {"task": task, "source_run_id": source_run.name,
                         "source_run": str(source_run), "diagnostic_run_id": out.name,
@@ -494,16 +580,87 @@ def _creditcard_note(summary, variable_metrics, attribution):
 
 
 def _read_rawcount_status():
-    path = ROOT / "result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031"
-    metrics = path / "baselines-v2/metrics.json"
-    return {"directory": str(path), "full_and_baselines_complete": metrics.is_file(),
-            "s_only_present": False, "s_only_note": "No RawCount S-only output was found; the available run is RawCount Full plus CATCH/IF/PCA.",
-            "metrics": json.loads(metrics.read_text()) if metrics.is_file() else None,
-            "command": "python scripts/run_mnrf_branch_ablation.py --task CalIt2 --mode execute --source-dir result/score/MNRF-ViewProbe-RawCount/CalIt2/rawcount-full-20261031T20261031T092320Z-1093827 --views S"}
+    """Search only the known RawCount roots for a verified S-only result."""
+    report_root = ROOT / "result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031"
+    source = ROOT / "result/score/MNRF-ViewProbe-RawCount/CalIt2/rawcount-full-20261031T20261031T092320Z-1093827"
+    # These are the bounded result roots used by the RawCount repair work;
+    # do not turn this status check into a repository-wide result scan.
+    roots = [ROOT / "result/score/MNRF-ViewProbe-RawCount",
+             ROOT / "result/score/MNRF-ViewProbe-SOnly",
+             ROOT / "result/score/MNRF-ViewProbe-Components",
+             report_root]
+    source_name = source.name
+    candidates = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for manifest_path in sorted(root.rglob("probe_manifest.json")):
+            if manifest_path.parent == source:
+                continue
+            candidate = manifest_path.parent
+            record = {"path": str(candidate), "status": "rejected", "reasons": []}
+            try:
+                manifest = _read_json(manifest_path)
+                config = manifest.get("config", {})
+                selected = config.get("selected_views", manifest.get("selected_views", []))
+                mode = config.get("mode", manifest.get("mode"))
+                status = manifest.get("stage_status")
+                head_status = manifest.get("head_status")
+                bound = config.get("source_dir", manifest.get("source_dir", ""))
+                if list(selected) != ["S"]:
+                    record["reasons"].append(f"selected_views={selected!r}")
+                if mode not in ("select_gmm", "s_only"):
+                    record["reasons"].append(f"mode={mode!r}")
+                if status != "complete" or head_status != "complete":
+                    record["reasons"].append(f"incomplete stage/head status: {status!r}/{head_status!r}")
+                if source_name not in str(bound):
+                    record["reasons"].append("source binding does not identify the fixed RawCount Full source")
+                if not (candidate / "results/test_nll.npy").is_file():
+                    record["reasons"].append("missing test_nll.npy")
+                if not record["reasons"]:
+                    record["status"] = "verified"
+            except Exception as exc:
+                record["reasons"].append(f"manifest unreadable: {type(exc).__name__}: {exc}")
+            candidates.append(record)
+    metrics = report_root / "baselines-v2/metrics.json"
+    command = (
+        "python scripts/run_mnrf_view_probe.py --task CalIt2 --data-source large_detect "
+        "--mode select_gmm --views S "
+        f"--source-dir result/score/MNRF-ViewProbe-RawCount/CalIt2/{source_name} "
+        "--data-root result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root "
+        "--output-dir result/score/MNRF-ViewProbe-RawCount/CalIt2/rawcount-s-only-$(date -u +%Y%m%dT%H%M%SZ)-$$ "
+        "--seed 2021 --seq-len 192 --pattern-len 32 --hidden-dim 32 --batch-size 128 "
+        "--encoding-batch-size 128 --stage1-epochs 50 --stage2-epochs 30 --patience 5 "
+        "--learning-rate 0.001 --weight-decay 0.0001 --feature-std-floor 0.05 "
+        "--score-mad-floor 0.001 --calibration-quantile 0.995 --device cpu --cpu-threads 1 "
+        "--cache-chunk-size 256 --view-dim 8 --evolution-dim 8 --pattern-dim 8 --relation-dim 8 "
+        "--gmm-components 4 --gmm-covariance-type full --gmm-reg-covar 0.001 --gmm-n-init 1 "
+        "--gmm-max-iter 100 --gmm-fit-max-windows 20000 --train-noise-std 0.01 "
+        "--noise-seed 20261013 --log-every-steps 100 --log-every-seconds 30 "
+        "--gmm-log-every-iters 10 --artifact-policy full "
+        "--startup-script scripts/multivariate_detection/detect_score/CalIt2_script/MNRFRawCountSOnly.sh"
+    )
+    verified = [r for r in candidates if r["status"] == "verified"]
+    return {
+        "directory": str(report_root),
+        "searched_roots": [str(root) for root in roots],
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "verified_candidates": [r["path"] for r in verified],
+        "s_only_present": bool(verified),
+        "s_only_note": ("A same-source completed S-only result was verified."
+                         if verified else
+                         "No same-source completed RawCount S-only output was verified; the available report is RawCount Full plus CATCH/IF/PCA."),
+        "full_and_baselines_complete": metrics.is_file(),
+        "metrics": json.loads(metrics.read_text()) if metrics.is_file() else None,
+        "command": command,
+        "completion_criterion": "run_status=complete, selected_views=['S'], fixed RawCount Full source binding, native validation passed, and S-only artifacts/metrics present",
+    }
 
 
 def build_readme(results, output, rawcount):
     summary = results["summary"]
+    reference_metrics = results["reference_metrics"]
     attribution = results["attribution"]
     variable_metrics = results["variable_metrics"]
     lines = ["# Frozen E/R decoder result analysis", "",
@@ -526,23 +683,39 @@ def build_readme(results, output, rawcount):
         rnll = next(r for r in rows if r["view"] == "R" and r["score"] == "nll")
         er = next(r for r in rows if r["view"] == "E" and r["score"] == "squared_residual")
         lines.append(f"- **{task}:** R residual AP/AUC={rres['aggregate_average_precision']}/{rres['aggregate_auc_roc']}; R NLL AP/AUC={rnll['aggregate_average_precision']}/{rnll['aggregate_auc_roc']}; E residual AP/AUC={er['aggregate_average_precision']}/{er['aggregate_auc_roc']}. These are diagnostic rankings, not claims of a new detector.")
+    cc = _creditcard_note(summary, variable_metrics, attribution)
     lines += ["", "## Creditcard residual/NLL reversal", "",
-               f"For R decoder, squared-residual AP is **{_creditcard_note(summary, variable_metrics, attribution)['residual_ap']:.6f}** while NLL AP is **{_creditcard_note(summary, variable_metrics, attribution)['nll_ap']:.6f}**. The residual score uses the decoder mean error; NLL additionally standardizes the per-variable Gaussian likelihood and therefore can change both variable ranking and the final max aggregation. The top anomaly-point max contributors are recorded in `max_attribution.csv`. Pointwise sigma is not saved, so this report cannot claim that a particular anomaly was hidden by high predicted variance; a minimal follow-up would save per-point sigma, decoder mean and target for a fixed deterministic sample.", ""]
+               f"For R decoder, squared-residual AP is **{cc['residual_ap']:.6f}** while NLL AP is **{cc['nll_ap']:.6f}**. The ranking deterioration is already present at the single-variable auxiliary-NLL layer; a positive median/MAD affine standardization cannot change a variable's ordering. Cross-variable scaling and the final max aggregation can further change the overall result. The top anomaly-point max contributors are recorded in `max_attribution.csv`. Pointwise sigma is not saved, so this report does not claim that particular anomalies were hidden by high predicted variance; a fixed-sample export of per-point mu/sigma would be required.", ""]
+    lines += ["## E-branch reference comparison", "",
+              "E residual scores are compared separately with persistence and the training-target-mean reference in `reference_metrics.csv`. GECCO, the historical modulo-10 CalIt2 source, and Creditcard have E residual AP above persistence but not above the target-mean reference; this is not evidence that historical conditions add detection information. Small differences are reported as such. A stronger conditional increment requires consistent improvement over both simple references under the same coordinates and threshold protocol.", ""]
+    def reference_ap(task, view, variant):
+        row = next(r for r in reference_metrics if r["dataset"] == task and r["view"] == view
+                   and r["variant"] == variant and r["score"] == "squared_residual")
+        return row.get("average_precision")
+    lines += ["| Dataset | E decoder AP | E persistence AP | E target-mean AP | E latent-mean AP | R decoder AP | R persistence AP | R target-mean AP | R latent-mean AP |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for task in TASKS:
+        lines.append("| {} | {} | {} | {} | {} | {} | {} | {} |".format(
+            task, reference_ap(task, "E", "decoder"), reference_ap(task, "E", "persistence"),
+            reference_ap(task, "E", "train_target_mean"), reference_ap(task, "E", "decoder_latent_train_mean"),
+            reference_ap(task, "R", "decoder"), reference_ap(task, "R", "persistence"),
+            reference_ap(task, "R", "train_target_mean"), reference_ap(task, "R", "decoder_latent_train_mean")))
+    lines.append("")
     lines += ["## MSL target and condition fields", "",
               "MSL is analyzed as 55 input fields and 27 source sequences are not reconstructed by this diagnostic into separate retrained models. `col_0` is reported separately in `variable_metrics.csv`; `col_37`, `col_51` and `col_25` are retained as ordinary fields in the full attribution table. A large residual contribution does not by itself mean a field controls the max score; use `max_attribution.csv` for the latter.", ""]
     lines += ["## NYC event profile", "",
-              "NYC retains the source event boundaries, global coordinates and unscored gaps. `nyc_event_profile.csv` reports target-variable absolute residual/NLL near event starts, interiors and ends. The passenger/calendar role interpretation is a diagnostic annotation, not evidence that calendar fields are causal or that lower prediction error proves anomaly information.", ""]
+              "NYC retains the source event boundaries, global coordinates and unscored gaps. `nyc_event_profile.csv` reports the original target-variable rows. `nyc_event_neighborhood.csv` adds a pre-fixed k=8 summary for event_first8, event_last8, remaining event_interior, and same-segment consecutive normal_before8/normal_after8 points when available. This source has one scored anomaly event, so the neighborhoods describe that event only; they do not establish a general persistence mechanism. Passenger/calendar role interpretation remains a diagnostic annotation, not evidence that calendar fields are causal or that lower prediction error proves anomaly information.", ""]
     lines += ["## Task-specific interpretation", "",
               "- PSM and GECCO show R squared-residual ranking above their simple static/persistence references in the saved metrics, but fixed-threshold alarms and event coverage remain separate outcomes.",
               "- Genesis R residual improves ranking over persistence and target-mean references while its fixed threshold still has substantial false positives; ranking gain is not alarm calibration gain.",
               "- CalIt2 is the historical modulo-10 representation. The separate RawCount report exists and shows a RawCount Full rerun plus CATCH/IF/PCA, but no RawCount S-only result; it must not be substituted into the old source comparison.",
               "- CICIDS has no verified entity/session identity in the frozen input; row-adjacent event interpretations remain limited.", ""]
     lines += ["## RawCount CalIt2 status", "",
-              f"RawCount output: `{rawcount['directory']}`. Full and CATCH/IF/PCA metrics are present; S-only is absent. The manual S-only command is recorded in `analysis_config.json` and should use the RawCount source only if a new isolated head run is authorized.", ""]
+              f"RawCount output: `{rawcount['directory']}`. Search roots were `{', '.join(rawcount['searched_roots'])}`; {rawcount['candidate_count']} manifest candidate(s) were inspected and {len(rawcount['verified_candidates'])} same-source S-only candidate(s) passed the binding/status checks. {rawcount['s_only_note']}",
+              "The report contains RawCount Full plus CATCH/IF/PCA metrics, but this read-only analysis did not execute an S-only fit. The accurate future entry is `run_mnrf_view_probe.py --mode select_gmm --views S` with the fixed RawCount `--source-dir`, explicit `--data-root`, CPU and a unique output directory; the complete command is recorded in `analysis_config.json`.", ""]
     lines += ["## Next P diagnostic", "",
-              "Use a fixed 8-step masking rule on raw input windows, mask only the P target positions before the encoder, retain the original E/R/S/R roles, and re-encode the masked input. Compare a P-masked encoder against persistence and a fixed train-mean recovery using the same validation median/MAD and calibration q=0.995. Use the source test coordinates, segment IDs and no-cross-boundary windows; budget at most 256 train, 128 validation, 128 calibration and 512 test diagnostic samples initially. Existing source validation, axis binding, chunked cache writing and evaluation helpers can be reused, but the current full P cache cannot stand in for the masked representation. This round did not run it.", ""]
+              "Use the training-time 32-step local window with a continuous 8-step P mask, the saved valid flag, relative-position input and the original auxiliary decoder. Apply the identical deterministic mask rule to every split without using test labels. Persistence must read the unmasked history only, never the held-out masked truth. Map each recovered position back to its original global coordinate and segment; aggregate overlaps by a fixed rule (for example mean over valid reconstructions), and retain only common valid points. Treat 256/128/128/512 as a process-validation budget, not a formal performance sample. With small calibration sets, q=.995 is unstable; do not publish a comparative claim without enough positives and a predeclared budget. Existing axis validation and chunked I/O can be reused, but the full P cache cannot stand in for a masked representation. This round did not run it.", ""]
     lines += ["## Output files", "",
-              "`summary.csv` contains aggregate E/R diagnostic rows; `reference_metrics.csv` preserves the complete 13-row distinction between Full GMM, decoder, latent-mean intervention, persistence and train-target-mean references; `full_reference.csv` records the source Full GMM NLL, calibration arrays, axes and binding hashes; `variable_distributions.csv` contains normal/anomaly per-variable residual/NLL statistics; `variable_metrics.csv` contains per-variable and aggregate ranking metrics; `max_attribution.csv` contains tie-split max attribution for normal/anomaly/TP/FP/FN; `scale_diagnostics.csv` records MAD floors; `nyc_event_profile.csv` contains bounded event phase rows; `source_bindings.csv` and `analysis_config.json` record source identities, layouts, protocol fields and RawCount status.", ""]
+              "`summary.csv` contains aggregate E/R diagnostic rows; `reference_metrics.csv` preserves the complete 13-row distinction between Full GMM, decoder, latent-mean intervention, persistence and train-target-mean references; `full_reference.csv` records the source Full GMM NLL, calibration arrays, axes and binding hashes; `variable_distributions.csv` contains normal/anomaly per-variable residual/NLL statistics; `variable_metrics.csv` contains corrected per-variable and aggregate ranking metrics; `max_attribution.csv` contains tie-split max attribution for normal/anomaly/TP/FP/FN; `scale_diagnostics.csv` records MAD floors; `nyc_event_profile.csv` and `nyc_event_neighborhood.csv` contain bounded event rows and fixed-k summaries; `source_bindings.csv` and `analysis_config.json` record source identities, layouts, protocol fields and RawCount status.", ""]
     return "\n".join(lines) + "\n"
 
 
@@ -555,10 +728,10 @@ def main(argv=None):
         raise SystemExit(f"refusing to overwrite non-empty output: {args.output_dir}")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     results = {"summary": [], "reference_metrics": [], "distribution": [], "variable_metrics": [], "attribution": [],
-               "scale": [], "nyc_events": [], "full_reference": [], "source": {}}
+               "scale": [], "nyc_events": [], "nyc_neighborhood": [], "full_reference": [], "source": {}}
     for task in TASKS:
         result = analyze_task(task, args.diagnostic_root)
-        for key in ("summary", "reference_metrics", "distribution", "variable_metrics", "attribution", "scale", "nyc_events"):
+        for key in ("summary", "reference_metrics", "distribution", "variable_metrics", "attribution", "scale", "nyc_events", "nyc_neighborhood"):
             results[key].extend(result[key])
         results["full_reference"].append(result["full_reference"])
         results["source"][task] = result["source"]
@@ -570,6 +743,7 @@ def main(argv=None):
     _write_csv(args.output_dir / "max_attribution.csv", results["attribution"])
     _write_csv(args.output_dir / "scale_diagnostics.csv", results["scale"])
     _write_csv(args.output_dir / "nyc_event_profile.csv", results["nyc_events"])
+    _write_csv(args.output_dir / "nyc_event_neighborhood.csv", results["nyc_neighborhood"])
     _write_csv(args.output_dir / "full_reference.csv", results["full_reference"])
     source_rows = []
     for task, binding in results["source"].items():
@@ -591,6 +765,7 @@ def main(argv=None):
                       "reference_metric_rows": len(results["reference_metrics"]),
                       "variable_metric_rows": len(results["variable_metrics"]),
                       "attribution_rows": len(results["attribution"]), "nyc_event_rows": len(results["nyc_events"]),
+                      "nyc_neighborhood_rows": len(results["nyc_neighborhood"]),
                       "full_reference_rows": len(results["full_reference"]),
                       "model_execution": False}, ensure_ascii=False, indent=2))
 
