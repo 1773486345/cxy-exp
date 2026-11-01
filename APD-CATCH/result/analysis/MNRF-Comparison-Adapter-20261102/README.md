@@ -7,7 +7,7 @@ result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/
 result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/
 ```
 
-`mnrf_evaluation_plan.json` 固化了八个注册 Full 源、有效端点、冷启动前缀、段边界检查和需要的训练侧文件。当前所有源均只允许在已保存有效端点内使用同一冻结 segment 的历史；没有显式实体边界字段的任务不会被解释为已经证明了跨行 session 连续性。冷启动前缀没有保存特征，计划状态为 `ready-frozen-forward`：只有后续明确执行入口，按同一 segment 真实前向生成后才可补分，当前没有补造分数。所有八组均无尾部未评分点。
+`mnrf_evaluation_plan.json` 固化了八个注册 Full 源、有效端点、冷启动前缀、段边界检查和需要的训练侧文件。已保存端点只在其自身冻结 segment 内使用历史；没有显式实体边界字段的任务不会被解释为已经证明了跨行 session 连续性。MSL 明确标为 `blocked-known-cross-channel`：不能借 T-9 的训练尾部给 C-1 的测试开头补历史。Creditcard/CICIDS 标为 `blocked-entity-session-unproven`，因为当前证据没有权威实体/session 边界。PSM、GECCO、Genesis、NYC、CalIt2 的计划只在全局坐标连续、时间单调且窗口不跨冻结 segment 时标为 `ready-frozen-forward`，这仍是窗口级证据，不是跨实体连续性的证明。冷启动前缀没有保存特征，计划状态只是后续人工前向的准入结果，当前没有补造分数。所有八组均无尾部未评分点。
 
 ## 入口
 
@@ -54,13 +54,13 @@ python scripts/prepare_mnrf_comparison_adapter.py \
 | 数据集 | source Run ID | seq_len | 前缀规则 |
 |---|---|---:|---|
 | PSM | `full_gmm-full-20261024T115119Z-3976714` | 192 | 同 frozen segment；191 点待补算 |
-| MSL | `full_gmm-full-20261021T112147Z-2470335` | 192 | 同 frozen segment；191 点待补算 |
+| MSL | `full_gmm-full-20261021T112147Z-2470335` | 192 | `blocked-known-cross-channel`；191 点禁止借 T-9 历史补算 |
 | GECCO | `full_gmm-full-20261020T204951Z-1642355` | 96 | 同 frozen segment；95 点待补算 |
 | Genesis | `full_gmm-full-20261020T205005Z-1645522` | 192 | 同 frozen segment；191 点待补算 |
 | NYC | `full_gmm-full-20261020T211341Z-1931786` | 192 | 同 frozen segment；191 点待补算 |
 | CalIt2 | `full_gmm-full-20261021T112212Z-2474004` | 192 | 同 frozen segment；191 点待补算 |
-| Creditcard | `full_gmm-full-20261024T115131Z-3977864` | 192 | 同 frozen segment；191 点待补算 |
-| CICIDS | `full_gmm-full-20261024T115157Z-3980319` | 192 | 同 frozen segment；191 点待补算 |
+| Creditcard | `full_gmm-full-20261024T115131Z-3977864` | 192 | `blocked-entity-session-unproven`；191 点待边界证据 |
+| CICIDS | `full_gmm-full-20261024T115157Z-3980319` | 192 | `blocked-entity-session-unproven`；191 点待边界证据 |
 
 以下是后续经人工授权后才执行的冻结评分命令。它们只加载指定 Full 的已保存 GMM、标准化统计、固定噪声和 test feature cache；不拟合、不重新校准，并输出到新目录。当前本轮未执行：
 
@@ -95,5 +95,4 @@ python scripts/prepare_mnrf_comparison_adapter.py --mode score-cold-start \
   --output-dir result/score/MNRF-Comparison-Adapter/PSM/cold-start-<RUN_ID>
 ```
 
-其余任务只替换 `--task` 与计划中对应固定源路径。没有显式实体列的任务只能按
-已保存 segment 身份放行，不能解释为已经证明跨 session 连续；越过边界的窗口会被拒绝。
+其余任务只替换 `--task` 与计划中对应固定源路径；MSL、Creditcard、CICIDS 当前会在准入阶段明确拒绝，而不是产生伪造分数。没有显式实体列的任务只能按已保存 segment 身份放行，不能解释为已经证明跨 session 连续；越过边界的窗口会被拒绝。冷启动输出采用原生结构：先填 `aligned_scores/aligned_predictions/aligned_actual/valid_mask` 全测试轴，再由 mask 派生紧凑 `scores/predictions/time_indices/time_values_ns/local_indices/actual`，因此不会覆盖紧凑数组前部冒充前缀。评价覆盖率分母始终是官方完整测试点数。NYC/CalIt2 的 PCA 与 PCA-residual 产物是不同只读产品，本适配器不会互相替换或重跑它们。

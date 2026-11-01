@@ -247,6 +247,23 @@ def _source_plan(task: str, source: Path):
         if not safe:
             prefix_safe, prefix_reason = False, reason
             break
+    # A frozen segment id is not, by itself, proof that the row immediately
+    # before a test sequence belongs to the same physical stream.  Keep that
+    # distinction explicit in the plan so a later cold-start command cannot
+    # silently borrow history across known/unknown channel boundaries.
+    continuity_evidence = {
+        "MSL": ("blocked-known-cross-channel",
+                "T-9 training tail and C-1 test head are different telemetry channels; "
+                "the shared concatenated segment id is not permission to cross the boundary"),
+        "Creditcard": ("blocked-entity-session-unproven",
+                       "no authoritative entity/session boundary is recorded for the row adjacency"),
+        "CICIDS": ("blocked-entity-session-unproven",
+                   "no authoritative entity/session boundary is recorded for the row adjacency"),
+    }
+    continuity_status, continuity_reason = continuity_evidence.get(
+        task, ("within-segment-monotonic-only",
+               "global rows, timestamps and frozen segment ids are continuous; no additional entity column is recorded"))
+    cold_status = continuity_status if continuity_status.startswith("blocked-") else ("ready-frozen-forward" if prefix_safe else "blocked-boundary")
     return {
         "dataset": task, "source_path": str(source),
         "source_run_id": source.name, "source_manifest_sha256": _sha256(manifest_path),
@@ -262,16 +279,19 @@ def _source_plan(task: str, source: Path):
                            "entity_identity_evidence": ("explicit-boundary-columns"
                                                          if identity.get("boundary_columns")
                                                          else "no-explicit-entity-columns-recorded")},
+        "continuity_evidence": {"status": continuity_status, "reason": continuity_reason,
+                                 "prefix_window_check": {"passed": prefix_safe, "reason": prefix_reason}},
         "information_policy": {"window": f"[{seq_len}-1 past rows, current endpoint]",
                                 "future_rows": 0,
                                 "missing_history_mask_supported": False,
                                 "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
                                 "source_temporal_rule": identity.get("temporal_rule", {}),
                                 "permission": "only rows within the frozen source segment and saved endpoint cache"},
-        "cold_start_extension": {"status": "ready-frozen-forward" if prefix_safe else "blocked-boundary",
+        "cold_start_extension": {"status": cold_status,
                                   "coordinates": prefix_coordinates.tolist(),
-                                  "reason": ("source has no saved prefix features; explicit frozen-encoder forward is required"
-                                             if prefix_safe else prefix_reason)},
+                                  "reason": (continuity_reason if cold_status.startswith("blocked-") else
+                                              ("source has no saved prefix features; explicit frozen-encoder forward is required"
+                                               if prefix_safe else prefix_reason))},
         "tail_extension": {"status": "not-needed" if last_valid == len(test_global) - 1 else "blocked",
                             "coordinates": list(range(last_valid + 1, len(test_global))) if last_valid is not None else []},
         "required_training_side_artifacts": [
@@ -369,8 +389,10 @@ def evaluate(bundle: Path, source: Path, output: Path):
     adapter_manifest = _json(manifest_path)
     source_manifest = _json(source_manifest_path)
     source_status = _json(status_path)
-    if adapter_manifest.get("schema") != "mnrf-comparison-adapter-score-v1":
+    schema = adapter_manifest.get("schema")
+    if schema not in {"mnrf-comparison-adapter-score-v1", "mnrf-comparison-adapter-cold-start-v1"}:
         raise ValueError("unsupported adapter manifest schema")
+    cold_start = schema == "mnrf-comparison-adapter-cold-start-v1"
     if adapter_manifest.get("source_path") != str(source.resolve()):
         raise ValueError("adapter source_path is not the requested source")
     if adapter_manifest.get("source_run_id") != source.name:
@@ -406,25 +428,16 @@ def evaluate(bundle: Path, source: Path, output: Path):
     required_fields = {"scores", "predictions", "time_indices", "threshold", "valid_mask"}
     if not required_fields.issubset(source_payload) or not required_fields.issubset(bundle_payload):
         raise ValueError("source and adapter score artifacts lack required binding fields")
-    source_indices = _strict_indices(source_payload["time_indices"], "source time_indices")
-    bundle_indices = _strict_indices(bundle_payload["time_indices"], "adapter time_indices")
-    if not np.array_equal(source_indices, bundle_indices):
-        raise ValueError("adapter global score coordinates differ from source")
-    for field in ("scores", "predictions", "valid_mask", "threshold"):
-        if field == "threshold":
-            if not np.isclose(float(source_payload[field]), float(bundle_payload[field]), rtol=0, atol=1e-12):
-                raise ValueError("adapter threshold differs from source")
-        elif not np.array_equal(source_payload[field], bundle_payload[field], equal_nan=(field == "scores")):
-            raise ValueError(f"adapter {field} differs from source")
-    for field in ("time_values_ns", "actual", "local_indices", "aligned_scores", "aligned_predictions"):
-        if field in source_payload:
-            if field not in bundle_payload:
-                raise ValueError(f"adapter is missing source-bound field: {field}")
-            if not np.array_equal(source_payload[field], bundle_payload[field], equal_nan=(field == "aligned_scores")):
-                raise ValueError(f"adapter {field} differs from source")
+    source_mask = np.asarray(source_payload["valid_mask"], dtype=bool)
+    bundle_mask = np.asarray(bundle_payload["valid_mask"], dtype=bool)
+    if source_mask.ndim != 1 or bundle_mask.ndim != 1 or len(source_mask) != len(bundle_mask):
+        raise ValueError("source and adapter valid masks have incompatible full-axis lengths")
+    if not cold_start and not np.array_equal(source_mask, bundle_mask):
+        raise ValueError("adapter valid mask differs from source")
+    if not cold_start and not np.isclose(float(source_payload["threshold"]), float(bundle_payload["threshold"]), rtol=0, atol=1e-12):
+        raise ValueError("adapter threshold differs from source")
     if adapter_manifest.get("output_aligned_scores_sha256") != _sha256(bundle / "results" / "aligned_scores.npz"):
         raise ValueError("adapter output score hash is stale")
-    source_mask = np.asarray(source_payload["valid_mask"], dtype=bool)
     declared_mask_hash = adapter_manifest.get("source_valid_mask_sha256")
     actual_mask_hash = hashlib.sha256(np.ascontiguousarray(source_mask).tobytes()).hexdigest()
     if declared_mask_hash != actual_mask_hash:
@@ -437,53 +450,86 @@ def evaluate(bundle: Path, source: Path, output: Path):
         test_global = _strict_indices(inputs["test_global_indices"], "source test_global_indices")
         test_times = np.asarray(inputs["test_time_values_ns"])
         test_segment_ids = np.asarray(inputs["test_segment_ids"]) if "test_segment_ids" in inputs.files else None
-    if "local_indices" in source_payload:
-        local_indices = np.asarray(source_payload["local_indices"])
-    else:
-        local_indices = np.searchsorted(test_global, source_indices)
-    local_indices = _strict_indices(local_indices, "source local_indices") if len(local_indices) else local_indices.astype(np.int64)
-    if len(local_indices) != len(source_indices) or np.any(local_indices >= len(test_global)):
-        raise ValueError("source local_indices are not a valid test-axis mapping")
-    if not np.array_equal(source_indices, test_global[local_indices]):
-        raise ValueError("source global coordinates do not map to analysis test axis")
-    if "time_values_ns" not in source_payload or not np.array_equal(source_payload["time_values_ns"], test_times[local_indices]):
-        raise ValueError("source time coordinates do not map to analysis test axis")
-    if "actual" in source_payload and not np.array_equal(source_payload["actual"], labels[local_indices]):
-        raise ValueError("source labels do not map to analysis test axis")
     if labels.ndim != 1 or len(labels) != len(test_global) or len(test_times) != len(test_global):
         raise ValueError("source test axis fields have incompatible lengths")
-    mask = np.asarray(bundle_payload["valid_mask"], dtype=bool)
-    scores = np.asarray(bundle_payload["scores"])
-    predictions = np.asarray(bundle_payload["predictions"])
-    threshold = float(np.asarray(bundle_payload["threshold"]))
-    aligned_scores = np.asarray(bundle_payload.get("aligned_scores", scores))
-    aligned_predictions = np.asarray(bundle_payload.get("aligned_predictions", predictions))
-    if len(aligned_scores) != len(mask) or len(aligned_predictions) != len(mask):
-        raise ValueError("aligned score arrays and valid mask have incompatible lengths")
-    if np.any(~mask & np.isfinite(aligned_scores)) or np.any(mask & ~np.isfinite(aligned_scores)):
-        raise ValueError("valid-mask and finite aligned score states disagree")
-    if len(predictions) == len(mask) and len(scores) == len(mask):
-        if not np.array_equal(aligned_predictions[mask], (aligned_scores[mask] > threshold).astype(aligned_predictions.dtype)):
-            raise ValueError("adapter aligned predictions do not implement strict score > threshold")
-        scores = scores[mask]
-        predictions = predictions[mask]
-    elif len(predictions) == len(scores):
-        if not np.array_equal(predictions, (scores > threshold).astype(predictions.dtype)):
-            raise ValueError("adapter predictions do not implement strict score > threshold")
-        if not np.array_equal(aligned_predictions[mask], predictions.astype(aligned_predictions.dtype)):
-            raise ValueError("aligned and valid-endpoint predictions differ")
-    elif len(predictions) == len(mask):
-        if not np.array_equal(aligned_predictions[mask], (aligned_scores[mask] > threshold).astype(aligned_predictions.dtype)):
-            raise ValueError("adapter aligned predictions do not implement strict score > threshold")
-        scores = scores[mask]
-        predictions = predictions[mask]
+    def _compact(payload, name):
+        mask = np.asarray(payload["valid_mask"], dtype=bool)
+        aligned_scores = np.asarray(payload.get("aligned_scores", payload["scores"]))
+        aligned_predictions = np.asarray(payload.get("aligned_predictions", payload["predictions"]))
+        if len(aligned_scores) != len(mask) or len(aligned_predictions) != len(mask):
+            raise ValueError(f"{name}: aligned arrays and valid mask have incompatible lengths")
+        if np.any(~mask & np.isfinite(aligned_scores)) or np.any(mask & ~np.isfinite(aligned_scores)):
+            raise ValueError(f"{name}: invalid finite aligned score state")
+        scores = np.asarray(payload["scores"])
+        predictions = np.asarray(payload["predictions"])
+        if len(scores) == len(mask):
+            if not np.array_equal(scores[mask], aligned_scores[mask], equal_nan=True):
+                raise ValueError(f"{name}: full scores do not map to aligned valid scores")
+            scores = scores[mask]
+        elif len(scores) != int(mask.sum()):
+            raise ValueError(f"{name}: scores are neither full-axis nor compact")
+        if len(predictions) == len(mask):
+            if not np.array_equal(predictions[mask], aligned_predictions[mask]):
+                raise ValueError(f"{name}: full predictions do not map to aligned valid predictions")
+            predictions = predictions[mask]
+        elif len(predictions) != int(mask.sum()):
+            raise ValueError(f"{name}: predictions are neither full-axis nor compact")
+        threshold = float(np.asarray(payload["threshold"]))
+        if not np.isfinite(threshold) or not np.array_equal(predictions.astype(np.int8), (scores > threshold).astype(np.int8)):
+            raise ValueError(f"{name}: predictions do not implement strict score > threshold")
+        local = np.asarray(payload.get("local_indices", np.flatnonzero(mask)))
+        local = _strict_indices(local, f"{name} local_indices")
+        if len(local) != len(scores) or not np.array_equal(local, np.flatnonzero(mask)):
+            raise ValueError(f"{name}: compact local indices do not match valid mask")
+        global_values = _strict_indices(payload.get("time_indices", test_global[local]), f"{name} time_indices")
+        if not np.array_equal(global_values, test_global[local]):
+            raise ValueError(f"{name}: global coordinates do not map to test axis")
+        times = np.asarray(payload.get("time_values_ns", test_times[local]))
+        actual = np.asarray(payload.get("actual", labels[local]))
+        if not np.array_equal(times, test_times[local]) or not np.array_equal(actual, labels[local]):
+            raise ValueError(f"{name}: compact time/label fields do not map to test axis")
+        return {"mask": mask, "scores": scores, "predictions": predictions, "local": local,
+                "global": global_values, "times": times, "actual": actual,
+                "aligned_scores": aligned_scores, "aligned_predictions": aligned_predictions,
+                "threshold": threshold}
+
+    source_compact = _compact(source_payload, "source")
+    bundle_compact = _compact(bundle_payload, "adapter")
+    if not np.isclose(source_compact["threshold"], bundle_compact["threshold"], rtol=0, atol=1e-12):
+        raise ValueError("adapter threshold differs from source")
+    if cold_start:
+        prefix = _strict_indices(adapter_manifest.get("prefix_local_indices", []), "cold-start prefix_local_indices")
+        if len(prefix) == 0 or np.any(prefix >= len(labels)):
+            raise ValueError("cold-start prefix is empty or outside the test axis")
+        expected_mask = source_compact["mask"].copy()
+        if np.any(expected_mask[prefix]) or not np.array_equal(prefix, np.flatnonzero(~expected_mask)[:len(prefix)]):
+            raise ValueError("cold-start prefix is not exactly the declared missing prefix")
+        expected_mask[prefix] = True
+        if not np.array_equal(bundle_compact["mask"], expected_mask):
+            raise ValueError("cold-start added points are not exactly the declared prefix")
+        old_positions = np.searchsorted(bundle_compact["local"], source_compact["local"])
+        if (len(old_positions) != len(source_compact["local"]) or
+                not np.array_equal(bundle_compact["local"][old_positions], source_compact["local"])):
+            raise ValueError("cold-start output dropped or reordered an old valid point")
+        for field in ("scores", "predictions", "global", "times", "actual"):
+            if not np.array_equal(bundle_compact[field][old_positions], source_compact[field], equal_nan=True):
+                raise ValueError(f"cold-start changed an old valid {field} value")
+        if not np.array_equal(bundle_compact["global"], test_global[bundle_compact["local"]]):
+            raise ValueError("cold-start global coordinate mapping is inconsistent")
     else:
-        raise ValueError("adapter predictions length is not bound to valid or full axis")
+        for field in ("scores", "predictions", "local", "global", "times", "actual"):
+            if not np.array_equal(source_compact[field], bundle_compact[field], equal_nan=True):
+                raise ValueError(f"adapter {field} differs from source")
+    mask = bundle_compact["mask"]
+    scores = bundle_compact["scores"]
+    predictions = bundle_compact["predictions"]
+    local_indices = bundle_compact["local"]
+    threshold = bundle_compact["threshold"]
     with np.load(calibration_path, allow_pickle=False) as calibration:
         calibration_threshold = float(np.asarray(calibration["threshold"]))
     if not np.isclose(threshold, calibration_threshold, rtol=0, atol=1e-12):
         raise ValueError("adapter threshold differs from frozen calibration threshold")
-    y = labels[local_indices][mask] if len(local_indices) == len(mask) else labels[local_indices]
+    y = labels[local_indices]
     s = scores
     result = {"valid_points": int(len(scores)), "total_test_points": int(len(labels)),
               "coverage": float(mask.sum() / max(len(labels), 1)), "threshold": threshold,
@@ -493,7 +539,9 @@ def evaluate(bundle: Path, source: Path, output: Path):
               "recall": float(recall_score(y, predictions, zero_division=0)) if len(y) else None,
               "f1": float(f1_score(y, predictions, zero_division=0)) if len(y) else None,
               "alarm_points": int(predictions.sum()),
-              "invalid_points": int((~mask).sum()), "protocol": "MNRF-valid-endpoint-q995",
+              "invalid_points": int((~mask).sum()), "new_valid_points": int(mask.sum() - source_mask.sum()) if cold_start else 0,
+              "old_valid_points": int(source_mask.sum()),
+              "protocol": "MNRF-cold-start-q995" if cold_start else "MNRF-valid-endpoint-q995",
               "source_run_id": source.name, "source_manifest_sha256": _sha256(source_manifest_path),
               "source_time_binding_checked": True, "source_label_binding_checked": True,
               "source_segment_binding_checked": test_segment_ids is not None}
@@ -641,6 +689,92 @@ def common_compare(output_dir: Path):
     return {"rows": len(rows), "datasets": len(TASKS), "path": str(csv_path), "json": str(json_path)}
 
 
+def _load_npy_memmap(path: Path):
+    """Load a read-only .npy array without treating the memmap as a context manager."""
+    values = np.load(path, mmap_mode="r", allow_pickle=False)
+    if not isinstance(values, np.ndarray) or values.ndim == 0:
+        raise ValueError(f"expected a readable ndarray at {path}")
+    return values
+
+
+def _assemble_cold_start_payload(old, prefix, prefix_scores, prefix_predictions,
+                                 test_global, test_times, test_labels, threshold):
+    """Fill the full test axis, then derive the compact native representation."""
+    old_mask = np.asarray(old["valid_mask"], dtype=bool)
+    old_aligned_scores = np.asarray(old.get("aligned_scores", old["scores"])).copy()
+    old_aligned_predictions = np.asarray(old.get("aligned_predictions", old["predictions"])).copy()
+    if len(old_mask) != len(test_global) or len(old_aligned_scores) != len(old_mask):
+        raise ValueError("cold-start source full-axis fields have incompatible lengths")
+    prefix = _strict_indices(prefix, "cold-start prefix_local_indices")
+    if len(prefix) == 0 or np.any(prefix >= len(old_mask)):
+        raise ValueError("cold-start prefix is empty or outside the test axis")
+    if not np.array_equal(prefix, np.flatnonzero(~old_mask)[:len(prefix)]):
+        raise ValueError("cold-start prefix is not exactly the initial invalid range")
+    if len(prefix_scores) != len(prefix) or len(prefix_predictions) != len(prefix):
+        raise ValueError("cold-start prefix score lengths differ")
+    if not np.isfinite(prefix_scores).all():
+        raise ValueError("cold-start prefix scores are non-finite")
+    new_mask = old_mask.copy()
+    new_aligned_scores = old_aligned_scores.copy()
+    new_aligned_predictions = old_aligned_predictions.copy()
+    new_mask[prefix] = True
+    new_aligned_scores[prefix] = np.asarray(prefix_scores)
+    new_aligned_predictions[prefix] = np.asarray(prefix_predictions)
+    if not np.array_equal(new_aligned_predictions[new_mask],
+                          (new_aligned_scores[new_mask] > threshold).astype(new_aligned_predictions.dtype)):
+        raise ValueError("cold-start predictions do not implement strict score > threshold")
+    new_aligned_actual = np.asarray(old.get("aligned_actual", np.full(len(old_mask), -1, dtype=np.int8))).copy()
+    if len(new_aligned_actual) != len(old_mask):
+        raise ValueError("cold-start aligned_actual has wrong length")
+    new_aligned_actual[prefix] = np.asarray(test_labels)[prefix]
+    local = np.flatnonzero(new_mask).astype(np.int64)
+    old_local = np.flatnonzero(old_mask).astype(np.int64)
+    old_scores = np.asarray(old["scores"])
+    old_predictions = np.asarray(old["predictions"])
+    if len(old_scores) == len(old_mask):
+        old_scores = old_scores[old_mask]
+    if len(old_predictions) == len(old_mask):
+        old_predictions = old_predictions[old_mask]
+    if len(old_scores) != len(old_local) or not np.array_equal(old_scores, old_aligned_scores[old_mask], equal_nan=True):
+        raise ValueError("cold-start source compact scores do not map to its aligned scores")
+    if len(old_predictions) != len(old_local) or not np.array_equal(old_predictions, old_aligned_predictions[old_mask]):
+        raise ValueError("cold-start source compact predictions do not map to its aligned predictions")
+    compact_scores = new_aligned_scores[new_mask].copy()
+    compact_predictions = new_aligned_predictions[new_mask].copy()
+    compact_actual = new_aligned_actual[new_mask].copy()
+    payload = {name: np.asarray(value).copy() for name, value in old.items()}
+    payload.update({"scores": compact_scores, "predictions": compact_predictions,
+                    "time_indices": np.asarray(test_global)[local],
+                    "time_values_ns": np.asarray(test_times)[local],
+                    "local_indices": local, "actual": compact_actual,
+                    "valid_mask": new_mask, "aligned_scores": new_aligned_scores,
+                    "aligned_predictions": new_aligned_predictions,
+                    "aligned_actual": new_aligned_actual,
+                    "threshold": np.asarray(threshold)})
+    return payload, old_local
+
+
+def _validate_prefix_windows(prefix, test_global, all_global, all_segments, all_times, seq_len):
+    """Return global endpoints after proving every prefix window is legal."""
+    positions = []
+    for local in _strict_indices(prefix, "cold-start prefix_local_indices"):
+        if local >= len(test_global):
+            raise ValueError(f"prefix endpoint {int(local)} is outside the test axis")
+        endpoint = int(test_global[local])
+        start = endpoint - int(seq_len) + 1
+        if start < 0 or endpoint >= len(all_global):
+            raise ValueError(f"prefix endpoint {int(local)} has no complete history window")
+        if not np.array_equal(all_global[start:endpoint + 1], np.arange(all_global[start], endpoint + 1, dtype=np.int64)):
+            raise ValueError(f"prefix endpoint {int(local)} crosses a global coordinate gap")
+        if np.any(all_segments[start:endpoint + 1] != all_segments[endpoint]):
+            raise ValueError(f"prefix endpoint {int(local)} crosses a known cross-channel/segment boundary")
+        differences = np.diff(all_times[start:endpoint + 1])
+        if len(differences) and (not np.isfinite(differences).all() or np.any(differences <= 0)):
+            raise ValueError(f"prefix endpoint {int(local)} has invalid time continuity")
+        positions.append(endpoint)
+    return positions
+
+
 def score_cold_start(task: str, source: Path, output: Path):
     """Generate only the missing prefix with the frozen encoder and GMM.
 
@@ -661,32 +795,23 @@ def score_cold_start(task: str, source: Path, output: Path):
     with np.load(source / "analysis_inputs.npz", allow_pickle=False) as inputs:
         test_global = _strict_indices(inputs["test_global_indices"], f"{task} test_global_indices")
         test_segments = np.asarray(inputs["test_segment_ids"])
+        test_times = np.asarray(inputs["test_time_values_ns"])
+        test_labels = np.asarray(inputs["test_labels"])
         all_global = _strict_indices(inputs["all_global_indices"], f"{task} all_global_indices")
         all_segments = np.asarray(inputs["all_segment_ids"])
         all_times = np.asarray(inputs["all_time_values_ns"])
         if len(test_segments) != len(test_global) or not np.array_equal(test_segments, all_segments[int(task_record["official_train_length"]):]):
             raise ValueError(f"{task}: test segment IDs are not the frozen full-axis slice")
-    with np.load(source / "cache/normalized_values.npy", mmap_mode="r", allow_pickle=False) as normalized:
+    normalized = _load_npy_memmap(source / "cache/normalized_values.npy")
+    try:
         if normalized.ndim != 2 or normalized.shape[0] != len(all_global) or normalized.dtype != np.float32:
             raise ValueError(f"{task}: normalized source cache is not a complete float32 row axis")
         prefix = np.asarray(task_record["cold_start_extension"]["coordinates"], dtype=np.int64)
         if len(prefix) == 0:
             raise ValueError(f"{task}: no prefix coordinates require cold-start generation")
         seq_len = int(task_record["seq_len"])
-        positions = []
-        for local in prefix:
-            endpoint = int(test_global[local])
-            start = endpoint - seq_len + 1
-            if start < 0 or endpoint >= len(all_global):
-                raise ValueError(f"{task}: prefix endpoint {int(local)} has no complete history window")
-            if not np.array_equal(all_global[start:endpoint + 1], np.arange(all_global[start], endpoint + 1, dtype=np.int64)):
-                raise ValueError(f"{task}: prefix endpoint {int(local)} crosses a global coordinate gap")
-            if np.any(all_segments[start:endpoint + 1] != all_segments[endpoint]):
-                raise ValueError(f"{task}: prefix endpoint {int(local)} crosses a frozen segment boundary")
-            times = np.diff(all_times[start:endpoint + 1])
-            if len(times) and (not np.isfinite(times).all() or np.any(times <= 0)):
-                raise ValueError(f"{task}: prefix endpoint {int(local)} has invalid time continuity")
-            positions.append(endpoint)
+        positions = _validate_prefix_windows(prefix, test_global, all_global,
+                                              all_segments, all_times, seq_len)
 
         probe = load_probe(source, device="cpu")
         # Reproduce the already-saved endpoint score before combining a prefix.
@@ -735,6 +860,23 @@ def score_cold_start(task: str, source: Path, output: Path):
                 values = trainer.encoder.encode_views(torch.as_tensor(windows, dtype=torch.float32))[
                     "features"].detach().cpu().numpy().astype(np.float32, copy=False)
                 features[begin:begin + len(values)] = values
+        # Re-encode a bounded set of already-saved endpoints with the newly
+        # loaded frozen encoder.  Cached-score agreement alone cannot prove
+        # that this forward path is reproducible.
+        test_cache = _load_npy_memmap(source / "cache/test_features.npy")
+        saved_endpoints = _load_npy_memmap(source / "cache/test_window_end_indices.npy")
+        if len(test_cache) != len(saved_endpoints):
+            raise ValueError(f"{task}: test cache and endpoint arrays differ")
+        check_rows = np.unique(np.linspace(0, len(saved_endpoints) - 1,
+                                           num=min(8, len(saved_endpoints)), dtype=np.int64))
+        with torch.no_grad():
+            check_windows = np.stack([normalized[int(saved_endpoints[i]) - seq_len + 1:int(saved_endpoints[i]) + 1]
+                                      for i in check_rows])
+            check_features = trainer.encoder.encode_views(torch.as_tensor(check_windows, dtype=torch.float32))["features"].detach().cpu().numpy()
+        max_abs = float(np.max(np.abs(check_features - np.asarray(test_cache[check_rows], dtype=np.float32)))) if len(check_rows) else 0.0
+        if not np.allclose(check_features, np.asarray(test_cache[check_rows]), rtol=1e-5, atol=1e-6):
+            raise ValueError(f"{task}: frozen encoder endpoint reproduction failed (max_abs={max_abs})")
+
         # GMM scores need the frozen feature statistics, not the trainer's
         # freshly constructed (unfitted) scaler.
         probe.trainer = None
@@ -744,17 +886,13 @@ def score_cold_start(task: str, source: Path, output: Path):
         threshold = float(probe._probe_stats["threshold"])
         prefix_scores = np.max((nll - center) / scale, axis=1)
         prefix_predictions = (prefix_scores > threshold).astype(np.int64)
-    with np.load(source / "results/aligned_scores.npz", allow_pickle=False) as old:
-        combined = {name: np.asarray(old[name]) for name in old.files}
-    combined_scores = np.asarray(combined["scores"]).copy()
-    combined_predictions = np.asarray(combined["predictions"]).copy()
-    combined_mask = np.asarray(combined["valid_mask"], dtype=bool).copy()
-    combined_scores[prefix] = prefix_scores
-    combined_predictions[prefix] = prefix_predictions
-    combined_mask[prefix] = True
-    combined["scores"] = combined_scores
-    combined["predictions"] = combined_predictions
-    combined["valid_mask"] = combined_mask
+        with np.load(source / "results/aligned_scores.npz", allow_pickle=False) as old:
+            old_payload = {name: np.asarray(old[name]) for name in old.files}
+        combined, old_local = _assemble_cold_start_payload(
+            old_payload, prefix, prefix_scores, prefix_predictions,
+            test_global, test_times, test_labels, threshold)
+    finally:
+        del normalized
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=f"{task}-cold-start-", dir=str(output.parent)))
     try:
@@ -769,6 +907,11 @@ def score_cold_start(task: str, source: Path, output: Path):
                   "checkpoint_sha256": _sha256(checkpoint),
                   "source_aligned_scores_sha256": _sha256(source / "results/aligned_scores.npz"),
                   "source_valid_endpoint_reproduction": True,
+                  "encoder_endpoint_reproduction": {"checked": int(len(check_rows)),
+                                                     "max_abs": max_abs, "rtol": 1e-5, "atol": 1e-6},
+                  "old_valid_local_indices": old_local.tolist(),
+                  "source_valid_mask_sha256": hashlib.sha256(
+                      np.ascontiguousarray(old_payload["valid_mask"], dtype=bool).tobytes()).hexdigest(),
                   "history_policy": "within-frozen-segment-only",
                   "future_rows": 0, "noise_seed": int(probe.config.noise_seed),
                   "gmm_compute_dtype": probe.config.gmm_compute_dtype,
@@ -808,15 +951,19 @@ def synthetic_check():
                  test_global_indices=global_indices,
                  test_time_values_ns=time_values,
                  test_segment_ids=segments)
-        scores = np.array([np.nan, np.nan, 0.1, 0.9, 0.8, 0.2], dtype=np.float32)
+        scores = np.array([0.1, 0.9, 0.8, 0.2], dtype=np.float32)
         mask = np.array([False, False, True, True, True, True], dtype=bool)
-        predictions = np.array([-1, -1, 0, 1, 1, 0], dtype=np.int64)
+        predictions = np.array([0, 1, 1, 0], dtype=np.int64)
+        aligned_scores = np.array([np.nan, np.nan, 0.1, 0.9, 0.8, 0.2], dtype=np.float32)
+        aligned_predictions = np.array([-1, -1, 0, 1, 1, 0], dtype=np.int64)
         source_npz = source / "results" / "aligned_scores.npz"
         (source / "results").mkdir()
         np.savez(source_npz, scores=scores, predictions=predictions,
                  valid_mask=mask, threshold=np.asarray(0.5),
-                 time_indices=global_indices, time_values_ns=time_values,
-                 actual=labels)
+                 time_indices=global_indices[2:], time_values_ns=time_values[2:],
+                 local_indices=global_indices[2:], aligned_scores=aligned_scores,
+                 aligned_predictions=aligned_predictions, aligned_actual=np.array([-1, -1, 0, 1, 1, 0], dtype=np.int8),
+                 actual=labels[2:])
         shutil.copy2(source_npz, bundle / "results" / "aligned_scores.npz")
         source_manifest = {"schema": "mnrf-test", "artifact_type": "probe_head",
                            "config": {"task_name": "synthetic.csv"}}
@@ -851,8 +998,80 @@ def synthetic_check():
             pass
         else:
             raise AssertionError("coordinate-shifted same-length bundle was accepted")
+    cold = synthetic_cold_start_check()
     return {"status": "passed", "valid_local": [2, 3, 4, 5], "cold_start": [0, 1],
-            "boundary_crossing_rejected": True, "evaluation_bundle_written": True}
+            "boundary_crossing_rejected": True, "evaluation_bundle_written": True,
+            "cold_start_e2e": cold}
+
+
+def synthetic_cold_start_check():
+    """Exercise the native compact/full-axis cold-start contract without a model."""
+    with tempfile.TemporaryDirectory(prefix="mnrf-cold-start-synthetic-") as directory:
+        root = Path(directory)
+        source = root / "source"
+        output = root / "cold-output"
+        (source / "results").mkdir(parents=True)
+        (source / "heads").mkdir()
+        (source / "cache").mkdir()
+        labels = np.array([0, 0, 0, 1, 1, 0], dtype=np.int8)
+        times = np.arange(6, dtype=np.int64) * 60_000_000_000
+        global_indices = np.arange(6, dtype=np.int64)
+        segments = np.zeros(6, dtype=np.int32)
+        np.savez(source / "analysis_inputs.npz", test_labels=labels,
+                 test_global_indices=global_indices, test_time_values_ns=times,
+                 test_segment_ids=segments, all_global_indices=global_indices,
+                 all_time_values_ns=times, all_segment_ids=segments)
+        np.save(source / "cache" / "normalized_values.npy", np.arange(12, dtype=np.float32).reshape(6, 2))
+        assert isinstance(_load_npy_memmap(source / "cache" / "normalized_values.npy"), np.ndarray)
+        old_mask = np.array([False, False, True, True, True, True], dtype=bool)
+        old_scores = np.array([0.1, 0.9, 0.8, 0.2], dtype=np.float32)
+        old_predictions = (old_scores > 0.5).astype(np.int64)
+        aligned_scores = np.array([np.nan, np.nan, 0.1, 0.9, 0.8, 0.2], dtype=np.float32)
+        aligned_predictions = np.array([-1, -1, 0, 1, 1, 0], dtype=np.int64)
+        aligned_actual = np.array([-1, -1, 0, 1, 1, 0], dtype=np.int8)
+        source_npz = source / "results" / "aligned_scores.npz"
+        np.savez(source_npz, scores=old_scores, predictions=old_predictions,
+                 time_indices=np.array([2, 3, 4, 5], dtype=np.int64),
+                 time_values_ns=times[2:], local_indices=np.array([2, 3, 4, 5], dtype=np.int64),
+                 valid_mask=old_mask, aligned_scores=aligned_scores,
+                 aligned_predictions=aligned_predictions, aligned_actual=aligned_actual,
+                 actual=labels[2:], threshold=np.asarray(0.5))
+        (source / "probe_manifest.json").write_text(json.dumps({"artifact_type": "probe_head",
+            "config": {"task_name": "synthetic.csv"}}), encoding="utf-8")
+        (source / "run_status.json").write_text(json.dumps({"status": "complete"}), encoding="utf-8")
+        np.savez(source / "heads" / "calibration.npz", threshold=np.asarray(0.5))
+        with np.load(source_npz, allow_pickle=False) as old:
+            old_payload = {name: np.asarray(old[name]) for name in old.files}
+        payload, old_local = _assemble_cold_start_payload(
+            old_payload, np.array([0, 1], dtype=np.int64), np.array([0.7, 0.6], dtype=np.float32),
+            np.array([1, 1], dtype=np.int64), global_indices, times, labels, 0.5)
+        (output / "results").mkdir(parents=True)
+        output_npz = output / "results" / "aligned_scores.npz"
+        np.savez(output_npz, **payload)
+        manifest = {"schema": "mnrf-comparison-adapter-cold-start-v1", "task": "synthetic",
+                    "source_path": str(source.resolve()), "source_run_id": source.name,
+                    "source_aligned_scores_sha256": _sha256(source_npz),
+                    "output_aligned_scores_sha256": _sha256(output_npz),
+                    "source_valid_mask_sha256": hashlib.sha256(np.ascontiguousarray(old_mask).tobytes()).hexdigest(),
+                    "prefix_local_indices": [0, 1]}
+        (output / "adapter_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        report = root / "cold-evaluation.json"
+        result = evaluate(output, source, report)
+        assert result["new_valid_points"] == 2 and result["old_valid_points"] == 4
+        with np.load(output_npz, allow_pickle=False) as saved:
+            assert saved["scores"].shape == (6,) and saved["aligned_scores"].shape == (6,)
+            assert np.array_equal(saved["scores"][2:], old_scores)
+        try:
+            _validate_prefix_windows(np.array([0]), np.array([4]), np.arange(8),
+                                     np.array([0, 0, 0, 1, 1, 1, 1, 1]),
+                                     np.arange(8, dtype=np.int64), 4)
+        except ValueError as error:
+            assert "boundary" in str(error)
+        else:
+            raise AssertionError("cross-channel prefix history was accepted")
+        return {"status": "passed", "old_valid_unchanged": True,
+                "new_prefix_points": 2, "evaluation": str(report),
+                "cross_channel_rejected": True}
 
 
 def main():

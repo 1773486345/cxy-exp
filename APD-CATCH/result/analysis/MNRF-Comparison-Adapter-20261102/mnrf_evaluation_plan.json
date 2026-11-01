@@ -203,6 +203,14 @@
         "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
         "status": "ready-frozen-forward"
       },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "global rows, timestamps and frozen segment ids are continuous; no additional entity column is recorded",
+        "status": "within-segment-monotonic-only"
+      },
       "dataset": "PSM",
       "history_check": {
         "allowed_for_saved_endpoints": true,
@@ -454,8 +462,16 @@
           189,
           190
         ],
-        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
-        "status": "ready-frozen-forward"
+        "reason": "T-9 training tail and C-1 test head are different telemetry channels; the shared concatenated segment id is not permission to cross the boundary",
+        "status": "blocked-known-cross-channel"
+      },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "T-9 training tail and C-1 test head are different telemetry channels; the shared concatenated segment id is not permission to cross the boundary",
+        "status": "blocked-known-cross-channel"
       },
       "dataset": "MSL",
       "history_check": {
@@ -614,6 +630,14 @@
         ],
         "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
         "status": "ready-frozen-forward"
+      },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "global rows, timestamps and frozen segment ids are continuous; no additional entity column is recorded",
+        "status": "within-segment-monotonic-only"
       },
       "dataset": "GECCO",
       "history_check": {
@@ -869,6 +893,14 @@
         "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
         "status": "ready-frozen-forward"
       },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "global rows, timestamps and frozen segment ids are continuous; no additional entity column is recorded",
+        "status": "within-segment-monotonic-only"
+      },
       "dataset": "Genesis",
       "history_check": {
         "allowed_for_saved_endpoints": true,
@@ -1122,6 +1154,14 @@
         ],
         "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
         "status": "ready-frozen-forward"
+      },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "global rows, timestamps and frozen segment ids are continuous; no additional entity column is recorded",
+        "status": "within-segment-monotonic-only"
       },
       "dataset": "NYC",
       "history_check": {
@@ -1377,6 +1417,14 @@
         "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
         "status": "ready-frozen-forward"
       },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "global rows, timestamps and frozen segment ids are continuous; no additional entity column is recorded",
+        "status": "within-segment-monotonic-only"
+      },
       "dataset": "CalIt2",
       "history_check": {
         "allowed_for_saved_endpoints": true,
@@ -1628,8 +1676,16 @@
           189,
           190
         ],
-        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
-        "status": "ready-frozen-forward"
+        "reason": "no authoritative entity/session boundary is recorded for the row adjacency",
+        "status": "blocked-entity-session-unproven"
+      },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "no authoritative entity/session boundary is recorded for the row adjacency",
+        "status": "blocked-entity-session-unproven"
       },
       "dataset": "Creditcard",
       "history_check": {
@@ -1882,8 +1938,16 @@
           189,
           190
         ],
-        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
-        "status": "ready-frozen-forward"
+        "reason": "no authoritative entity/session boundary is recorded for the row adjacency",
+        "status": "blocked-entity-session-unproven"
+      },
+      "continuity_evidence": {
+        "prefix_window_check": {
+          "passed": true,
+          "reason": "within-frozen-segment context is available"
+        },
+        "reason": "no authoritative entity/session boundary is recorded for the row adjacency",
+        "status": "blocked-entity-session-unproven"
       },
       "dataset": "CICIDS",
       "history_check": {
