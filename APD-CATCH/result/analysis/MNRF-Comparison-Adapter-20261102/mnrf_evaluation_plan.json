@@ -200,8 +200,8 @@
           189,
           190
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "PSM",
       "history_check": {
@@ -213,6 +213,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
@@ -452,8 +454,8 @@
           189,
           190
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "MSL",
       "history_check": {
@@ -465,6 +467,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
@@ -608,8 +612,8 @@
           93,
           94
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "GECCO",
       "history_check": {
@@ -621,6 +625,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
@@ -860,8 +866,8 @@
           189,
           190
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "Genesis",
       "history_check": {
@@ -873,6 +879,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
@@ -1112,8 +1120,8 @@
           189,
           190
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "NYC",
       "history_check": {
@@ -1125,6 +1133,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
@@ -1364,8 +1374,8 @@
           189,
           190
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "CalIt2",
       "history_check": {
@@ -1377,6 +1387,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
@@ -1616,8 +1628,8 @@
           189,
           190
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "Creditcard",
       "history_check": {
@@ -1629,6 +1641,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
@@ -1868,8 +1882,8 @@
           189,
           190
         ],
-        "reason": "source has no encoded features for the invalid prefix; no score is invented",
-        "status": "blocked-no-saved-features"
+        "reason": "source has no saved prefix features; explicit frozen-encoder forward is required",
+        "status": "ready-frozen-forward"
       },
       "dataset": "CICIDS",
       "history_check": {
@@ -1881,6 +1895,8 @@
       "history_policy": "within-frozen-segment-only",
       "information_policy": {
         "future_rows": 0,
+        "missing_history_mask_reason": "frozen encoder receives normalized window values only; no mask channel is recorded",
+        "missing_history_mask_supported": false,
         "permission": "only rows within the frozen source segment and saved endpoint cache",
         "source_temporal_rule": {
           "entity_boundary_columns": [],
