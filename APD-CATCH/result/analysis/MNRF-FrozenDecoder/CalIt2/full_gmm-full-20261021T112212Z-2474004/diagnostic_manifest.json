@@ -1,0 +1,192 @@
+{
+  "calibration_quantile": 0.995,
+  "checkpoint_sha256": "178284379be2f847ce4214c2ba649392e1be3f690011b9d97eddb6c7292c9bb9",
+  "chunk_size": 256,
+  "cpu_threads": {
+    "native_threadpools": [
+      {
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libopenblas",
+        "user_api": "blas"
+      },
+      {
+        "internal_api": "openmp",
+        "num_threads": 1,
+        "prefix": "libgomp",
+        "user_api": "openmp"
+      }
+    ],
+    "requested": 1,
+    "torch_interop": 1,
+    "torch_intraop": 1
+  },
+  "elapsed_seconds": 10.705205448990455,
+  "encoder_forward_called": false,
+  "gmm_fit_called": false,
+  "notes": [
+    "E/R decoder consumes raw cached latent slices before GMM feature standardization/noise.",
+    "Decoder latent-train-mean is a diagnostic intervention, not a new model.",
+    "Test labels are used only after calibration for reported metrics.",
+    "P is intentionally not evaluated in this round; future masking/recovery diagnostics require re-encoding."
+  ],
+  "prediction_error": {
+    "E": {
+      "decoder": {
+        "latent_train_mean_shape": [
+          2,
+          8
+        ],
+        "mae": 0.5231274366378784,
+        "mse": 0.612913966178894,
+        "nll_quantiles": [
+          -1.6351733779907227,
+          0.6338865756988525,
+          15.894401140213352
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.49498793482780457,
+            "mse": 0.6003515124320984,
+            "nll_median": 0.40943199396133423,
+            "sigma_median": 0.39745408296585083,
+            "variable": "9"
+          },
+          {
+            "index": 1,
+            "mae": 0.5512669086456299,
+            "mse": 0.6254763603210449,
+            "nll_median": 0.8093302249908447,
+            "sigma_median": 0.5320940613746643,
+            "variable": "7"
+          }
+        ],
+        "sigma_quantiles": [
+          0.07652754984796047,
+          0.4646873325109482,
+          1.2785966098308568
+        ]
+      },
+      "decoder_latent_train_mean": {
+        "latent_train_mean_shape": [
+          2,
+          8
+        ],
+        "mae": 0.7295026183128357,
+        "mse": 1.1372177600860596,
+        "nll_quantiles": [
+          0.2471942901611328,
+          0.5643443465232849,
+          19.971843719482422
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.7307613492012024,
+            "mse": 1.153729796409607,
+            "nll_median": 0.5438815951347351,
+            "sigma_median": 0.510773241519928,
+            "variable": "9"
+          },
+          {
+            "index": 1,
+            "mae": 0.7282439470291138,
+            "mse": 1.1207058429718018,
+            "nll_median": 0.649714469909668,
+            "sigma_median": 0.5752723813056946,
+            "variable": "7"
+          }
+        ],
+        "sigma_quantiles": [
+          0.510773241519928,
+          0.5430228114128113,
+          0.5752723813056946
+        ]
+      }
+    },
+    "R": {
+      "decoder": {
+        "latent_train_mean_shape": [
+          2,
+          8
+        ],
+        "mae": 0.536374568939209,
+        "mse": 0.658239483833313,
+        "nll_quantiles": [
+          -1.493126084804535,
+          0.7276990413665771,
+          23.980856876373462
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.5217249393463135,
+            "mse": 0.6724939942359924,
+            "nll_median": 0.589667022228241,
+            "sigma_median": 0.4244999885559082,
+            "variable": "9"
+          },
+          {
+            "index": 1,
+            "mae": 0.5510241389274597,
+            "mse": 0.6439849138259888,
+            "nll_median": 0.907850980758667,
+            "sigma_median": 0.4107572138309479,
+            "variable": "7"
+          }
+        ],
+        "sigma_quantiles": [
+          0.08257579751312732,
+          0.4174513518810272,
+          1.2601172876358033
+        ]
+      },
+      "decoder_latent_train_mean": {
+        "latent_train_mean_shape": [
+          2,
+          8
+        ],
+        "mae": 0.7205587029457092,
+        "mse": 1.1680734157562256,
+        "nll_quantiles": [
+          0.2010175585746765,
+          0.6364662051200867,
+          23.40885353088379
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.717698335647583,
+            "mse": 1.1971348524093628,
+            "nll_median": 0.41089940071105957,
+            "sigma_median": 0.48130542039871216,
+            "variable": "9"
+          },
+          {
+            "index": 1,
+            "mae": 0.7234190702438354,
+            "mse": 1.1390119791030884,
+            "nll_median": 0.6364662051200867,
+            "sigma_median": 0.5976243615150452,
+            "variable": "7"
+          }
+        ],
+        "sigma_quantiles": [
+          0.48130542039871216,
+          0.5394648909568787,
+          0.5976243615150452
+        ]
+      }
+    }
+  },
+  "source_registration": null,
+  "source_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/CalIt2/full_gmm-full-20261021T112212Z-2474004",
+  "task": "CalIt2",
+  "task_role_note": "All variables retain their frozen source roles.",
+  "test_labels_used_only_for_metrics": true,
+  "variable_names": [
+    "9",
+    "7"
+  ]
+}

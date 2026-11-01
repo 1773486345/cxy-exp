@@ -1,0 +1,720 @@
+{
+  "calibration_quantile": 0.995,
+  "checkpoint_sha256": "a6d947adac205a3bc433713c86ffb4ef8d822f4260ac5cbeaf24dcad812edfe7",
+  "chunk_size": 256,
+  "cpu_threads": {
+    "native_threadpools": [
+      {
+        "internal_api": "openblas",
+        "num_threads": 1,
+        "prefix": "libopenblas",
+        "user_api": "blas"
+      },
+      {
+        "internal_api": "openmp",
+        "num_threads": 1,
+        "prefix": "libgomp",
+        "user_api": "openmp"
+      }
+    ],
+    "requested": 1,
+    "torch_interop": 1,
+    "torch_intraop": 1
+  },
+  "elapsed_seconds": 26.5021261840011,
+  "encoder_forward_called": false,
+  "gmm_fit_called": false,
+  "notes": [
+    "E/R decoder consumes raw cached latent slices before GMM feature standardization/noise.",
+    "Decoder latent-train-mean is a diagnostic intervention, not a new model.",
+    "Test labels are used only after calibration for reported metrics.",
+    "P is intentionally not evaluated in this round; future masking/recovery diagnostics require re-encoding."
+  ],
+  "prediction_error": {
+    "E": {
+      "decoder": {
+        "latent_train_mean_shape": [
+          18,
+          8
+        ],
+        "mae": 0.16379103064537048,
+        "mse": 0.2966872453689575,
+        "nll_quantiles": [
+          -1.147108221054077,
+          -0.4037708044052124,
+          3.360228571891787
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.41795310378074646,
+            "mse": 0.4972168505191803,
+            "nll_median": 0.6465733051300049,
+            "sigma_median": 0.6222593188285828,
+            "variable": "MotorData.ActCurrent"
+          },
+          {
+            "index": 1,
+            "mae": 0.071001797914505,
+            "mse": 0.007096415385603905,
+            "nll_median": -0.9634307622909546,
+            "sigma_median": 0.13823144137859344,
+            "variable": "MotorData.ActPosition"
+          },
+          {
+            "index": 2,
+            "mae": 0.14445096254348755,
+            "mse": 0.07708939909934998,
+            "nll_median": -0.11619317531585693,
+            "sigma_median": 0.2960342764854431,
+            "variable": "MotorData.ActSpeed"
+          },
+          {
+            "index": 3,
+            "mae": 0.5825797915458679,
+            "mse": 1.2688456773757935,
+            "nll_median": 0.9501559734344482,
+            "sigma_median": 0.9016320109367371,
+            "variable": "MotorData.IsAcceleration"
+          },
+          {
+            "index": 4,
+            "mae": 0.44430482387542725,
+            "mse": 0.5108247399330139,
+            "nll_median": 0.7390774488449097,
+            "sigma_median": 0.7008550763130188,
+            "variable": "MotorData.IsForce"
+          },
+          {
+            "index": 5,
+            "mae": 0.0996791273355484,
+            "mse": 0.1150784119963646,
+            "nll_median": -0.18643426895141602,
+            "sigma_median": 0.3281288743019104,
+            "variable": "MotorData.Motor_Pos1reached"
+          },
+          {
+            "index": 6,
+            "mae": 0.05986810848116875,
+            "mse": 0.025289351120591164,
+            "nll_median": -0.914087176322937,
+            "sigma_median": 0.15611332654953003,
+            "variable": "MotorData.Motor_Pos2reached"
+          },
+          {
+            "index": 7,
+            "mae": 0.06962882727384567,
+            "mse": 0.024221088737249374,
+            "nll_median": -0.9710150957107544,
+            "sigma_median": 0.14307641983032227,
+            "variable": "MotorData.Motor_Pos3reached"
+          },
+          {
+            "index": 8,
+            "mae": 0.11051716655492783,
+            "mse": 0.1230948194861412,
+            "nll_median": -0.4037708044052124,
+            "sigma_median": 0.2598836421966553,
+            "variable": "MotorData.Motor_Pos4reached"
+          },
+          {
+            "index": 9,
+            "mae": 0.09178217500448227,
+            "mse": 0.09463218599557877,
+            "nll_median": -0.49925196170806885,
+            "sigma_median": 0.24013125896453857,
+            "variable": "NVL_Recv_Ind.GL_Metall"
+          },
+          {
+            "index": 10,
+            "mae": 0.16037823259830475,
+            "mse": 0.225901797413826,
+            "nll_median": -0.594074010848999,
+            "sigma_median": 0.21640384197235107,
+            "variable": "NVL_Recv_Ind.GL_NonMetall"
+          },
+          {
+            "index": 11,
+            "mae": 0.07511511445045471,
+            "mse": 0.04650058597326279,
+            "nll_median": -0.17063498497009277,
+            "sigma_median": 0.33250734210014343,
+            "variable": "NVL_Recv_Storage.GL_I_ProcessStarted"
+          },
+          {
+            "index": 12,
+            "mae": 0.10120023787021637,
+            "mse": 0.06310150772333145,
+            "nll_median": -0.7002531290054321,
+            "sigma_median": 0.19321952760219574,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_IN"
+          },
+          {
+            "index": 13,
+            "mae": 0.06859513372182846,
+            "mse": 0.05507824197411537,
+            "nll_median": -0.6180474758148193,
+            "sigma_median": 0.21305803954601288,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_OUT"
+          },
+          {
+            "index": 14,
+            "mae": 0.10394778102636337,
+            "mse": 1.7713584899902344,
+            "nll_median": 1.2408299446105957,
+            "sigma_median": 1.3795719146728516,
+            "variable": "NVL_Recv_Storage.GL_LightBarrier"
+          },
+          {
+            "index": 15,
+            "mae": 0.15049877762794495,
+            "mse": 0.34689241647720337,
+            "nll_median": 0.6608903408050537,
+            "sigma_median": 0.7696396708488464,
+            "variable": "NVL_Send_Storage.ActivateStorage"
+          },
+          {
+            "index": 16,
+            "mae": 0.09480047971010208,
+            "mse": 0.029604757204651833,
+            "nll_median": -0.5164250135421753,
+            "sigma_median": 0.2175760269165039,
+            "variable": "PLC_PRG.Gripper"
+          },
+          {
+            "index": 17,
+            "mae": 0.10193721204996109,
+            "mse": 0.058543212711811066,
+            "nll_median": -0.6124740839004517,
+            "sigma_median": 0.20818914473056793,
+            "variable": "PLC_PRG.MaterialIsMetal"
+          }
+        ],
+        "sigma_quantiles": [
+          0.11523844018578529,
+          0.2598836421966553,
+          1.595105870962144
+        ]
+      },
+      "decoder_latent_train_mean": {
+        "latent_train_mean_shape": [
+          18,
+          8
+        ],
+        "mae": 0.5462138652801514,
+        "mse": 1.2299540042877197,
+        "nll_quantiles": [
+          -0.5264569520950317,
+          0.0037938356399536133,
+          135.71231079101562
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.7629346251487732,
+            "mse": 1.10014009475708,
+            "nll_median": 0.56927490234375,
+            "sigma_median": 0.5744174122810364,
+            "variable": "MotorData.ActCurrent"
+          },
+          {
+            "index": 1,
+            "mae": 0.9100927710533142,
+            "mse": 1.1079527139663696,
+            "nll_median": 8.95883846282959,
+            "sigma_median": 0.1368301957845688,
+            "variable": "MotorData.ActPosition"
+          },
+          {
+            "index": 2,
+            "mae": 0.7821648120880127,
+            "mse": 1.1358106136322021,
+            "nll_median": 5.6429877281188965,
+            "sigma_median": 0.3095009922981262,
+            "variable": "MotorData.ActSpeed"
+          },
+          {
+            "index": 3,
+            "mae": 0.5073806643486023,
+            "mse": 1.1920747756958008,
+            "nll_median": 0.8784389495849609,
+            "sigma_median": 0.95870041847229,
+            "variable": "MotorData.IsAcceleration"
+          },
+          {
+            "index": 4,
+            "mae": 0.7976001501083374,
+            "mse": 1.199241042137146,
+            "nll_median": 0.6436070203781128,
+            "sigma_median": 0.6503422856330872,
+            "variable": "MotorData.IsForce"
+          },
+          {
+            "index": 5,
+            "mae": 0.34795716404914856,
+            "mse": 1.1730458736419678,
+            "nll_median": -0.140936017036438,
+            "sigma_median": 0.3377494812011719,
+            "variable": "MotorData.Motor_Pos1reached"
+          },
+          {
+            "index": 6,
+            "mae": 0.5156779885292053,
+            "mse": 1.1474636793136597,
+            "nll_median": -0.5264569520950317,
+            "sigma_median": 0.17189818620681763,
+            "variable": "MotorData.Motor_Pos2reached"
+          },
+          {
+            "index": 7,
+            "mae": 0.6165379881858826,
+            "mse": 1.0998566150665283,
+            "nll_median": -0.1412121057510376,
+            "sigma_median": 0.16354183852672577,
+            "variable": "MotorData.Motor_Pos3reached"
+          },
+          {
+            "index": 8,
+            "mae": 0.36159589886665344,
+            "mse": 1.1664246320724487,
+            "nll_median": -0.3151423931121826,
+            "sigma_median": 0.2719291150569916,
+            "variable": "MotorData.Motor_Pos4reached"
+          },
+          {
+            "index": 9,
+            "mae": 0.36220425367355347,
+            "mse": 1.348613977432251,
+            "nll_median": -0.42960691452026367,
+            "sigma_median": 0.25082093477249146,
+            "variable": "NVL_Recv_Ind.GL_Metall"
+          },
+          {
+            "index": 10,
+            "mae": 0.38831815123558044,
+            "mse": 1.3350805044174194,
+            "nll_median": -0.47011709213256836,
+            "sigma_median": 0.22818107903003693,
+            "variable": "NVL_Recv_Ind.GL_NonMetall"
+          },
+          {
+            "index": 11,
+            "mae": 0.5023191571235657,
+            "mse": 1.0625444650650024,
+            "nll_median": 0.0037938356399536133,
+            "sigma_median": 0.37349840998649597,
+            "variable": "NVL_Recv_Storage.GL_I_ProcessStarted"
+          },
+          {
+            "index": 12,
+            "mae": 0.6024090647697449,
+            "mse": 1.1693888902664185,
+            "nll_median": -0.10614097118377686,
+            "sigma_median": 0.22151795029640198,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_IN"
+          },
+          {
+            "index": 13,
+            "mae": 0.49224424362182617,
+            "mse": 1.2094731330871582,
+            "nll_median": -0.42190229892730713,
+            "sigma_median": 0.23475892841815948,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_OUT"
+          },
+          {
+            "index": 14,
+            "mae": 0.10995069146156311,
+            "mse": 2.1416337490081787,
+            "nll_median": 1.244807481765747,
+            "sigma_median": 1.3847402334213257,
+            "variable": "NVL_Recv_Storage.GL_LightBarrier"
+          },
+          {
+            "index": 15,
+            "mae": 0.25829505920410156,
+            "mse": 1.124592900276184,
+            "nll_median": 0.693510115146637,
+            "sigma_median": 0.7905665636062622,
+            "variable": "NVL_Send_Storage.ActivateStorage"
+          },
+          {
+            "index": 16,
+            "mae": 1.0157469511032104,
+            "mse": 1.0846097469329834,
+            "nll_median": 19.765731811523438,
+            "sigma_median": 0.19256488978862762,
+            "variable": "PLC_PRG.Gripper"
+          },
+          {
+            "index": 17,
+            "mae": 0.4984195828437805,
+            "mse": 1.3412264585494995,
+            "nll_median": -0.41419875621795654,
+            "sigma_median": 0.2183750867843628,
+            "variable": "PLC_PRG.MaterialIsMetal"
+          }
+        ],
+        "sigma_quantiles": [
+          0.1368301957845688,
+          0.2613750249147415,
+          1.3847402334213257
+        ]
+      }
+    },
+    "R": {
+      "decoder": {
+        "latent_train_mean_shape": [
+          18,
+          8
+        ],
+        "mae": 0.5471890568733215,
+        "mse": 1.0714808702468872,
+        "nll_quantiles": [
+          -1.5848863959312438,
+          0.6687833666801453,
+          4.550754098892212
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.6828863620758057,
+            "mse": 0.9027723073959351,
+            "nll_median": 1.1423418521881104,
+            "sigma_median": 0.98178631067276,
+            "variable": "MotorData.ActCurrent"
+          },
+          {
+            "index": 1,
+            "mae": 0.89998459815979,
+            "mse": 1.0602444410324097,
+            "nll_median": 1.3149338960647583,
+            "sigma_median": 1.0661882162094116,
+            "variable": "MotorData.ActPosition"
+          },
+          {
+            "index": 2,
+            "mae": 0.668441116809845,
+            "mse": 0.8834770917892456,
+            "nll_median": 1.2428398132324219,
+            "sigma_median": 0.9320236444473267,
+            "variable": "MotorData.ActSpeed"
+          },
+          {
+            "index": 3,
+            "mae": 0.5614252090454102,
+            "mse": 1.2566441297531128,
+            "nll_median": 1.0681767463684082,
+            "sigma_median": 1.1100389957427979,
+            "variable": "MotorData.IsAcceleration"
+          },
+          {
+            "index": 4,
+            "mae": 0.7126516103744507,
+            "mse": 0.9834288358688354,
+            "nll_median": 1.1661674976348877,
+            "sigma_median": 0.9927585124969482,
+            "variable": "MotorData.IsForce"
+          },
+          {
+            "index": 5,
+            "mae": 0.46567338705062866,
+            "mse": 1.1179616451263428,
+            "nll_median": 1.1797406673431396,
+            "sigma_median": 1.1996179819107056,
+            "variable": "MotorData.Motor_Pos1reached"
+          },
+          {
+            "index": 6,
+            "mae": 0.5139768123626709,
+            "mse": 0.8928637504577637,
+            "nll_median": -0.5552839040756226,
+            "sigma_median": 0.22372202575206757,
+            "variable": "MotorData.Motor_Pos2reached"
+          },
+          {
+            "index": 7,
+            "mae": 0.5281685590744019,
+            "mse": 0.7694216966629028,
+            "nll_median": -0.6074182987213135,
+            "sigma_median": 0.2121194303035736,
+            "variable": "MotorData.Motor_Pos3reached"
+          },
+          {
+            "index": 8,
+            "mae": 0.41798675060272217,
+            "mse": 0.9878221154212952,
+            "nll_median": -0.01151573657989502,
+            "sigma_median": 0.3890479803085327,
+            "variable": "MotorData.Motor_Pos4reached"
+          },
+          {
+            "index": 9,
+            "mae": 0.41628673672676086,
+            "mse": 1.0185940265655518,
+            "nll_median": -0.4869964122772217,
+            "sigma_median": 0.2448297142982483,
+            "variable": "NVL_Recv_Ind.GL_Metall"
+          },
+          {
+            "index": 10,
+            "mae": 0.3694407343864441,
+            "mse": 1.3196139335632324,
+            "nll_median": -0.7762340307235718,
+            "sigma_median": 0.18098603188991547,
+            "variable": "NVL_Recv_Ind.GL_NonMetall"
+          },
+          {
+            "index": 11,
+            "mae": 0.45948708057403564,
+            "mse": 0.7362632155418396,
+            "nll_median": 0.12726765871047974,
+            "sigma_median": 0.4445372223854065,
+            "variable": "NVL_Recv_Storage.GL_I_ProcessStarted"
+          },
+          {
+            "index": 12,
+            "mae": 0.4782135784626007,
+            "mse": 1.1492693424224854,
+            "nll_median": -0.8278939723968506,
+            "sigma_median": 0.16588091850280762,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_IN"
+          },
+          {
+            "index": 13,
+            "mae": 0.41603168845176697,
+            "mse": 0.7390398383140564,
+            "nll_median": -0.5478284358978271,
+            "sigma_median": 0.23053370416164398,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_OUT"
+          },
+          {
+            "index": 14,
+            "mae": 0.25963109731674194,
+            "mse": 2.2274749279022217,
+            "nll_median": 0.35562562942504883,
+            "sigma_median": 0.5646789073944092,
+            "variable": "NVL_Recv_Storage.GL_LightBarrier"
+          },
+          {
+            "index": 15,
+            "mae": 0.34050557017326355,
+            "mse": 1.070945143699646,
+            "nll_median": 0.2124916911125183,
+            "sigma_median": 0.4879027307033539,
+            "variable": "NVL_Send_Storage.ActivateStorage"
+          },
+          {
+            "index": 16,
+            "mae": 0.9572749137878418,
+            "mse": 0.9365715980529785,
+            "nll_median": 1.4568212032318115,
+            "sigma_median": 1.1518244743347168,
+            "variable": "PLC_PRG.Gripper"
+          },
+          {
+            "index": 17,
+            "mae": 0.7013359665870667,
+            "mse": 1.2342491149902344,
+            "nll_median": 1.1397509574890137,
+            "sigma_median": 1.166806936264038,
+            "variable": "PLC_PRG.MaterialIsMetal"
+          }
+        ],
+        "sigma_quantiles": [
+          0.0800533189624548,
+          0.6372692584991455,
+          3.7290049815177917
+        ]
+      },
+      "decoder_latent_train_mean": {
+        "latent_train_mean_shape": [
+          18,
+          8
+        ],
+        "mae": 0.5582952499389648,
+        "mse": 1.2264600992202759,
+        "nll_quantiles": [
+          -0.45742249488830566,
+          0.582257091999054,
+          72.3975601196289
+        ],
+        "per_variable": [
+          {
+            "index": 0,
+            "mae": 0.7584263682365417,
+            "mse": 1.0902459621429443,
+            "nll_median": 0.7572681307792664,
+            "sigma_median": 0.7374700903892517,
+            "variable": "MotorData.ActCurrent"
+          },
+          {
+            "index": 1,
+            "mae": 0.9038669466972351,
+            "mse": 1.0986149311065674,
+            "nll_median": 1.1581721305847168,
+            "sigma_median": 1.0556950569152832,
+            "variable": "MotorData.ActPosition"
+          },
+          {
+            "index": 2,
+            "mae": 0.8149588108062744,
+            "mse": 1.1502010822296143,
+            "nll_median": 1.5191309452056885,
+            "sigma_median": 0.7715346813201904,
+            "variable": "MotorData.ActSpeed"
+          },
+          {
+            "index": 3,
+            "mae": 0.5309024453163147,
+            "mse": 1.1960618495941162,
+            "nll_median": 0.8222534656524658,
+            "sigma_median": 0.9038472771644592,
+            "variable": "MotorData.IsAcceleration"
+          },
+          {
+            "index": 4,
+            "mae": 0.7878637313842773,
+            "mse": 1.179189682006836,
+            "nll_median": 0.8101211786270142,
+            "sigma_median": 0.7701192498207092,
+            "variable": "MotorData.IsForce"
+          },
+          {
+            "index": 5,
+            "mae": 0.4866443872451782,
+            "mse": 1.1330217123031616,
+            "nll_median": 0.9856765270233154,
+            "sigma_median": 1.0419455766677856,
+            "variable": "MotorData.Motor_Pos1reached"
+          },
+          {
+            "index": 6,
+            "mae": 0.5085810422897339,
+            "mse": 1.1531016826629639,
+            "nll_median": -0.05729031562805176,
+            "sigma_median": 0.3532712459564209,
+            "variable": "MotorData.Motor_Pos2reached"
+          },
+          {
+            "index": 7,
+            "mae": 0.6083321571350098,
+            "mse": 1.1079069375991821,
+            "nll_median": 0.030464112758636475,
+            "sigma_median": 0.3591722846031189,
+            "variable": "MotorData.Motor_Pos3reached"
+          },
+          {
+            "index": 8,
+            "mae": 0.3670778274536133,
+            "mse": 1.1642966270446777,
+            "nll_median": 0.3487885594367981,
+            "sigma_median": 0.5551031827926636,
+            "variable": "MotorData.Motor_Pos4reached"
+          },
+          {
+            "index": 9,
+            "mae": 0.35830429196357727,
+            "mse": 1.3507919311523438,
+            "nll_median": -0.061390042304992676,
+            "sigma_median": 0.3700672686100006,
+            "variable": "NVL_Recv_Ind.GL_Metall"
+          },
+          {
+            "index": 10,
+            "mae": 0.3473045825958252,
+            "mse": 1.3571523427963257,
+            "nll_median": -0.38350796699523926,
+            "sigma_median": 0.267405241727829,
+            "variable": "NVL_Recv_Ind.GL_NonMetall"
+          },
+          {
+            "index": 11,
+            "mae": 0.5085394382476807,
+            "mse": 1.0580872297286987,
+            "nll_median": 0.4250173568725586,
+            "sigma_median": 0.5913958549499512,
+            "variable": "NVL_Recv_Storage.GL_I_ProcessStarted"
+          },
+          {
+            "index": 12,
+            "mae": 0.5156328082084656,
+            "mse": 1.2443212270736694,
+            "nll_median": -0.45742249488830566,
+            "sigma_median": 0.2337995320558548,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_IN"
+          },
+          {
+            "index": 13,
+            "mae": 0.4622015953063965,
+            "mse": 1.235805630683899,
+            "nll_median": -0.06952714920043945,
+            "sigma_median": 0.36567413806915283,
+            "variable": "NVL_Recv_Storage.GL_I_Slider_OUT"
+          },
+          {
+            "index": 14,
+            "mae": 0.11229809373617172,
+            "mse": 2.1414682865142822,
+            "nll_median": 0.582257091999054,
+            "sigma_median": 0.7130509614944458,
+            "variable": "NVL_Recv_Storage.GL_LightBarrier"
+          },
+          {
+            "index": 15,
+            "mae": 0.25788652896881104,
+            "mse": 1.1246308088302612,
+            "nll_median": 0.4858739972114563,
+            "sigma_median": 0.6391587257385254,
+            "variable": "NVL_Send_Storage.ActivateStorage"
+          },
+          {
+            "index": 16,
+            "mae": 1.0063540935516357,
+            "mse": 1.0171723365783691,
+            "nll_median": 1.4860315322875977,
+            "sigma_median": 1.0532901287078857,
+            "variable": "PLC_PRG.Gripper"
+          },
+          {
+            "index": 17,
+            "mae": 0.7141392230987549,
+            "mse": 1.2742128372192383,
+            "nll_median": 1.1374130249023438,
+            "sigma_median": 1.170320987701416,
+            "variable": "PLC_PRG.MaterialIsMetal"
+          }
+        ],
+        "sigma_quantiles": [
+          0.2337995320558548,
+          0.6761048436164856,
+          1.170320987701416
+        ]
+      }
+    }
+  },
+  "source_registration": null,
+  "source_run": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522",
+  "task": "Genesis",
+  "task_role_note": "All variables retain their frozen source roles.",
+  "test_labels_used_only_for_metrics": true,
+  "variable_names": [
+    "MotorData.ActCurrent",
+    "MotorData.ActPosition",
+    "MotorData.ActSpeed",
+    "MotorData.IsAcceleration",
+    "MotorData.IsForce",
+    "MotorData.Motor_Pos1reached",
+    "MotorData.Motor_Pos2reached",
+    "MotorData.Motor_Pos3reached",
+    "MotorData.Motor_Pos4reached",
+    "NVL_Recv_Ind.GL_Metall",
+    "NVL_Recv_Ind.GL_NonMetall",
+    "NVL_Recv_Storage.GL_I_ProcessStarted",
+    "NVL_Recv_Storage.GL_I_Slider_IN",
+    "NVL_Recv_Storage.GL_I_Slider_OUT",
+    "NVL_Recv_Storage.GL_LightBarrier",
+    "NVL_Send_Storage.ActivateStorage",
+    "PLC_PRG.Gripper",
+    "PLC_PRG.MaterialIsMetal"
+  ]
+}
