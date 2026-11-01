@@ -694,7 +694,7 @@ def build_readme(results, output, rawcount):
         return row.get("average_precision")
     lines += ["| Dataset | E decoder AP | E persistence AP | E target-mean AP | E latent-mean AP | R decoder AP | R persistence AP | R target-mean AP | R latent-mean AP |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for task in TASKS:
-        lines.append("| {} | {} | {} | {} | {} | {} | {} | {} |".format(
+        lines.append("| {} | {} | {} | {} | {} | {} | {} | {} | {} |".format(
             task, reference_ap(task, "E", "decoder"), reference_ap(task, "E", "persistence"),
             reference_ap(task, "E", "train_target_mean"), reference_ap(task, "E", "decoder_latent_train_mean"),
             reference_ap(task, "R", "decoder"), reference_ap(task, "R", "persistence"),
@@ -709,8 +709,14 @@ def build_readme(results, output, rawcount):
               "- Genesis R residual improves ranking over persistence and target-mean references while its fixed threshold still has substantial false positives; ranking gain is not alarm calibration gain.",
               "- CalIt2 is the historical modulo-10 representation. The separate RawCount report exists and shows a RawCount Full rerun plus CATCH/IF/PCA, but no RawCount S-only result; it must not be substituted into the old source comparison.",
               "- CICIDS has no verified entity/session identity in the frozen input; row-adjacent event interpretations remain limited.", ""]
+    roots = rawcount["searched_roots"]
+    if len(roots) <= 1:
+        roots_text = "" if not roots else "`{}`".format(roots[0])
+    else:
+        roots_text = ", ".join("`{}`".format(root) for root in roots[:-1])
+        roots_text += ", and `{}`".format(roots[-1])
     lines += ["## RawCount CalIt2 status", "",
-              f"RawCount output: `{rawcount['directory']}`. Search roots were `{', '.join(rawcount['searched_roots'])}`; {rawcount['candidate_count']} manifest candidate(s) were inspected and {len(rawcount['verified_candidates'])} same-source S-only candidate(s) passed the binding/status checks. {rawcount['s_only_note']}",
+              f"RawCount output: `{rawcount['directory']}`. Search roots were {roots_text}; {rawcount['candidate_count']} manifest candidate(s) were inspected and {len(rawcount['verified_candidates'])} same-source S-only candidate(s) passed the binding/status checks. {rawcount['s_only_note']}",
               "The report contains RawCount Full plus CATCH/IF/PCA metrics, but this read-only analysis did not execute an S-only fit. The accurate future entry is `run_mnrf_view_probe.py --mode select_gmm --views S` with the fixed RawCount `--source-dir`, explicit `--data-root`, CPU and a unique output directory; the complete command is recorded in `analysis_config.json`.", ""]
     lines += ["## Next P diagnostic", "",
               "Use the training-time 32-step local window with a continuous 8-step P mask, the saved valid flag, relative-position input and the original auxiliary decoder. Apply the identical deterministic mask rule to every split without using test labels. Persistence must read the unmasked history only, never the held-out masked truth. Map each recovered position back to its original global coordinate and segment; aggregate overlaps by a fixed rule (for example mean over valid reconstructions), and retain only common valid points. Treat 256/128/128/512 as a process-validation budget, not a formal performance sample. With small calibration sets, q=.995 is unstable; do not publish a comparative claim without enough positives and a predeclared budget. Existing axis validation and chunked I/O can be reused, but the full P cache cannot stand in for a masked representation. This round did not run it.", ""]

@@ -407,6 +407,60 @@ def _persist_training_receipt(output_path, provenance, resume=False):
     print("MNRF event=training_receipt_saved_before_fit path={}".format(receipt), flush=True)
 
 
+def _persist_head_provenance(output_path, provenance, source_dir):
+    """Persist immutable provenance for a source-backed derived head.
+
+    This is deliberately separate from the Full run's training receipt: a
+    select_gmm/s_only invocation fits only a new head over frozen source
+    artifacts and must not describe itself as encoder training.
+    """
+    output_path = Path(output_path)
+    receipt = output_path / "head_provenance.json"
+    if receipt.exists():
+        raise ValueError("refusing to overwrite an existing head provenance receipt")
+    source = Path(source_dir).expanduser().resolve()
+    if not source.is_dir():
+        raise FileNotFoundError("derived head source directory is absent: {}".format(source))
+    saved = dict(provenance or {})
+    saved["provenance_type"] = "mnrf-view-probe-derived-head-v1"
+    saved["captured_before_training"] = False
+    saved["captured_before_head_fit"] = True
+    saved["head_fit_scope"] = "frozen_source_features_only"
+    saved["source_binding"] = {
+        "source_dir": str(source),
+        "source_run_id": source.name,
+        "source_manifest_sha256": _sha256_file(source / "probe_manifest.json")
+        if (source / "probe_manifest.json").is_file() else None,
+        "source_training_provenance_sha256": _sha256_file(source / "training_provenance.json")
+        if (source / "training_provenance.json").is_file() else None,
+    }
+    effective_config = saved.get("effective_config", {})
+    configured_views = effective_config.get("views", effective_config.get("selected_views"))
+    if isinstance(configured_views, str):
+        configured_views = [item for item in configured_views.split(",") if item]
+    elif configured_views is not None:
+        configured_views = list(configured_views)
+    saved["head_execution"] = {
+        "mode": effective_config.get("mode"),
+        "selected_views": configured_views,
+        "seed": effective_config.get("seed"),
+        "cpu_threads": effective_config.get("cpu_threads"),
+        "source_run_id": source.name,
+    }
+    saved["head_environment"] = saved.pop("training_environment", None)
+    startup = dict(saved.get("startup_script") or {})
+    if startup.get("text") is not None:
+        snapshot = output_path / "provenance" / "startup_script.sh"
+        _atomic_bytes(snapshot, startup["text"].encode("utf-8"))
+        startup["snapshot"] = str(snapshot.relative_to(output_path))
+        startup["snapshot_sha256"] = _sha256_file(snapshot)
+        startup.pop("text", None)
+    saved["startup_script"] = startup
+    saved["receipt_schema"] = "mnrf-view-probe-head-receipt-v1"
+    _atomic_json(receipt, saved)
+    print("MNRF event=head_provenance_saved_before_fit path={}".format(receipt), flush=True)
+
+
 def _read_task(task, source, data_root=None):
     if source == "large_detect":
         folder = Path(data_root).expanduser() if data_root else ROOT / "dataset" / "anomaly_detect"
@@ -615,6 +669,11 @@ def main():
         if args.mode == "full_gmm" and args.artifact_policy == "full":
             probe._on_writes_started = lambda: _persist_training_receipt(
                 output_path, training_provenance, resume=bool(args.resume_from))
+        elif args.mode in {"select_gmm", "s_only"} and args.source_dir:
+            # Derived heads get their own receipt; they must not overwrite or
+            # masquerade as the source Full run's training provenance.
+            probe._on_writes_started = lambda: _persist_head_provenance(
+                output_path, training_provenance, args.source_dir)
         strategy = IndexedViewProbeStrategy(probe)
         print("MNRF event=data_read_complete task={} train_rows={} test_rows={} device={}".format(
             args.task, train_length, len(frame) - train_length, probe.device), flush=True)
