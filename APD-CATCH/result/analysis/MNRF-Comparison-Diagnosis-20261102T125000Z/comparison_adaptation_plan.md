@@ -2,6 +2,8 @@
 
 本方案只处理评价对齐和已有产物的只读复算，不改变模型、分数、阈值或历史结果。baseline 的配置和表格结果按已确认前提保留；论文/原生归档/common-protocol 三类结果分开报告。
 
+共同协议批次 `result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/` 已按各任务 `task_status.json` 逐项检查：八组的 CATCH-common、IsolationForest、PCA 共 24 个实际输出均存在 `results/aligned_scores.npz`；CATCH 使用 `results/common_manifest.json`，IF/PCA 使用 `evidence/baseline.json`，24 个文件均与各自 `common_contract.json` 的测试端点摘要一致。精确路径和哈希保存在 `result/analysis/MNRF-Comparison-Adapter-20261102/common_output_inventory.json`。
+
 ## 1. 正式采用的报告设置
 
 主表沿用已经确认的 16 方法原生结果：每个方法保留其官方数据版本、官方 train/test 范围、原生评分头、窗口和阈值/后处理。MNRF 不把自己的 `q=0.995` 报警结果改名为论文表格的原生报警指标。
@@ -68,7 +70,7 @@ coordinates = analysis_inputs.test_global_indices[valid_mask]
 | 八组 MNRF q=.995 点级 P/R/F1/FPR、混淆矩阵 | 保存 threshold、prediction、scores、labels | 可只读复算，严格检查 `prediction == score > threshold` |
 | 八组 MNRF segment-macro Affiliation | 完整标签轴、segment IDs、valid intervals 和已有评价封装 | 可只读复算；不得改名为论文 Aff-F |
 | 原表 CATCH/ModernTCN 等 native AUC/AP | 当前目录只有论文/配置记录，没有对应逐点 score 文件 | 保留已确认表值；不能在本机独立复算 |
-| common CATCH/IF/PCA 的独立坐标复算 | `common_protocol_metrics.csv` 只有汇总行，没有实际 score NPZ | 只能引用已绑定汇总；拿到实际 score 文件后才可运行 common evaluator |
+| common CATCH/IF/PCA 的独立坐标复算 | 2026-10-29 批次的 24 个 `aligned_scores.npz` 均存在；契约和摘要由 `prepare_mnrf_comparison_adapter.py --mode inventory` 核对 | 可在同一 common contract 上只读运行 common evaluator；仍与论文/原生结果分列 |
 | PSM 官方 87841 点的 MNRF 全轴成绩 | 当前 MNRF 仅有 87650 合法分数 | 缺少前 191 点分数；不得制造全轴结果 |
 
 ## 5. 可执行的只读步骤
@@ -113,21 +115,23 @@ PY
 
 对其它数据集只替换 `run`。脚本不会把无效前缀当正常点，也不会改写任何文件。若数组字段名在某个历史源中不同，应先按该源 `aligned_scores.npz` 的实际字段核对后再运行，不能猜字段或补齐数据。
 
-### C. 未来拥有 CATCH 实际逐点分数后的共同坐标复核
+### C. 已核实共同协议分数的共同坐标复核
 
-现有 common summary 没有 CATCH score NPZ，因此下列入口当前不能凭空运行；取得真实 CATCH 对齐分数后，才使用：
+下列入口使用已检查的 CATCH-common 文件和契约，只读比较，不训练、不拟合。PSM 示例可按 `common_output_inventory.json` 替换为其它任务：
 
 ```bash
 python scripts/evaluate_mnrf_view_probe_common.py \
-  --probe /absolute/path/to/mnrf/aligned_scores.npz \
-  --catch /absolute/path/to/catch/aligned_scores.npz \
-  --labels /absolute/path/to/common_contract/labels.npy \
-  --boundary-ids /absolute/path/to/common_contract/segment_ids.npy \
-  --common-manifest /absolute/path/to/common_contract/common_manifest.json \
-  --output /absolute/path/to/read-only-comparison.json
+  --probe result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714/results/aligned_scores.npz \
+  --catch result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/CATCH-common/results/aligned_scores.npz \
+  --labels result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/labels.npy \
+  --train-indices result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/catch_train_indices.npy \
+  --validation-indices result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/catch_validation_indices.npy \
+  --calibration-indices result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/common_contract/catch_calibration_indices.npy \
+  --common-manifest result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/PSM/CATCH-common/results/common_manifest.json \
+  --output result/analysis/MNRF-Comparison-Adapter-20261102/PSM-common-evaluation.json
 ```
 
-该入口要求实际坐标、时间、标签和边界严格绑定；不会通过取交集来隐藏缺点。缺少 `--catch` 的真实数组时，应保留“summary-only”，不要将结果称为独立重算。
+该入口要求实际坐标、时间、标签和边界严格绑定；不会通过取交集来隐藏缺点。当前 CATCH-common 文件已存在，但不能将其改称论文原生 CATCH 结果。
 
 ## 6. 八组适配结论
 
