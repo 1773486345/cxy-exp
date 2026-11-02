@@ -1,0 +1,13 @@
+split,endpoint_label_class,history_context,points
+validation,endpoint_normal,history_window_normal,13018
+validation,endpoint_normal,history_window_contains_anomaly,0
+validation,endpoint_anomaly,history_window_normal,0
+validation,endpoint_anomaly,history_window_contains_anomaly,0
+calibration,endpoint_normal,history_window_normal,13020
+calibration,endpoint_normal,history_window_contains_anomaly,0
+calibration,endpoint_anomaly,history_window_normal,0
+calibration,endpoint_anomaly,history_window_contains_anomaly,0
+test,endpoint_normal,history_window_normal,54127
+test,endpoint_normal,history_window_contains_anomaly,9145
+test,endpoint_anomaly,history_window_normal,0
+test,endpoint_anomaly,history_window_contains_anomaly,24378
