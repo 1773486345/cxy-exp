@@ -9,6 +9,7 @@ calibration, or threshold search.
 from __future__ import annotations
 
 import csv
+import argparse
 import hashlib
 import json
 import math
@@ -28,6 +29,7 @@ from scripts import run_mnrf_frozen_decoder_diagnostic as frozen
 SOURCE = ROOT / "result/score/MNRF-ViewProbe/Creditcard/full_gmm-full-20261024T115131Z-3977864"
 OLD_DIAGNOSTIC = ROOT / "result/analysis/MNRF-FrozenDecoder/Creditcard/full_gmm-full-20261024T115131Z-3977864"
 OUTPUT = ROOT / "result/analysis/MNRF-FrozenDecoder/Creditcard/R-loss-20261102"
+REVISION_OUTPUT = ROOT / "result/analysis/MNRF-FrozenDecoder/Creditcard/R-loss-20261102-revision"
 SEED = 2021
 NORMAL_SAMPLE_COUNT = 2048
 TRAIN_SIGMA_SAMPLE_COUNT = 2048
@@ -152,6 +154,296 @@ def matched_residual_sigma(sample_residual_sq: np.ndarray, sample_sigma: np.ndar
                      "anomaly_sigma_median": a_med, "normal_sigma_median": n_med,
                      "sigma_ratio_anomaly_over_normal": a_med / n_med if a_med is not None and n_med else None})
     return rows
+
+
+def residual_bin_statistics(rows: list[dict], bins: int = MATCH_BINS) -> list[dict]:
+    """Report class composition and sigma separately inside the original pooled-error bins."""
+    if bins < 1:
+        raise ValueError("bins must be positive")
+    by_variable: dict[tuple[int, str], list[dict]] = {}
+    for row in rows:
+        key = (int(row["variable_index"]), row["variable"])
+        by_variable.setdefault(key, []).append(row)
+    output = []
+    for (variable_index, name), values in sorted(by_variable.items()):
+        error = np.asarray([float(row["squared_residual"]) for row in values], dtype=np.float64)
+        signed_residual = np.asarray([float(row["residual"]) for row in values], dtype=np.float64)
+        sigma = np.asarray([float(row["sigma"]) for row in values], dtype=np.float64)
+        labels = np.asarray([int(row["label"]) for row in values], dtype=np.int8)
+        if not len(error) or not np.isin(labels, (0, 1)).all() or np.any(sigma <= 0):
+            raise ValueError(f"malformed residual-bin inputs for {name}")
+        # Preserve the existing pooled squared-residual quantile rule, including
+        # duplicate-edge collapse. Every resulting interval is emitted even if
+        # a class is absent in it.
+        edges = np.unique(np.quantile(error, np.linspace(0, 1, bins + 1)))
+        if len(edges) < 2:
+            edges = np.asarray([float(error.min()), float(error.max()) + np.finfo(float).eps])
+        assignments = np.clip(np.digitize(error, edges[1:-1], right=True), 0, len(edges) - 2)
+        for bin_id in range(len(edges) - 1):
+            in_bin = assignments == bin_id
+            class_stats = {}
+            for label, class_name in ((0, "normal"), (1, "anomaly")):
+                mask = in_bin & (labels == label)
+                if mask.any():
+                    class_stats[class_name] = {
+                        "n": int(mask.sum()),
+                        "residual_min": float(np.min(signed_residual[mask])),
+                        "residual_max": float(np.max(signed_residual[mask])),
+                        "residual_median": float(np.median(signed_residual[mask])),
+                        "squared_residual_min": float(np.min(error[mask])),
+                        "squared_residual_max": float(np.max(error[mask])),
+                        "squared_residual_median": float(np.median(error[mask])),
+                        "sigma_median": float(np.median(sigma[mask])),
+                    }
+                else:
+                    class_stats[class_name] = {
+                        "n": 0, "residual_min": None, "residual_max": None,
+                        "residual_median": None, "squared_residual_min": None,
+                        "squared_residual_max": None, "squared_residual_median": None,
+                        "sigma_median": None,
+                    }
+            normal_sigma = class_stats["normal"]["sigma_median"]
+            anomaly_sigma = class_stats["anomaly"]["sigma_median"]
+            if class_stats["normal"]["n"] and class_stats["anomaly"]["n"]:
+                status = "coarse_bin_overlap_only"
+                ratio = anomaly_sigma / normal_sigma
+            elif not class_stats["normal"]["n"] and not class_stats["anomaly"]["n"]:
+                status, ratio = "empty_bin", None
+            elif not class_stats["normal"]["n"]:
+                status, ratio = "no_normal_class", None
+            else:
+                status, ratio = "no_anomaly_class", None
+            output.append({
+                "variable_index": variable_index, "variable": name,
+                "bin_index": bin_id, "bin_count_after_duplicate_edge_collapse": len(edges) - 1,
+                "squared_residual_lower": float(edges[bin_id]),
+                "squared_residual_upper": float(edges[bin_id + 1]),
+                "lower_inclusive": bin_id == 0, "upper_inclusive": True,
+                "normal_n": class_stats["normal"]["n"], "anomaly_n": class_stats["anomaly"]["n"],
+                "normal_residual_min": class_stats["normal"]["residual_min"],
+                "normal_residual_max": class_stats["normal"]["residual_max"],
+                "normal_residual_median": class_stats["normal"]["residual_median"],
+                "anomaly_residual_min": class_stats["anomaly"]["residual_min"],
+                "anomaly_residual_max": class_stats["anomaly"]["residual_max"],
+                "anomaly_residual_median": class_stats["anomaly"]["residual_median"],
+                "normal_squared_residual_median": class_stats["normal"]["squared_residual_median"],
+                "anomaly_squared_residual_median": class_stats["anomaly"]["squared_residual_median"],
+                "normal_sigma_median": normal_sigma, "anomaly_sigma_median": anomaly_sigma,
+                "anomaly_over_normal_sigma_median_ratio": ratio,
+                "comparison_status": status,
+                "interpretation": "coarse pooled-residual bin only; not exact residual matching",
+            })
+    return output
+
+
+def recompute_max_tie_shares(rows: list[dict], variables: int = 29) -> list[dict]:
+    """Recompute each score's max membership jointly across all variables per endpoint."""
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(row["global_endpoint"], []).append(row)
+    for endpoint, point_rows in grouped.items():
+        point_rows.sort(key=lambda row: int(row["variable_index"]))
+        if len(point_rows) != variables or [int(row["variable_index"]) for row in point_rows] != list(range(variables)):
+            raise ValueError(f"endpoint {endpoint} does not contain variables 0..{variables - 1} exactly once")
+        for value_key, flag_key, share_key in (
+                ("nll_standardized_z", "nll_is_max_variable", "nll_max_tie_share"),
+                ("residual_standardized_z", None, "residual_max_tie_share")):
+            scores = np.asarray([float(row[value_key]) for row in point_rows], dtype=np.float64)
+            maximum = np.max(scores)
+            tied = np.isclose(scores, maximum, rtol=RTOL, atol=ATOL)
+            count = int(np.count_nonzero(tied))
+            if count < 1:
+                raise AssertionError("a finite point must have at least one maximum variable")
+            shares = tied.astype(np.float64) / count
+            if not np.isclose(shares.sum(), 1.0, rtol=0, atol=1e-15):
+                raise AssertionError(f"max shares for endpoint {endpoint} do not sum to one")
+            for index, row in enumerate(point_rows):
+                row[share_key] = repr(float(shares[index]))
+                if flag_key is not None:
+                    row[flag_key] = "True" if tied[index] else "False"
+    return rows
+
+
+def _synthetic_revision_checks() -> dict:
+    """Exercise the exact revision functions on class-composition and tie counterexamples."""
+    synthetic = []
+    anomaly_counts = [1] * 9 + [20]
+    for residual_bin, anomaly_count in enumerate(anomaly_counts):
+        sigma_value = float(residual_bin + 1)
+        for index in range(10):
+            signed = float(residual_bin + 1)
+            synthetic.append({"variable_index": "0", "variable": "V0", "squared_residual": repr(signed ** 2),
+                              "residual": repr(signed), "sigma": repr(sigma_value), "label": "0"})
+        for index in range(anomaly_count):
+            signed = float(residual_bin + 1)
+            synthetic.append({"variable_index": "0", "variable": "V0", "squared_residual": repr(signed ** 2),
+                              "residual": repr(signed), "sigma": repr(sigma_value), "label": "1"})
+    bins = residual_bin_statistics(synthetic)
+    overlapping = [row for row in bins if row["normal_n"] and row["anomaly_n"]]
+    if not overlapping or any(not math.isclose(row["anomaly_over_normal_sigma_median_ratio"], 1.0)
+                              for row in overlapping):
+        raise AssertionError("per-bin equal sigma must yield ratio one despite different class composition")
+    if len({row["normal_sigma_median"] for row in overlapping}) < 2:
+        raise AssertionError("synthetic bins must vary sigma between bins to expose pooling confounding")
+
+    def rows_with_ties(tie_count: int) -> list[dict]:
+        scores = [5.0] * tie_count + [0.0] * (29 - tie_count)
+        return [{"global_endpoint": "100", "variable_index": str(i),
+                 "nll_standardized_z": repr(scores[i]), "residual_standardized_z": repr(scores[i]),
+                 "nll_is_max_variable": "False", "nll_max_tie_share": "0", "residual_max_tie_share": "0"}
+                for i in range(29)]
+    tie_results = {}
+    for count in (2, 3):
+        tied_rows = recompute_max_tie_shares(rows_with_ties(count))
+        shares = [float(row["nll_max_tie_share"]) for row in tied_rows]
+        if not np.allclose(shares[:count], 1 / count) or any(shares[count:]) or not math.isclose(sum(shares), 1.0):
+            raise AssertionError(f"{count}-way max tie shares are incorrect")
+        if not np.allclose([float(row["residual_max_tie_share"]) for row in tied_rows], shares):
+            raise AssertionError("residual max tie shares did not follow the same rule")
+        tie_results[str(count)] = {"tied_share": shares[0], "sum": sum(shares)}
+    return {"residual_bins_equal_within_bin_sigma": True, "overlap_bins": len(overlapping),
+            "between_bin_sigma_varies": True, "max_ties": tie_results}
+
+
+def revise_existing() -> Path:
+    """Create a corrected copy using only the already exported sample CSV/summary."""
+    source_csv = OUTPUT / "sampled_test_point_variables.csv"
+    source_summary = OUTPUT / "summary.json"
+    source_readme = OUTPUT / "README.md"
+    if not all(path.is_file() for path in (source_csv, source_summary, source_readme)):
+        raise FileNotFoundError("existing Creditcard R-loss export is incomplete")
+    original_csv_hash = sha256(source_csv)
+    original_summary_hash = sha256(source_summary)
+    original_readme_hash = sha256(source_readme)
+    original_summary = json.loads(source_summary.read_text(encoding="utf-8"))
+    if REVISION_OUTPUT.exists():
+        prior_revision = REVISION_OUTPUT / "summary.json"
+        if not prior_revision.is_file():
+            raise FileExistsError(f"revision directory exists without its ownership record: {REVISION_OUTPUT}")
+        prior_record = json.loads(prior_revision.read_text(encoding="utf-8")).get("revision", {})
+        if (prior_record.get("operation") != "read_only_revise_residual_bins_and_max_tie_shares"
+                or prior_record.get("input_sample_csv_sha256") != sha256(source_csv)):
+            raise FileExistsError(f"revision directory is not the prior output for these exact inputs: {REVISION_OUTPUT}")
+    rows = list(csv.DictReader(source_csv.open(encoding="utf-8", newline="")))
+    sample = original_summary["sample"]
+    if sample != {"all_valid_anomalies": 221, "normal_points": 2048, "rows_exported": 65801,
+                  "seed": 2021, "selected_points": 2269, "selected_variables": 29}:
+        raise ValueError(f"existing sample binding differs from expected Creditcard sample: {sample}")
+    endpoints: dict[str, list[dict]] = {}
+    for row in rows:
+        endpoints.setdefault(row["global_endpoint"], []).append(row)
+    labels_per_endpoint = {key: {int(row["label"]) for row in group} for key, group in endpoints.items()}
+    if (len(rows) != sample["rows_exported"] or len(endpoints) != sample["selected_points"]
+            or sum(next(iter(v)) for v in labels_per_endpoint.values()) != sample["all_valid_anomalies"]
+            or any(len(v) != 1 for v in labels_per_endpoint.values())):
+        raise ValueError("existing sample row count, labels, or endpoint count failed validation")
+    normal_points = sum(next(iter(v)) == 0 for v in labels_per_endpoint.values())
+    if normal_points != sample["normal_points"]:
+        raise ValueError(f"existing normal sample count mismatch: {normal_points}")
+    synthetic_checks = _synthetic_revision_checks()
+    revised_rows = recompute_max_tie_shares(rows)
+    bin_rows = residual_bin_statistics(rows)
+
+    # The full-test ranking/threshold/confusion/fixed-sigma figures are copied
+    # unchanged; only the bounded sample summaries below are superseded.
+    revision = {
+        "operation": "read_only_revise_residual_bins_and_max_tie_shares",
+        "input_sample_csv_sha256": original_csv_hash,
+        "input_summary_sha256": original_summary_hash,
+        "input_readme_sha256": original_readme_hash,
+        "source_binding": {
+            "source_run_id": original_summary["source_run_id"],
+            "source_path": original_summary["source_path"],
+            "old_diagnostic_path": original_summary["old_diagnostic_path"],
+            "source_file_sha256": original_summary["source_file_sha256"],
+            "prior_diagnostic_file_sha256": original_summary["prior_diagnostic_file_sha256"],
+        },
+        "sample_validation": {"all_valid_anomalies": sample["all_valid_anomalies"],
+                              "normal_points": normal_points, "variables": 29,
+                              "points": len(endpoints), "rows": len(rows)},
+        "residual_bins": {"rule": "within-variable deciles of pooled sampled squared_residual; duplicate quantile edges collapsed as in the prior match helper",
+                          "bin_rows": len(bin_rows),
+                          "coarse_bins_are_not_exact_residual_matches": True,
+                          "no_cross_bin_pooled_sigma_ratio_reported": True},
+        "max_tie_shares": {"rule": f"np.isclose(rtol={RTOL}, atol={ATOL}) jointly over all 29 variables; each tied maximum receives 1/k",
+                           "endpoint_sums_verified": len(endpoints),
+                           "all_endpoint_sums_equal_one": True},
+        "synthetic_checks": synthetic_checks,
+        "unchanged_fields": ["full_test_metrics_recomputed_from_existing_saved_scores",
+                             "forward_reproduction", "training_sigma_counterfactual",
+                             "source_file_sha256", "prior_diagnostic_file_sha256"],
+    }
+    revised_summary = dict(original_summary)
+    superseded_match = revised_summary.pop("fixed_residual_strata_sigma_comparison", None)
+    focus_bins = {}
+    for name in ("V14", "V17"):
+        matching = [row for row in bin_rows if row["variable"] == name]
+        overlap = [row for row in matching if row["comparison_status"] == "coarse_bin_overlap_only"]
+        ratios = [row["anomaly_over_normal_sigma_median_ratio"] for row in overlap]
+        focus_bins[name] = {
+            "overlap_bins": len(overlap),
+            "bins_without_anomaly": sum(row["comparison_status"] == "no_anomaly_class" for row in matching),
+            "coarse_bin_sigma_ratio_min": min(ratios) if ratios else None,
+            "coarse_bin_sigma_ratio_max": max(ratios) if ratios else None,
+            "these_are_not_exact_residual_matches": True,
+        }
+    revised_summary["revision"] = revision
+    revised_summary["revision"]["superseded_pooled_sigma_ratio"] = {
+        "old_field_removed": "fixed_residual_strata_sigma_comparison",
+        "prior_values_not_reused_as_residual_controlled_evidence": superseded_match is not None,
+        "reason": "pooling observations from different residual bins does not control residual magnitude",
+        "replacement_focus_bin_summary": focus_bins,
+    }
+
+    REVISION_OUTPUT.mkdir(parents=True, exist_ok=True)
+    revised_csv = REVISION_OUTPUT / "sampled_test_point_variables.csv"
+    with revised_csv.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(revised_rows[0]))
+        writer.writeheader(); writer.writerows(revised_rows)
+    bins_csv = REVISION_OUTPUT / "residual_bin_sigma_by_variable.csv"
+    with bins_csv.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(bin_rows[0]))
+        writer.writeheader(); writer.writerows(bin_rows)
+    (REVISION_OUTPUT / "summary.json").write_text(
+        json.dumps(revised_summary, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+    comparable = sum(row["comparison_status"] == "coarse_bin_overlap_only" for row in bin_rows)
+    missing_class = len(bin_rows) - comparable
+    focus_text = []
+    for name, value in focus_bins.items():
+        if value["coarse_bin_sigma_ratio_min"] is None:
+            focus_text.append(f"{name}: no overlapping class bins")
+        else:
+            focus_text.append(
+                f"{name}: {value['overlap_bins']} overlapping bins, "
+                f"{value['bins_without_anomaly']} bins without anomalies, coarse-bin sigma ratios "
+                f"{value['coarse_bin_sigma_ratio_min']:.2f}–{value['coarse_bin_sigma_ratio_max']:.2f}"
+            )
+    readme = (
+        "# Creditcard R-loss statistics revision\n\n"
+        f"This is a read-only correction of `{OUTPUT}`. It consumes only its existing sample CSV and summary; it does not load a checkpoint or source cache.\n\n"
+        "## Residual-bin correction\n\n"
+        f"For each variable, bins reuse the previous pooled sampled squared-residual quantile rule ({MATCH_BINS} requested quantiles, duplicate edges collapsed). "
+        f"The table contains {len(bin_rows)} variable/bin rows: {comparable} bins contain both classes and {missing_class} preserve a missing class or empty-bin state. "
+        "Each row reports both class counts, signed-residual and squared-residual ranges/medians, sigma medians, and an anomaly/normal sigma ratio only when both classes are present. "
+        "These are coarse bins, not exact residual matches. No cross-bin pooled ratio is reported; the earlier 63.4x/76.2x wording is withdrawn as a residual-controlled claim.\n\n"
+        + "For the prespecified variables, " + "; ".join(focus_text) + ". These within-bin ratios are still descriptive only: each coarse interval can contain materially different residuals between classes, so they do not isolate a sigma effect at fixed residual. The corrected evidence is therefore insufficient to quantify an independent residual-controlled sigma difference.\n\n"
+        "## Max tie shares\n\n"
+        f"For each endpoint, NLL and residual standardized values are compared jointly across all 29 variables using the original `np.isclose(rtol={RTOL}, atol={ATOL})`. "
+        "If k variables tie at the maximum each now receives 1/k; other variables receive zero. Endpoint shares sum to one. The full-test `weighted_dominance` summary was not recalculated from this sample and remains byte-for-byte copied from the original summary.\n\n"
+        "## Preserved evidence\n\n"
+        "The original residual/NLL full-test AUC/AP, confusion matrices, thresholds, fixed-sigma counterfactual, and source bindings are copied unchanged into this revision summary. "
+        "The revised per-point CSV retains the original sample selection: all 221 anomalies, 2,048 seed-2021 sampled normals, and 29 variables (65,801 rows).\n\n"
+        "Synthetic checks exercised the actual binning and tie-share functions: within-bin equal sigmas yielded ratios of one despite differing class proportions across bins; two- and three-way ties yielded 1/2 and 1/3 shares summing to one.\n"
+    )
+    (REVISION_OUTPUT / "README.md").write_text(readme, encoding="utf-8")
+    if (sha256(source_csv) != original_csv_hash or sha256(source_summary) != original_summary_hash
+            or sha256(source_readme) != original_readme_hash):
+        raise RuntimeError("original R-loss export changed while creating read-only revision")
+    print(json.dumps({"revision_output": str(REVISION_OUTPUT), "sample_points": len(endpoints),
+                      "rows": len(revised_rows), "residual_bin_rows": len(bin_rows),
+                      "bins_with_both_classes": comparable, "synthetic_checks": synthetic_checks,
+                      "original_full_metrics_unchanged": True}, indent=2))
+    return REVISION_OUTPUT
 
 
 def main() -> Path:
@@ -479,4 +771,12 @@ def main() -> Path:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--revise-existing", action="store_true",
+                        help="read the existing R-loss CSV/summary only; do not load source data or model weights")
+    args = parser.parse_args()
+    if args.revise_existing:
+        _synthetic_revision_checks()
+        revise_existing()
+    else:
+        main()
