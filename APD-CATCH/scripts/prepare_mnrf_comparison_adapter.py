@@ -551,7 +551,7 @@ def evaluate(bundle: Path, source: Path, output: Path):
 
 
 def _common_metrics(method: str, score_path: Path, contract_dir: Path, labels: np.ndarray,
-                    expected_indices: np.ndarray, official_test_points: int):
+                    expected_indices: np.ndarray):
     """Validate a non-CATCH common artifact against the same frozen contract."""
     from sklearn.metrics import (average_precision_score, f1_score, precision_score,
                                  recall_score, roc_auc_score)
@@ -596,10 +596,8 @@ def _common_metrics(method: str, score_path: Path, contract_dir: Path, labels: n
     full_pred[indices] = predictions.astype(np.int64)
     affiliation = _affiliation_fallback(contract_labels, full_pred, full_valid, contract)
     return {"method": method, "threshold": threshold, "valid_points": int(len(indices)),
-            "official_test_points": int(official_test_points),
-            "full_input_points": int(len(contract_labels)),
-            "total_points": int(official_test_points),
-            "coverage": float(len(indices) / max(official_test_points, 1)),
+            "total_points": int(len(contract_labels)),
+            "coverage": float(len(indices) / max(len(contract_labels), 1)),
             "auc_roc": float(roc_auc_score(actual, scores)) if np.unique(actual).size == 2 else None,
             "auc_pr": float(average_precision_score(actual, scores)),
             "precision": float(precision_score(actual, predictions, zero_division=0)),
@@ -636,9 +634,6 @@ def common_compare(output_dir: Path):
         contract_dir = COMMON_BATCH / task / "common_contract"
         expected = _strict_indices(np.load(contract_dir / "catch_test_indices.npy", allow_pickle=False), f"{task} common test")
         labels_path = contract_dir / "labels.npy"
-        source_inputs = source / "analysis_inputs.npz"
-        with np.load(source_inputs, allow_pickle=False) as source_axis:
-            official_test_points = int(len(source_axis["test_labels"]))
         splits = tuple(str(contract_dir / f"{name}_indices.npy") for name in ("catch_train", "catch_validation", "catch_calibration"))
         catch_output = Path(task_status["methods"]["CATCH-common"]["output"])
         catch_path = catch_output / "results" / "aligned_scores.npz"
@@ -656,9 +651,7 @@ def common_compare(output_dir: Path):
             actual = labels[expected]
             rows.append({"dataset": task, "method": method_name, "protocol": "common-protocol",
                          "source_run_id": source.name, "valid_points": strict["common_count"],
-                         "official_test_points": official_test_points,
-                         "full_input_points": len(labels), "total_points": official_test_points,
-                         "coverage": float(strict["common_count"] / max(official_test_points, 1)),
+                         "total_points": len(labels), "coverage": strict["coverage"],
                          "threshold": metric.get("threshold"), "auc_roc": metric.get("auc_roc"),
                          "auc_pr": metric.get("auc_pr"),
                          "precision": float(precision_score(actual, score_predictions, zero_division=0)),
@@ -671,7 +664,7 @@ def common_compare(output_dir: Path):
         for method in ("IsolationForest", "PCA"):
             output = Path(task_status["methods"][method]["output"])
             metric = _common_metrics(method, output / "results" / "aligned_scores.npz",
-                                     contract_dir, labels, expected, official_test_points)
+                                     contract_dir, labels, expected)
             metric.update({"dataset": task, "source_run_id": source.name, "status": "verified"})
             metric["affiliation_f"] = metric.get("affiliation", {}).get("affiliation_f_segment_macro",
                                                                             metric.get("affiliation", {}).get("affiliation_f"))
@@ -685,58 +678,15 @@ def common_compare(output_dir: Path):
                                      "source_note": "read-only reuse; no new scoring/fitting/calibration"},
                                     indent=2, sort_keys=True), encoding="utf-8")
     csv_path = output_dir / "common_comparison.csv"
-    fields = ["dataset", "method", "protocol", "source_run_id", "valid_points",
-              "official_test_points", "full_input_points", "total_points", "coverage",
-              "threshold", "auc_roc", "auc_pr", "precision", "recall", "f1", "fpr",
+    fields = ["dataset", "method", "protocol", "source_run_id", "valid_points", "total_points",
+              "coverage", "threshold", "auc_roc", "auc_pr", "precision", "recall", "f1", "fpr",
               "affiliation_f", "affiliation_defined_segments", "status"]
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
+        writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for row in rows:
             writer.writerow({field: row.get(field) for field in fields})
     return {"rows": len(rows), "datasets": len(TASKS), "path": str(csv_path), "json": str(json_path)}
-
-
-def refresh_common_coverage(output_dir: Path):
-    """Refresh denominator fields from existing rows without rescoring anything."""
-    json_path = output_dir / "common_comparison.json"
-    csv_path = output_dir / "common_comparison.csv"
-    if not json_path.is_file() or not csv_path.is_file():
-        raise FileNotFoundError("existing common comparison JSON/CSV is required")
-    payload = _json(json_path)
-    rows = payload.get("rows")
-    if not isinstance(rows, list) or not rows:
-        raise ValueError("existing common comparison has no rows")
-    official = {}
-    full_input = {}
-    for task in TASKS:
-        task_status = _json(COMMON_BATCH / task / "task_status.json")
-        source = Path(task_status["source_path"]).resolve()
-        with np.load(source / "analysis_inputs.npz", allow_pickle=False) as values:
-            official[task] = int(len(values["test_labels"]))
-        contract = COMMON_BATCH / task / "common_contract" / "labels.npy"
-        full_input[task] = int(len(np.load(contract, mmap_mode="r", allow_pickle=False)))
-    for row in rows:
-        task = row.get("dataset")
-        if task not in official:
-            raise ValueError(f"unknown dataset in existing common comparison: {task}")
-        row["official_test_points"] = official[task]
-        row["full_input_points"] = full_input[task]
-        row["total_points"] = official[task]
-        row["coverage"] = float(row["valid_points"] / max(official[task], 1))
-    payload["coverage_definition"] = "valid_points / official_test_points"
-    payload["full_input_points_definition"] = "length of the complete input/label axis; not a coverage denominator"
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    fields = ["dataset", "method", "protocol", "source_run_id", "valid_points",
-              "official_test_points", "full_input_points", "total_points", "coverage",
-              "threshold", "auc_roc", "auc_pr", "precision", "recall", "f1", "fpr",
-              "affiliation_f", "affiliation_defined_segments", "status"]
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: row.get(field) for field in fields})
-    return {"rows": len(rows), "path": str(csv_path), "read_only_refresh": True}
 
 
 def _load_npy_memmap(path: Path):
@@ -823,33 +773,6 @@ def _validate_prefix_windows(prefix, test_global, all_global, all_segments, all_
             raise ValueError(f"prefix endpoint {int(local)} has invalid time continuity")
         positions.append(endpoint)
     return positions
-
-
-def _write_cold_start_artifact(output: Path, source: Path, payload: dict, record: dict):
-    """Write and self-validate a cold-start artifact before publishing it."""
-    if output.exists():
-        raise FileExistsError(f"refusing to overwrite cold-start output: {output}")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=f"{record['task']}-cold-start-", dir=str(output.parent)))
-    try:
-        (temporary / "results").mkdir()
-        score_path = temporary / "results" / "aligned_scores.npz"
-        np.savez_compressed(score_path, **payload)
-        published_record = dict(record)
-        published_record["output_aligned_scores_sha256"] = _sha256(score_path)
-        (temporary / "adapter_manifest.json").write_text(
-            json.dumps(published_record, indent=2, sort_keys=True), encoding="utf-8")
-        # Validate the exact bytes and mappings that will be published.  The
-        # temporary report is removed with the staging directory.
-        validation_report = temporary / "_cold_start_validation.json"
-        evaluate(temporary, source, validation_report)
-        validation_report.unlink()
-        os.replace(temporary, output)
-        published_record["output_dir"] = str(output.resolve())
-        return published_record
-    except Exception:
-        shutil.rmtree(temporary, ignore_errors=True)
-        raise
 
 
 def score_cold_start(task: str, source: Path, output: Path):
@@ -970,25 +893,36 @@ def score_cold_start(task: str, source: Path, output: Path):
             test_global, test_times, test_labels, threshold)
     finally:
         del normalized
-    record = {"schema": "mnrf-comparison-adapter-cold-start-v1", "task": task,
-              "source_path": str(source), "source_run_id": source.name,
-              "mode": "frozen-encoder-prefix-forward-gmm-no-fit-no-calibration",
-              "prefix_local_indices": prefix.tolist(), "prefix_global_indices": [int(x) for x in positions],
-              "prefix_count": int(len(prefix)), "threshold_reused": threshold,
-              "input_statistics_sha256": _sha256(source / "input_statistics.npz"),
-              "checkpoint_sha256": _sha256(checkpoint),
-              "source_aligned_scores_sha256": _sha256(source / "results/aligned_scores.npz"),
-              "source_valid_endpoint_reproduction": True,
-              "encoder_endpoint_reproduction": {"checked": int(len(check_rows)),
-                                                 "max_abs": max_abs, "rtol": 1e-5, "atol": 1e-6},
-              "old_valid_local_indices": old_local.tolist(),
-              "source_valid_mask_sha256": hashlib.sha256(
-                  np.ascontiguousarray(old_payload["valid_mask"], dtype=bool).tobytes()).hexdigest(),
-              "history_policy": "within-frozen-segment-only",
-              "future_rows": 0, "noise_seed": int(probe.config.noise_seed),
-              "gmm_compute_dtype": probe.config.gmm_compute_dtype,
-              "no_training_fit_or_recalibration": True}
-    return _write_cold_start_artifact(output, source, combined, record)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f"{task}-cold-start-", dir=str(output.parent)))
+    try:
+        (temporary / "results").mkdir()
+        np.savez_compressed(temporary / "results" / "aligned_scores.npz", **combined)
+        record = {"schema": "mnrf-comparison-adapter-cold-start-v1", "task": task,
+                  "source_path": str(source), "source_run_id": source.name,
+                  "mode": "frozen-encoder-prefix-forward-gmm-no-fit-no-calibration",
+                  "prefix_local_indices": prefix.tolist(), "prefix_global_indices": [int(x) for x in positions],
+                  "prefix_count": int(len(prefix)), "threshold_reused": threshold,
+                  "input_statistics_sha256": _sha256(source / "input_statistics.npz"),
+                  "checkpoint_sha256": _sha256(checkpoint),
+                  "source_aligned_scores_sha256": _sha256(source / "results/aligned_scores.npz"),
+                  "source_valid_endpoint_reproduction": True,
+                  "encoder_endpoint_reproduction": {"checked": int(len(check_rows)),
+                                                     "max_abs": max_abs, "rtol": 1e-5, "atol": 1e-6},
+                  "old_valid_local_indices": old_local.tolist(),
+                  "source_valid_mask_sha256": hashlib.sha256(
+                      np.ascontiguousarray(old_payload["valid_mask"], dtype=bool).tobytes()).hexdigest(),
+                  "history_policy": "within-frozen-segment-only",
+                  "future_rows": 0, "noise_seed": int(probe.config.noise_seed),
+                  "gmm_compute_dtype": probe.config.gmm_compute_dtype,
+                  "no_training_fit_or_recalibration": True}
+        (temporary / "adapter_manifest.json").write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(temporary, output)
+        record["output_dir"] = str(output.resolve())
+        return record
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
 
 
 def synthetic_check():
@@ -1111,14 +1045,16 @@ def synthetic_cold_start_check():
         payload, old_local = _assemble_cold_start_payload(
             old_payload, np.array([0, 1], dtype=np.int64), np.array([0.7, 0.6], dtype=np.float32),
             np.array([1, 1], dtype=np.int64), global_indices, times, labels, 0.5)
+        (output / "results").mkdir(parents=True)
+        output_npz = output / "results" / "aligned_scores.npz"
+        np.savez(output_npz, **payload)
         manifest = {"schema": "mnrf-comparison-adapter-cold-start-v1", "task": "synthetic",
                     "source_path": str(source.resolve()), "source_run_id": source.name,
                     "source_aligned_scores_sha256": _sha256(source_npz),
+                    "output_aligned_scores_sha256": _sha256(output_npz),
                     "source_valid_mask_sha256": hashlib.sha256(np.ascontiguousarray(old_mask).tobytes()).hexdigest(),
                     "prefix_local_indices": [0, 1]}
-        published = _write_cold_start_artifact(output, source, payload, manifest)
-        output_npz = output / "results" / "aligned_scores.npz"
-        assert published["output_aligned_scores_sha256"] == _sha256(output_npz)
+        (output / "adapter_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         report = root / "cold-evaluation.json"
         result = evaluate(output, source, report)
         assert result["new_valid_points"] == 2 and result["old_valid_points"] == 4
@@ -1135,12 +1071,12 @@ def synthetic_cold_start_check():
             raise AssertionError("cross-channel prefix history was accepted")
         return {"status": "passed", "old_valid_unchanged": True,
                 "new_prefix_points": 2, "evaluation": str(report),
-                "written_output": str(output), "cross_channel_rejected": True}
+                "cross_channel_rejected": True}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("inventory", "plan", "common-compare", "refresh-coverage", "score",
+    parser.add_argument("--mode", choices=("inventory", "plan", "common-compare", "score",
                                             "score-cold-start", "evaluate", "synthetic"), required=True)
     parser.add_argument("--task", choices=TASKS)
     parser.add_argument("--source-dir", type=Path)
@@ -1154,8 +1090,6 @@ def main():
         print(json.dumps(plan(args.output_dir, ROOT / "result/score/MNRF-ViewProbe"), indent=2, sort_keys=True))
     elif args.mode == "common-compare":
         print(json.dumps(common_compare(args.output_dir), indent=2, sort_keys=True))
-    elif args.mode == "refresh-coverage":
-        print(json.dumps(refresh_common_coverage(args.output_dir), indent=2, sort_keys=True))
     elif args.mode == "synthetic":
         print(json.dumps(synthetic_check(), indent=2, sort_keys=True))
     elif args.mode == "score-cold-start":

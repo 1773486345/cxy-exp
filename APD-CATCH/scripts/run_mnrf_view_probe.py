@@ -537,6 +537,8 @@ def main():
                         help="invoking task script captured in training provenance")
     parser.add_argument("--data-root", default="",
                         help=argparse.SUPPRESS)
+    parser.add_argument("--msl-sequence-map", default="",
+                        help="verified MSL channel-row map; adds non-feature entity boundaries")
     args = parser.parse_args()
 
     def _terminate(signum, _frame):
@@ -641,8 +643,21 @@ def main():
         print("MNRF event=preflight_start", flush=True)
         frame, train_length, test_labels, data_path, metadata_path, metadata_row = _read_task(
             args.task, args.data_source, args.data_root or None)
+        if args.msl_sequence_map:
+            if args.task != "MSL" or args.data_source != "large_detect":
+                raise ValueError("--msl-sequence-map is only valid for the large_detect MSL task")
+            from scripts.mnrf_msl_sequence_boundaries import (
+                annotate_frame, load_mapping, mapping_summary, verify_source_csv,
+            )
+            mapping, mapping_sha256, mapping_path = load_mapping(args.msl_sequence_map)
+            source_csv_sha256 = verify_source_csv(mapping, data_path)
+            frame = annotate_frame(frame, train_length, mapping)
         training_provenance = _capture_training_provenance(
             args, args.startup_script, data_path, metadata_path, metadata_row, frame, train_length)
+        if args.msl_sequence_map:
+            training_provenance.setdefault("source_data", {})["sequence_boundary_mapping"] = mapping_summary(
+                mapping, mapping_sha256, mapping_path)
+            training_provenance["source_data"]["sequence_boundary_mapping"]["verified_csv_sha256"] = source_csv_sha256
         kwargs = dict(seed=args.seed, seq_len=args.seq_len, pattern_len=args.pattern_len,
                       hidden_dim=args.hidden_dim, batch_size=args.batch_size,
                       stage1_epochs=args.stage1_epochs, stage2_epochs=args.stage2_epochs,

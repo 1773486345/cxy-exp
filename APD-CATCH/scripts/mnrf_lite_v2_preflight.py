@@ -87,7 +87,7 @@ def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
               encoding_batch_size: int = 0, evolution_dim: int = None,
               pattern_dim: int = None, relation_dim: int = None, view_dim: int = 8,
               root: Path = ROOT, output_dir: str = "", mode: str = "full_gmm",
-              data_root: str = ""):
+              data_root: str = "", msl_sequence_map: str = ""):
     if source == "large_detect":
         folder = Path(data_root).expanduser().resolve() if data_root else root / "dataset/anomaly_detect"
         meta_path = folder / "DETECT_META.csv"
@@ -126,6 +126,16 @@ def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
     except Exception as error:
         raise ValueError(f"task={task} source={source}: invalid MNRF preflight configuration: {error}") from error
     frame = _load_task_read_only(source, folder, task)
+    boundary_mapping = None
+    boundary_mapping_sha256 = None
+    boundary_mapping_path = None
+    if msl_sequence_map:
+        if task != "MSL" or source != "large_detect":
+            raise ValueError("--msl-sequence-map is only valid for the large_detect MSL task")
+        from scripts.mnrf_msl_sequence_boundaries import annotate_frame, load_mapping, verify_source_csv
+        boundary_mapping, boundary_mapping_sha256, boundary_mapping_path = load_mapping(msl_sequence_map)
+        verify_source_csv(boundary_mapping, data_path)
+        frame = annotate_frame(frame, train_length, boundary_mapping)
     if "label" not in {str(column).lower() for column in frame.columns}:
         raise ValueError(f"task={task} source={source}: parsed series has no label column")
     label_column = next(column for column in frame.columns if str(column).lower() == "label")
@@ -178,6 +188,10 @@ def preflight(task: str, source: str, batch_size: int = 64, seq_len: int = 128,
           f"encoding_batch_size={min(config.batch_size, config.encoding_batch_size or config.batch_size)}")
     print(f"branch_dimensions={config.layout.dimensions} F={config.layout.total_dim} layout={config.layout.to_dict()}")
     print(f"external_train_boundary={train_length} total_rows={len(frame)}")
+    if boundary_mapping is not None:
+        print(f"msl_sequence_mapping={boundary_mapping_path} sha256={boundary_mapping_sha256} "
+              f"channels={len(boundary_mapping['channels'])} train_sequences={len(boundary_mapping['channels'])} "
+              f"test_sequences={len(boundary_mapping['channels'])}; all 55 features retained")
     print(f"train_segments={train_segments} continuity={train_audit} frozen_expected_interval_ns={expected_interval}")
     print(f"test_segments={test_segments} continuity={test_audit}")
     print(f"internal_purged_ranges={split} usable_windows={split_counts} test_usable_windows={test_windows}")
@@ -218,10 +232,13 @@ def main():
     parser.add_argument("--output-dir", default="", help="target run path used only for volume estimation")
     parser.add_argument("--data-root", default="", help="optional isolated large_detect root containing data/ and DETECT_META.csv")
     parser.add_argument("--mode", default="full_gmm", choices=("stage1", "full_gmm", "random_gmm", "select_gmm", "s_only", "flow"))
+    parser.add_argument("--msl-sequence-map", default="",
+                        help="verified MSL channel-row map; counts windows without crossing sequences")
     args = parser.parse_args()
     preflight(args.task, args.data_source, args.batch_size, args.seq_len, args.encoding_batch_size,
               args.evolution_dim, args.pattern_dim, args.relation_dim, args.view_dim,
-              output_dir=args.output_dir, mode=args.mode, data_root=args.data_root)
+              output_dir=args.output_dir, mode=args.mode, data_root=args.data_root,
+              msl_sequence_map=args.msl_sequence_map)
 
 
 if __name__ == "__main__":
