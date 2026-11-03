@@ -1,0 +1,81 @@
+{
+  "schema": "mnrf-masked-cold-start-verification-v1",
+  "batch": "benchmark-main-20261103T200322Z-851688",
+  "source_run_ids": {
+    "MSL": "full_gmm-full-20261021T112147Z-2470335",
+    "Creditcard": "full_gmm-full-20261024T115131Z-3977864",
+    "CICIDS": "full_gmm-full-20261024T115157Z-3980319"
+  },
+  "rules": {
+    "MSL": "C-1 test sequence history only; no T-9 train-tail history",
+    "Creditcard": "current observation retained; all history missing because entity/session continuity is unproven",
+    "CICIDS": "current observation retained; all history missing because entity/session continuity is unproven"
+  },
+  "published": {
+    "MSL": {
+      "status": "complete",
+      "official_test_points": 73729,
+      "old_valid_points": 73538,
+      "prefix_points": 191,
+      "prefix_alarm_points": 50,
+      "prefix_anomaly_points": 0,
+      "roc_auc": 0.6014954666619483,
+      "average_precision": 0.15767888837494964,
+      "benchmark_affiliation_f": 0.534397026525371,
+      "old_valid_roc_auc": 0.602445207747461,
+      "old_valid_average_precision": 0.1590062828565859,
+      "roc_auc_delta_vs_valid": -0.0009497410855131007,
+      "average_precision_delta_vs_valid": -0.001327393961636257,
+      "threshold": 2201.669311523398,
+      "source_saved_result_validation_scope": "bound-artifacts; full old-point GMM scoring was not repeated",
+      "old_valid_points_unchanged": true,
+      "encoder_endpoint_max_abs": 0.0,
+      "evaluation": "scores/MSL-masked-evaluation.json",
+      "score_artifact": "result/score/MNRF-Comparison-Adapter/MSL/benchmark-main-20261103T200322Z-851688-masked-history/results/aligned_scores.npz"
+    },
+    "CICIDS": {
+      "status": "complete",
+      "official_test_points": 85116,
+      "old_valid_points": 84925,
+      "prefix_points": 191,
+      "prefix_alarm_points": 191,
+      "prefix_anomaly_points": 5,
+      "roc_auc": 0.5668722311940759,
+      "average_precision": 0.004596446170512636,
+      "benchmark_affiliation_f": 0.2128682710765212,
+      "old_valid_roc_auc": 0.5388251328959158,
+      "old_valid_average_precision": 0.0009173981247266992,
+      "roc_auc_delta_vs_valid": 0.028047098298159917,
+      "average_precision_delta_vs_valid": 0.003679048045785936,
+      "threshold": 74.09978164672852,
+      "source_saved_result_validation_scope": "bound-artifacts; full old-point GMM scoring was not repeated",
+      "old_valid_points_unchanged": true,
+      "encoder_endpoint_max_abs": 0.0,
+      "evaluation": "scores/CICIDS-masked-evaluation.json",
+      "score_artifact": "result/score/MNRF-Comparison-Adapter/CICIDS/benchmark-main-20261103T200322Z-851688-masked-history/results/aligned_scores.npz"
+    }
+  },
+  "blocked": {
+    "Creditcard": {
+      "status": "blocked-endpoint-reproduction",
+      "prefix_points_attempted": 191,
+      "prefix_points_published": 0,
+      "prefix_points": 191,
+      "max_abs": 6.318092346191406e-06,
+      "rtol": 1e-05,
+      "atol": 1e-06,
+      "published_output": false,
+      "source_unchanged": true,
+      "reason": "The frozen encoder endpoint check failed before prefix publication; no score, metric or threshold was inferred."
+    }
+  },
+  "execution_boundary": {
+    "stage1_training": false,
+    "encoder_forward": true,
+    "gmm_fit": false,
+    "recalibration": false,
+    "threshold_search": false,
+    "baseline_rerun": false,
+    "source_mutation": false
+  }
+}

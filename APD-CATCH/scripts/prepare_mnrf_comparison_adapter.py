@@ -4,8 +4,9 @@
 The default modes are read-only inventory and plan generation.  ``score`` is
 an explicit deployment operation: it restores a completed MNRF GMM artifact,
 scores the already saved test feature cache, and writes a new valid-endpoint
-bundle without fitting, encoding, or recalibrating.  It never invents scores
-for the cold-start prefix.
+bundle without fitting, encoding, or recalibrating.  Separate explicit
+cold-start modes can run frozen encoder inference for missing prefixes under
+their declared continuity and mask policies.
 """
 
 from __future__ import annotations
@@ -17,11 +18,14 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 TASKS = ("PSM", "MSL", "GECCO", "Genesis", "NYC", "CalIt2", "Creditcard", "CICIDS")
 COMMON_BATCH = ROOT / "result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun"
 DEFAULT_OUTPUT = ROOT / "result/analysis/MNRF-Comparison-Adapter-20261102"
@@ -518,6 +522,61 @@ def evaluate(bundle: Path, source: Path, output: Path):
                 raise ValueError(f"cold-start changed an old valid {field} value")
         if not np.array_equal(bundle_compact["global"], test_global[bundle_compact["local"]]):
             raise ValueError("cold-start global coordinate mapping is inconsistent")
+        if adapter_manifest.get("masked_history"):
+            score_file = bundle / "results" / "aligned_scores.npz"
+            with np.load(score_file, allow_pickle=False) as masked_payload:
+                if "prefix_history_valid" not in masked_payload.files or "prefix_history_global_indices" not in masked_payload.files:
+                    raise ValueError("masked cold-start output lacks its history mask/coordinate fields")
+                history_valid = np.asarray(masked_payload["prefix_history_valid"], dtype=bool)
+                history_indices = np.asarray(masked_payload["prefix_history_global_indices"], dtype=np.int64)
+            if history_valid.ndim != 3 or history_indices.ndim != 2 or history_valid.shape[:2] != history_indices.shape:
+                raise ValueError("masked cold-start history fields have incompatible shapes")
+            if history_valid.shape[0] != len(prefix) or history_valid.shape[2] <= 0:
+                raise ValueError("masked cold-start history fields do not match prefix/variable dimensions")
+            if not np.array_equal(history_valid[:, -1, :], np.ones((len(prefix), history_valid.shape[2]), dtype=bool)):
+                raise ValueError("masked cold-start current observations are not all marked valid")
+            if np.any(history_valid & (history_indices[..., None] < 0)):
+                raise ValueError("masked cold-start valid history has a missing global coordinate")
+            if np.any((~history_valid) & (history_indices[..., None] >= 0)):
+                raise ValueError("masked cold-start invalid history has a global coordinate")
+            if adapter_manifest.get("prefix_history_valid_sha256") != hashlib.sha256(
+                    np.ascontiguousarray(history_valid).tobytes()).hexdigest():
+                raise ValueError("masked cold-start history-valid hash is stale")
+            if adapter_manifest.get("prefix_history_global_indices_sha256") != hashlib.sha256(
+                    np.ascontiguousarray(history_indices).tobytes()).hexdigest():
+                raise ValueError("masked cold-start history-coordinate hash is stale")
+            if str(adapter_manifest.get("task", "")) == "MSL":
+                _, sequence_rows = _load_msl_test_sequence_map()
+                c1 = next((row for row in sequence_rows if row["channel_id"] == "C-1"), None)
+                if (c1 is None or c1["test_local_start"] != 0
+                        or c1["test_global_start"] != int(test_global[0])
+                        or c1["test_local_stop"] > len(test_global)
+                        or int(test_global[c1["test_local_stop"] - 1]) + 1 != c1["test_global_stop"]):
+                    raise ValueError("masked MSL output has no matching C-1 source map")
+                for row_index, local_value in enumerate(prefix):
+                    local_value = int(local_value)
+                    if local_value >= c1["test_local_stop"]:
+                        raise ValueError("masked MSL prefix extends outside C-1")
+                    count = min(local_value, history_valid.shape[1] - 1)
+                    expected = np.full(history_valid.shape[1], -1, dtype=np.int64)
+                    if count:
+                        expected[-1-count:-1] = test_global[local_value-count:local_value]
+                    expected[-1] = test_global[local_value]
+                    if not np.array_equal(history_indices[row_index], expected):
+                        raise ValueError("masked MSL history coordinates do not map to C-1 test history")
+                    expected_valid = (expected >= 0)[:, None]
+                    if not np.array_equal(history_valid[row_index],
+                                          np.broadcast_to(expected_valid, history_valid[row_index].shape)):
+                        raise ValueError("masked MSL history-valid mask does not match C-1 coordinates")
+            else:
+                expected = np.full_like(history_indices, -1)
+                expected[:, -1] = test_global[prefix]
+                if not np.array_equal(history_indices, expected):
+                    raise ValueError("masked unknown-entity output must not read any historical coordinate")
+                expected_valid = np.zeros_like(history_valid)
+                expected_valid[:, -1, :] = True
+                if not np.array_equal(history_valid, expected_valid):
+                    raise ValueError("masked unknown-entity output must mark only current observations valid")
     else:
         for field in ("scores", "predictions", "local", "global", "times", "actual"):
             if not np.array_equal(source_compact[field], bundle_compact[field], equal_nan=True):
@@ -788,7 +847,67 @@ def _validate_prefix_windows(prefix, test_global, all_global, all_segments, all_
     return positions
 
 
-def score_cold_start(task: str, source: Path, output: Path):
+def _load_msl_test_sequence_map():
+    """Read the checked MSL channel map used by masked cold-start scoring."""
+    path = (ROOT / "result/analysis/MNRF-ViewProbe-ConditionalScore/"
+            "conditional-score-20261030T-run2/msl_test_sequence_map.csv")
+    if not path.is_file():
+        raise ValueError(f"MSL sequence map is missing: {path}")
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows or "channel_id" not in rows[0]:
+        raise ValueError("MSL sequence map has no channel_id column")
+    for row in rows:
+        for field in ("test_local_start", "test_local_stop", "test_global_start", "test_global_stop"):
+            row[field] = int(row[field])
+    return path, rows
+
+
+def _masked_prefix_windows(task, prefix, test_global, all_global, all_times, seq_len, normalized):
+    """Build zero-filled windows and explicit valid masks for prefix history."""
+    prefix = _strict_indices(prefix, "cold-start prefix_local_indices")
+    variables = int(normalized.shape[1])
+    windows = np.zeros((len(prefix), int(seq_len), variables), dtype=np.float32)
+    valid = np.zeros_like(windows, dtype=bool)
+    history_indices = np.full((len(prefix), int(seq_len)), -1, dtype=np.int64)
+    if task == "MSL":
+        map_path, rows = _load_msl_test_sequence_map()
+        c1 = next((row for row in rows if row["channel_id"] == "C-1"), None)
+        if c1 is None or c1["test_local_start"] != 0:
+            raise ValueError(f"MSL C-1 test sequence does not start at local 0: {map_path}")
+        if (c1["test_local_stop"] <= 0 or c1["test_local_stop"] > len(test_global)
+                or int(test_global[0]) != c1["test_global_start"]
+                or int(test_global[c1["test_local_stop"] - 1]) + 1 != c1["test_global_stop"]
+                or c1["test_global_stop"] - c1["test_global_start"] != c1["test_local_stop"]):
+            raise ValueError("MSL C-1 map does not match the frozen source test global coordinates")
+        if np.any(prefix >= c1["test_local_stop"]):
+            raise ValueError("MSL masked prefix extends beyond C-1 test sequence")
+    elif task not in {"Creditcard", "CICIDS"}:
+        raise ValueError(f"masked cold-start is not defined for {task}")
+    for row, local_value in enumerate(prefix):
+        local = int(local_value)
+        endpoint = int(test_global[local])
+        if endpoint < 0 or endpoint >= len(all_global):
+            raise ValueError(f"prefix endpoint {local} is outside the complete axis")
+        history_count = min(local, int(seq_len) - 1) if task == "MSL" else 0
+        if history_count:
+            source_local = np.arange(local - history_count, local, dtype=np.int64)
+            target_positions = np.arange(int(seq_len) - 1 - history_count, int(seq_len) - 1, dtype=np.int64)
+            source_global = np.asarray(test_global[source_local], dtype=np.int64)
+            if np.any(np.diff(source_global) != 1):
+                raise ValueError(f"MSL C-1 history for prefix endpoint {local} is not contiguous")
+            if np.any(np.diff(np.asarray(all_times[source_global], dtype=np.int64)) <= 0):
+                raise ValueError(f"MSL C-1 history for prefix endpoint {local} has invalid time order")
+            windows[row, target_positions] = np.asarray(normalized[source_global], dtype=np.float32)
+            valid[row, target_positions] = True
+            history_indices[row, target_positions] = source_global
+        windows[row, -1] = np.asarray(normalized[endpoint], dtype=np.float32)
+        valid[row, -1] = True
+        history_indices[row, -1] = endpoint
+    return windows, valid, history_indices
+
+
+def _score_cold_start(task: str, source: Path, output: Path, masked: bool = False):
     """Generate only the missing prefix with the frozen encoder and GMM.
 
     This is deliberately an explicit later operation.  It loads the validated
@@ -803,7 +922,7 @@ def score_cold_start(task: str, source: Path, output: Path):
     import torch
     source = source.resolve()
     task_record = _source_plan(task, source)
-    if task_record["cold_start_extension"]["status"] != "ready-frozen-forward":
+    if not masked and task_record["cold_start_extension"]["status"] != "ready-frozen-forward":
         raise ValueError(f"{task}: cold-start prefix is not legally scoreable: {task_record['cold_start_extension']['reason']}")
     with np.load(source / "analysis_inputs.npz", allow_pickle=False) as inputs:
         test_global = _strict_indices(inputs["test_global_indices"], f"{task} test_global_indices")
@@ -823,22 +942,40 @@ def score_cold_start(task: str, source: Path, output: Path):
         if len(prefix) == 0:
             raise ValueError(f"{task}: no prefix coordinates require cold-start generation")
         seq_len = int(task_record["seq_len"])
-        positions = _validate_prefix_windows(prefix, test_global, all_global,
-                                              all_segments, all_times, seq_len)
+        prefix_global_indices = [int(test_global[local]) for local in prefix]
+        if masked:
+            # Masked mode never borrows the train tail or an unproven entity.
+            # The window builder below supplies the current row only (or the
+            # verified C-1 test history for MSL).
+            positions = prefix_global_indices
+        else:
+            positions = _validate_prefix_windows(prefix, test_global, all_global,
+                                                  all_segments, all_times, seq_len)
 
-        probe = load_probe(source, device="cpu")
+        if task_record.get("source_status") != "complete":
+            raise ValueError(f"{task}: source run is not complete: {task_record.get('source_status')}")
+        source_score_path = source / "results" / "aligned_scores.npz"
+        if not source_score_path.is_file():
+            raise ValueError(f"{task}: source aligned score artifact is missing")
+        source_score_hash = _sha256(source_score_path)
+        probe = load_probe(source, device="cpu",
+                           validation_scope="bound-artifacts" if masked else "full")
         # The standalone adapter process must honor the frozen source's CPU
         # budget too; load_probe does not run fit(), where ViewProbe normally
         # applies this setting.
         torch.set_num_threads(int(probe.config.cpu_threads))
-        # Reproduce the already-saved endpoint score before combining a prefix.
-        # This is an in-memory cache/GMM check, not a new fit or calibration.
+        # The legacy path reproduces every cached endpoint.  Masked mode uses
+        # the source score bytes/coordinate binding and a bounded encoder
+        # endpoint check below; repeating the full GMM pass would add no new
+        # evidence and can take hours on the shared CPU quota.
         probe._log_event = lambda *args, **kwargs: None
         with np.load(source / "results/aligned_scores.npz", allow_pickle=False) as old:
             old_scores = np.asarray(old["scores"])
-            restored = probe.score_cached_test()
-            if not np.array_equal(np.asarray(restored["time_indices"]), np.asarray(old["time_indices"])) or not np.allclose(restored["scores"], old_scores, rtol=0, atol=1e-12):
-                raise ValueError(f"{task}: existing valid endpoint score cannot be reproduced; cold-start stopped")
+            if not masked:
+                restored = probe.score_cached_test()
+                if (not np.array_equal(np.asarray(restored["time_indices"]), np.asarray(old["time_indices"]))
+                        or not np.allclose(restored["scores"], old_scores, rtol=0, atol=1e-12)):
+                    raise ValueError(f"{task}: existing valid endpoint score cannot be reproduced; cold-start stopped")
 
         checkpoint = source / "checkpoints" / "best_encoder.pt"
         source_manifest = _json(source / "probe_manifest.json")
@@ -873,12 +1010,23 @@ def score_cold_start(task: str, source: Path, output: Path):
         features = np.empty((len(prefix), len(source_manifest["variable_names"]),
                              int(source_manifest.get("cache_feature_dim", probe.config.layout.total_dim))), dtype=np.float32)
         batch_size = max(1, min(int(probe.config.batch_size), 256))
+        masked_windows = masked_valid = history_indices = None
+        if masked:
+            masked_windows, masked_valid, history_indices = _masked_prefix_windows(
+                task, prefix, test_global, all_global, all_times, seq_len, normalized)
         with torch.no_grad():
             for begin in range(0, len(positions), batch_size):
                 batch_endpoints = positions[begin:begin + batch_size]
-                windows = np.stack([normalized[e - seq_len + 1:e + 1] for e in batch_endpoints])
-                values = trainer.encoder.encode_views(torch.as_tensor(
-                    windows, dtype=torch.float32, device=encoder_device))[
+                if masked:
+                    windows = masked_windows[begin:begin + len(batch_endpoints)]
+                    valid_window = masked_valid[begin:begin + len(batch_endpoints)]
+                else:
+                    windows = np.stack([normalized[e - seq_len + 1:e + 1] for e in batch_endpoints])
+                    valid_window = None
+                values = trainer.encoder.encode_views(
+                    torch.as_tensor(windows, dtype=torch.float32, device=encoder_device),
+                    valid=(torch.as_tensor(valid_window, dtype=torch.bool, device=encoder_device)
+                           if valid_window is not None else None))[
                     "features"].detach().cpu().numpy().astype(np.float32, copy=False)
                 features[begin:begin + len(values)] = values
         # Re-encode a bounded set of already-saved endpoints with the newly
@@ -936,6 +1084,9 @@ def score_cold_start(task: str, source: Path, output: Path):
         combined, old_local = _assemble_cold_start_payload(
             old_payload, prefix, prefix_scores, prefix_predictions,
             test_global, test_times, test_labels, threshold)
+        if masked:
+            combined["prefix_history_valid"] = np.asarray(masked_valid, dtype=np.bool_)
+            combined["prefix_history_global_indices"] = np.asarray(history_indices, dtype=np.int64)
     finally:
         del normalized
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -946,14 +1097,16 @@ def score_cold_start(task: str, source: Path, output: Path):
         np.savez_compressed(output_scores_path, **combined)
         record = {"schema": "mnrf-comparison-adapter-cold-start-v1", "task": task,
                   "source_path": str(source), "source_run_id": source.name,
-                  "mode": "frozen-encoder-prefix-forward-gmm-no-fit-no-calibration",
-                  "prefix_local_indices": prefix.tolist(), "prefix_global_indices": [int(x) for x in positions],
+                  "mode": ("frozen-encoder-prefix-forward-gmm-masked-history-no-fit-no-calibration"
+                            if masked else "frozen-encoder-prefix-forward-gmm-no-fit-no-calibration"),
+                  "prefix_local_indices": prefix.tolist(), "prefix_global_indices": prefix_global_indices,
                   "prefix_count": int(len(prefix)), "threshold_reused": threshold,
                   "input_statistics_sha256": _sha256(source / "input_statistics.npz"),
                   "checkpoint_sha256": _sha256(checkpoint),
-                  "source_aligned_scores_sha256": _sha256(source / "results/aligned_scores.npz"),
+                  "source_aligned_scores_sha256": source_score_hash,
                   "output_aligned_scores_sha256": _sha256(output_scores_path),
-                  "source_valid_endpoint_reproduction": True,
+                  "source_saved_result_validation_scope": ("bound-artifacts" if masked else "full-recompute"),
+                  "source_valid_endpoint_reproduction": not masked,
                   "encoder_endpoint_reproduction": {"checked": int(len(check_rows)),
                                                      "max_abs": max_abs, "rtol": 1e-5, "atol": 1e-6,
                                                      "device": encoder_device,
@@ -962,7 +1115,16 @@ def score_cold_start(task: str, source: Path, output: Path):
                   "old_valid_local_indices": old_local.tolist(),
                   "source_valid_mask_sha256": hashlib.sha256(
                       np.ascontiguousarray(old_payload["valid_mask"], dtype=bool).tobytes()).hexdigest(),
-                  "history_policy": "within-frozen-segment-only",
+                  "history_policy": ("MSL-C-1-test-sequence-only" if task == "MSL" and masked
+                                     else "current-observation-only-history-missing" if masked
+                                     else "within-frozen-segment-only"),
+                  "masked_history": bool(masked),
+                  "prefix_history_valid_sha256": (
+                      hashlib.sha256(np.ascontiguousarray(masked_valid).tobytes()).hexdigest()
+                      if masked else None),
+                  "prefix_history_global_indices_sha256": (
+                      hashlib.sha256(np.ascontiguousarray(history_indices).tobytes()).hexdigest()
+                      if masked else None),
                   "future_rows": 0, "noise_seed": int(probe.config.noise_seed),
                   "gmm_compute_dtype": probe.config.gmm_compute_dtype,
                   "no_training_fit_or_recalibration": True}
@@ -973,6 +1135,14 @@ def score_cold_start(task: str, source: Path, output: Path):
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
+
+
+def score_cold_start(task: str, source: Path, output: Path):
+    return _score_cold_start(task, source, output, masked=False)
+
+
+def score_cold_start_masked(task: str, source: Path, output: Path):
+    return _score_cold_start(task, source, output, masked=True)
 
 
 def synthetic_check():
@@ -1135,7 +1305,7 @@ def synthetic_cold_start_check():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("inventory", "plan", "common-compare", "score",
-                                            "score-cold-start", "evaluate", "synthetic"), required=True)
+                                            "score-cold-start", "score-cold-start-masked", "evaluate", "synthetic"), required=True)
     parser.add_argument("--task", choices=TASKS)
     parser.add_argument("--source-dir", type=Path)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
@@ -1154,6 +1324,11 @@ def main():
         if not args.task or not args.source_dir or not args.output_dir:
             parser.error("score-cold-start requires --task, --source-dir and --output-dir")
         print(json.dumps(score_cold_start(args.task, args.source_dir.resolve(), args.output_dir.resolve()),
+                         indent=2, sort_keys=True))
+    elif args.mode == "score-cold-start-masked":
+        if not args.task or not args.source_dir or not args.output_dir:
+            parser.error("score-cold-start-masked requires --task, --source-dir and --output-dir")
+        print(json.dumps(score_cold_start_masked(args.task, args.source_dir.resolve(), args.output_dir.resolve()),
                          indent=2, sort_keys=True))
     elif args.mode == "score":
         if not args.task or not args.source_dir or not args.output_dir:

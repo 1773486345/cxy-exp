@@ -2640,7 +2640,7 @@ def organize_results(path):
     return _organize_results_transaction(path)
 
 
-def load_probe(path, device="cpu"):
+def load_probe(path, device="cpu", validation_scope="full"):
     path = Path(path)
     manifest_path = path / "probe_manifest.json"
     if not manifest_path.is_file():
@@ -3055,11 +3055,14 @@ def load_probe(path, device="cpu"):
         if not probe._loaded_test_cache.is_file() or not probe._loaded_test_endpoints.is_file():
             raise ValueError("view probe Flow source test cache is missing")
         probe._fitted = True
-    _validate_saved_results(probe, path, manifest)
+    if validation_scope not in {"full", "bound-artifacts"}:
+        raise ValueError("validation_scope must be 'full' or 'bound-artifacts'")
+    _validate_saved_results(probe, path, manifest,
+                            recompute_nll=(validation_scope == "full"))
     return probe
 
 
-def _validate_saved_results(probe, path, manifest):
+def _validate_saved_results(probe, path, manifest, recompute_nll=True):
     """Validate result arrays and recompute scores/metrics from frozen state."""
     result_dir = Path(path) / "results"
     metrics_path = result_dir / "metrics.json"
@@ -3124,12 +3127,13 @@ def _validate_saved_results(probe, path, manifest):
     nll = np.load(nll_path, mmap_mode="r")
     if nll.ndim != 2 or nll.shape != (len(scores), variables) or not np.isfinite(nll).all():
         raise ValueError("view probe saved NLL has invalid shape or values")
-    if probe._loaded_head == "gmm":
-        expected_nll = probe._gmm_scores(features)
-    else:
-        expected_nll = probe.trainer.per_variable_scores(features)
-    if expected_nll.shape != nll.shape or not np.allclose(expected_nll, nll, rtol=0, atol=1e-6):
-        raise ValueError("view probe saved NLL does not reproduce from the frozen head")
+    if recompute_nll:
+        if probe._loaded_head == "gmm":
+            expected_nll = probe._gmm_scores(features)
+        else:
+            expected_nll = probe.trainer.per_variable_scores(features)
+        if expected_nll.shape != nll.shape or not np.allclose(expected_nll, nll, rtol=0, atol=1e-6):
+            raise ValueError("view probe saved NLL does not reproduce from the frozen head")
     center = probe._probe_stats["center"]
     scale = probe._probe_stats["scale"]
     threshold = float(probe._probe_stats["threshold"])

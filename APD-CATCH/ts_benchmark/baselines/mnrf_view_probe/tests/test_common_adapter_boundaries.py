@@ -9,7 +9,9 @@ from scripts.run_mnrf_catch_common import (
     _validate_window_boundaries,
 )
 from scripts.export_mnrf_view_probe_common import _endpoints_for_ranges
-from scripts.prepare_mnrf_comparison_adapter import synthetic_cold_start_check
+from scripts.prepare_mnrf_comparison_adapter import (
+    _masked_prefix_windows, synthetic_cold_start_check,
+)
 
 
 def test_catch_windows_are_lazy_and_batch_bounded():
@@ -105,6 +107,43 @@ def test_cold_start_full_axis_benchmark_affiliation_and_old_point_binding():
     assert result["old_valid_unchanged"] is True
     assert result["cross_channel_rejected"] is True
     assert result["benchmark_affiliation_f"] is not None
+
+
+def test_masked_cold_start_window_and_msl_sequence_boundary(monkeypatch):
+    import scripts.prepare_mnrf_comparison_adapter as adapter
+
+    rows = [{"channel_id": "C-1", "test_local_start": 0, "test_local_stop": 5,
+             "test_global_start": 10, "test_global_stop": 15}]
+    monkeypatch.setattr(adapter, "_load_msl_test_sequence_map", lambda: (None, rows))
+    normalized = np.arange(30, dtype=np.float32).reshape(15, 2)
+    test_global = np.arange(10, 15, dtype=np.int64)
+    all_global = np.arange(15, dtype=np.int64)
+    times = np.arange(15, dtype=np.int64)
+
+    windows, valid, history = _masked_prefix_windows(
+        "MSL", np.array([0, 1, 3, 4]), test_global, all_global, times, 4, normalized)
+    # First point cannot borrow the preceding train/channel rows. Later points
+    # use only earlier C-1 test rows, and the prefix end has a complete window.
+    assert valid.sum(axis=(1, 2)).tolist() == [2, 4, 8, 8]
+    np.testing.assert_array_equal(history[0], [-1, -1, -1, 10])
+    np.testing.assert_array_equal(history[-1], [11, 12, 13, 14])
+    assert np.all(windows[0, :-1] == 0)
+    assert np.array_equal(windows[0, -1], normalized[10])
+    # The current value does not occur in the E history positions.
+    prefix_global = test_global[np.array([0, 1, 3, 4])]
+    observed_history = history[:, :-1]
+    assert np.all((observed_history < prefix_global[:, None]) | (observed_history < 0))
+    with pytest.raises(ValueError, match="beyond C-1"):
+        _masked_prefix_windows("MSL", np.array([5]), np.arange(10, 17),
+                               np.arange(17), np.arange(17), 4, normalized)
+
+    for task in ("Creditcard", "CICIDS"):
+        masked_windows, masked_valid, masked_history = _masked_prefix_windows(
+            task, np.array([0, 1, 4]), test_global, all_global, times, 4, normalized)
+        assert masked_valid.sum(axis=(1, 2)).tolist() == [2, 2, 2]
+        assert np.all(masked_valid[:, :-1] == 0)
+        assert np.all(masked_windows[:, :-1] == 0)
+        assert np.all(masked_history[:, :-1] == -1)
 
 
 def test_frozen_probe_cadence_is_used_when_short_entities_are_not_windows():
