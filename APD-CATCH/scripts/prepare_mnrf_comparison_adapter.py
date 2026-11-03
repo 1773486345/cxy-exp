@@ -375,7 +375,9 @@ def evaluate(bundle: Path, source: Path, output: Path):
     A same-length score file is not sufficient: every coordinate, time value,
     label, mask, threshold and source score bytes must be bound to the source.
     """
-    from sklearn.metrics import average_precision_score, precision_score, recall_score, f1_score
+    from sklearn.metrics import precision_score, recall_score, f1_score
+    from ts_benchmark.evaluation.metrics.classification_metrics_score import auc_roc, auc_pr
+    from ts_benchmark.evaluation.metrics.classification_metrics_label import affiliation_f as benchmark_affiliation_f
     manifest_path = bundle / "adapter_manifest.json"
     source_manifest_path = source / "probe_manifest.json"
     status_path = source / "run_status.json"
@@ -533,8 +535,8 @@ def evaluate(bundle: Path, source: Path, output: Path):
     s = scores
     result = {"valid_points": int(len(scores)), "total_test_points": int(len(labels)),
               "coverage": float(mask.sum() / max(len(labels), 1)), "threshold": threshold,
-              "roc_auc": float(__import__("sklearn.metrics", fromlist=["roc_auc_score"]).roc_auc_score(y, s)) if np.unique(y).size == 2 else None,
-              "average_precision": float(average_precision_score(y, s)) if np.unique(y).size else None,
+              "roc_auc": float(auc_roc(y, s)) if np.unique(y).size == 2 else None,
+              "average_precision": float(auc_pr(y, s)) if np.unique(y).size else None,
               "precision": float(precision_score(y, predictions, zero_division=0)) if len(y) else None,
               "recall": float(recall_score(y, predictions, zero_division=0)) if len(y) else None,
               "f1": float(f1_score(y, predictions, zero_division=0)) if len(y) else None,
@@ -545,6 +547,17 @@ def evaluate(bundle: Path, source: Path, output: Path):
               "source_run_id": source.name, "source_manifest_sha256": _sha256(source_manifest_path),
               "source_time_binding_checked": True, "source_label_binding_checked": True,
               "source_segment_binding_checked": test_segment_ids is not None}
+    full_axis = bool(np.all(mask))
+    result.update({"official_test_points": int(len(labels)),
+                   "scored_test_points": int(mask.sum()),
+                   "benchmark_affiliation_f": (float(benchmark_affiliation_f(
+                       labels.astype(np.int64, copy=False),
+                       np.asarray(bundle_compact["aligned_predictions"], dtype=np.int64)))
+                       if full_axis else None),
+                   "benchmark_affiliation_status": ("complete_official_test_axis" if full_axis
+                                                     else "not_computed_incomplete_axis"),
+                   "benchmark_affiliation_reason": (None if full_axis else
+                       "benchmark affiliation is not computed on a compact subset because gaps would be joined")})
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     return result
@@ -814,6 +827,10 @@ def score_cold_start(task: str, source: Path, output: Path):
                                               all_segments, all_times, seq_len)
 
         probe = load_probe(source, device="cpu")
+        # The standalone adapter process must honor the frozen source's CPU
+        # budget too; load_probe does not run fit(), where ViewProbe normally
+        # applies this setting.
+        torch.set_num_threads(int(probe.config.cpu_threads))
         # Reproduce the already-saved endpoint score before combining a prefix.
         # This is an in-memory cache/GMM check, not a new fit or calibration.
         probe._log_event = lambda *args, **kwargs: None
@@ -832,7 +849,10 @@ def score_cold_start(task: str, source: Path, output: Path):
         for key in ("resolved_layout", "selected_indices", "selected_dim"):
             config.pop(key, None)
         config["output_dir"] = str(source)
-        config["device"] = "cpu"
+        encoder_device = str(config.get("device", "cpu"))
+        if encoder_device.startswith("cuda") and not torch.cuda.is_available():
+            raise ValueError(f"{task}: source encoder device {encoder_device} is unavailable; refusing CPU fallback")
+        config["device"] = encoder_device
         encoder_probe = probe.__class__.from_kwargs(**config)
         trainer = encoder_probe._make_trainer(len(source_manifest.get("variable_names", [])))
         state = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -857,7 +877,8 @@ def score_cold_start(task: str, source: Path, output: Path):
             for begin in range(0, len(positions), batch_size):
                 batch_endpoints = positions[begin:begin + batch_size]
                 windows = np.stack([normalized[e - seq_len + 1:e + 1] for e in batch_endpoints])
-                values = trainer.encoder.encode_views(torch.as_tensor(windows, dtype=torch.float32))[
+                values = trainer.encoder.encode_views(torch.as_tensor(
+                    windows, dtype=torch.float32, device=encoder_device))[
                     "features"].detach().cpu().numpy().astype(np.float32, copy=False)
                 features[begin:begin + len(values)] = values
         # Re-encode a bounded set of already-saved endpoints with the newly
@@ -869,12 +890,36 @@ def score_cold_start(task: str, source: Path, output: Path):
             raise ValueError(f"{task}: test cache and endpoint arrays differ")
         check_rows = np.unique(np.linspace(0, len(saved_endpoints) - 1,
                                            num=min(8, len(saved_endpoints)), dtype=np.int64))
+        # Reproduce selected cached endpoints using their original extraction
+        # batch shapes.  GPU kernels can differ slightly for batch=8 versus the
+        # source's configured batch=128, even with identical weights/inputs.
+        checks_by_batch = {}
+        source_batch = min(int(config.get("batch_size", 128)),
+                           int(config.get("encoding_batch_size") or config.get("batch_size", 128)))
+        for row in check_rows:
+            checks_by_batch.setdefault(int(row) // source_batch, []).append(int(row))
+        check_max_abs = 0.0
+        check_passed = True
         with torch.no_grad():
-            check_windows = np.stack([normalized[int(saved_endpoints[i]) - seq_len + 1:int(saved_endpoints[i]) + 1]
-                                      for i in check_rows])
-            check_features = trainer.encoder.encode_views(torch.as_tensor(check_windows, dtype=torch.float32))["features"].detach().cpu().numpy()
-        max_abs = float(np.max(np.abs(check_features - np.asarray(test_cache[check_rows], dtype=np.float32)))) if len(check_rows) else 0.0
-        if not np.allclose(check_features, np.asarray(test_cache[check_rows]), rtol=1e-5, atol=1e-6):
+            for batch_index, selected_rows in checks_by_batch.items():
+                batch_start = batch_index * source_batch
+                batch_stop = min(batch_start + source_batch, len(saved_endpoints))
+                batch_rows = np.arange(batch_start, batch_stop, dtype=np.int64)
+                batch_windows = np.stack([
+                    normalized[int(saved_endpoints[i]) - seq_len + 1:int(saved_endpoints[i]) + 1]
+                    for i in batch_rows
+                ])
+                batch_features = trainer.encoder.encode_views(torch.as_tensor(
+                    batch_windows, dtype=torch.float32, device=encoder_device))["features"].detach().cpu().numpy()
+                positions = np.asarray(selected_rows, dtype=np.int64) - batch_start
+                actual = batch_features[positions]
+                expected = np.asarray(test_cache[np.asarray(selected_rows, dtype=np.int64)], dtype=np.float32)
+                delta = np.abs(actual - expected)
+                if delta.size:
+                    check_max_abs = max(check_max_abs, float(delta.max()))
+                check_passed = check_passed and bool(np.allclose(actual, expected, rtol=1e-5, atol=1e-6))
+        max_abs = check_max_abs
+        if not check_passed:
             raise ValueError(f"{task}: frozen encoder endpoint reproduction failed (max_abs={max_abs})")
 
         # GMM scores need the frozen feature statistics, not the trainer's
@@ -897,7 +942,8 @@ def score_cold_start(task: str, source: Path, output: Path):
     temporary = Path(tempfile.mkdtemp(prefix=f"{task}-cold-start-", dir=str(output.parent)))
     try:
         (temporary / "results").mkdir()
-        np.savez_compressed(temporary / "results" / "aligned_scores.npz", **combined)
+        output_scores_path = temporary / "results" / "aligned_scores.npz"
+        np.savez_compressed(output_scores_path, **combined)
         record = {"schema": "mnrf-comparison-adapter-cold-start-v1", "task": task,
                   "source_path": str(source), "source_run_id": source.name,
                   "mode": "frozen-encoder-prefix-forward-gmm-no-fit-no-calibration",
@@ -906,9 +952,13 @@ def score_cold_start(task: str, source: Path, output: Path):
                   "input_statistics_sha256": _sha256(source / "input_statistics.npz"),
                   "checkpoint_sha256": _sha256(checkpoint),
                   "source_aligned_scores_sha256": _sha256(source / "results/aligned_scores.npz"),
+                  "output_aligned_scores_sha256": _sha256(output_scores_path),
                   "source_valid_endpoint_reproduction": True,
                   "encoder_endpoint_reproduction": {"checked": int(len(check_rows)),
-                                                     "max_abs": max_abs, "rtol": 1e-5, "atol": 1e-6},
+                                                     "max_abs": max_abs, "rtol": 1e-5, "atol": 1e-6,
+                                                     "device": encoder_device,
+                                                     "source_batch_size": source_batch,
+                                                     "source_batch_count": len(checks_by_batch)},
                   "old_valid_local_indices": old_local.tolist(),
                   "source_valid_mask_sha256": hashlib.sha256(
                       np.ascontiguousarray(old_payload["valid_mask"], dtype=bool).tobytes()).hexdigest(),
@@ -1058,6 +1108,13 @@ def synthetic_cold_start_check():
         report = root / "cold-evaluation.json"
         result = evaluate(output, source, report)
         assert result["new_valid_points"] == 2 and result["old_valid_points"] == 4
+        assert result["official_test_points"] == 6 and result["scored_test_points"] == 6
+        assert result["benchmark_affiliation_status"] == "complete_official_test_axis"
+        from ts_benchmark.evaluation.metrics.classification_metrics_label import affiliation_f
+        np.testing.assert_allclose(
+            result["benchmark_affiliation_f"],
+            affiliation_f(labels, payload["aligned_predictions"]), rtol=0, atol=0,
+        )
         with np.load(output_npz, allow_pickle=False) as saved:
             assert saved["scores"].shape == (6,) and saved["aligned_scores"].shape == (6,)
             assert np.array_equal(saved["scores"][2:], old_scores)
@@ -1071,6 +1128,7 @@ def synthetic_cold_start_check():
             raise AssertionError("cross-channel prefix history was accepted")
         return {"status": "passed", "old_valid_unchanged": True,
                 "new_prefix_points": 2, "evaluation": str(report),
+                "benchmark_affiliation_f": result["benchmark_affiliation_f"],
                 "cross_channel_rejected": True}
 
 

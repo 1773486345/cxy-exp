@@ -1,5 +1,13 @@
 # MNRF Comparison Adapter
 
+## 当前正式 benchmark 评价
+
+最新历史 Full GMM 官方测试轴评价位于：
+`result/analysis/MNRF-Benchmark-Main/benchmark-main-20261103T200322Z-851688/`。
+其中 PSM、GECCO、Genesis、NYC、旧 modulo-10 CalIt2 已完成全轴评价；MSL 因 T-9/C-1 跨通道边界、Creditcard 与 CICIDS 因无权威实体/session 连续性证据而保留 191 个未评分前缀。三者只列有效端点诊断，主表完整轴指标为空。此评价沿用各 Full 源保存的 q=.995 阈值，不是相同误报预算实验。
+
+common-protocol CATCH/IF/PCA 对照仍见本目录的 `common_comparison.csv`；它与论文 16 方法表分开。历史综合诊断保留于 `result/analysis/MNRF-Comparison-Diagnosis-20261102T125000Z/`。RawCount CalIt2 和 MSL 分段四格属于各自独立修正/诊断实验，不替代下面表格中的历史 Full。
+
 这是只读评价适配入口的实际盘点结果。`common_output_inventory.json` 已按 `task_status.json` 记录检查八组 `CATCH-common`、`IsolationForest`、`PCA` 输出：24/24 个 `results/aligned_scores.npz` 存在、有限、严格执行 `score > threshold`，其分数摘要、`common_manifest.json`/`evidence/baseline.json` 和 `common_contract.json` 均已核对。检查的共同协议根目录为：
 
 ```text
@@ -7,7 +15,7 @@ result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/
 result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/
 ```
 
-`mnrf_evaluation_plan.json` 固化了八个注册 Full 源、有效端点、冷启动前缀、段边界检查和需要的训练侧文件。已保存端点只在其自身冻结 segment 内使用历史；没有显式实体边界字段的任务不会被解释为已经证明了跨行 session 连续性。MSL 明确标为 `blocked-known-cross-channel`：不能借 T-9 的训练尾部给 C-1 的测试开头补历史。Creditcard/CICIDS 标为 `blocked-entity-session-unproven`，因为当前证据没有权威实体/session 边界。PSM、GECCO、Genesis、NYC、CalIt2 的计划只在全局坐标连续、时间单调且窗口不跨冻结 segment 时标为 `ready-frozen-forward`，这仍是窗口级证据，不是跨实体连续性的证明。冷启动前缀没有保存特征，计划状态只是后续人工前向的准入结果，当前没有补造分数。所有八组均无尾部未评分点。
+`mnrf_evaluation_plan.json` 固化了八个注册 Full 源、有效端点、冷启动前缀、段边界检查和需要的训练侧文件。已保存端点只在其自身冻结 segment 内使用历史；没有显式实体边界字段的任务不会被解释为已经证明了跨行 session 连续性。MSL 明确标为 `blocked-known-cross-channel`：不能借 T-9 的训练尾部给 C-1 的测试开头补历史。Creditcard/CICIDS 标为 `blocked-entity-session-unproven`，因为当前证据没有权威实体/session 边界。PSM、GECCO、Genesis、NYC、CalIt2 的准入只证明窗口位于冻结 segment 内且坐标/时间连续，不证明跨实体连续性。源本身仍没有前缀特征；五组新增分数保存在独立 benchmark 批次中，未写回源。所有八组均无尾部未评分点。
 
 ## 入口
 
@@ -53,16 +61,16 @@ python scripts/prepare_mnrf_comparison_adapter.py \
 
 | 数据集 | source Run ID | seq_len | 前缀规则 |
 |---|---|---:|---|
-| PSM | `full_gmm-full-20261024T115119Z-3976714` | 192 | 同 frozen segment；191 点待补算 |
+| PSM | `full_gmm-full-20261024T115119Z-3976714` | 192 | 同 frozen segment；191 点已在独立 benchmark 批次补算 |
 | MSL | `full_gmm-full-20261021T112147Z-2470335` | 192 | `blocked-known-cross-channel`；191 点禁止借 T-9 历史补算 |
-| GECCO | `full_gmm-full-20261020T204951Z-1642355` | 96 | 同 frozen segment；95 点待补算 |
-| Genesis | `full_gmm-full-20261020T205005Z-1645522` | 192 | 同 frozen segment；191 点待补算 |
-| NYC | `full_gmm-full-20261020T211341Z-1931786` | 192 | 同 frozen segment；191 点待补算 |
-| CalIt2 | `full_gmm-full-20261021T112212Z-2474004` | 192 | 同 frozen segment；191 点待补算 |
+| GECCO | `full_gmm-full-20261020T204951Z-1642355` | 96 | 同 frozen segment；95 点已在独立 benchmark 批次补算 |
+| Genesis | `full_gmm-full-20261020T205005Z-1645522` | 192 | 同 frozen segment；191 点已在独立 benchmark 批次补算 |
+| NYC | `full_gmm-full-20261020T211341Z-1931786` | 192 | 同 frozen segment；191 点已在独立 benchmark 批次补算 |
+| CalIt2 | `full_gmm-full-20261021T112212Z-2474004` | 192 | 同 frozen segment；191 点已在独立 benchmark 批次补算（旧 modulo-10） |
 | Creditcard | `full_gmm-full-20261024T115131Z-3977864` | 192 | `blocked-entity-session-unproven`；191 点待边界证据 |
 | CICIDS | `full_gmm-full-20261024T115157Z-3980319` | 192 | `blocked-entity-session-unproven`；191 点待边界证据 |
 
-以下是后续经人工授权后才执行的冻结评分命令。它们只加载指定 Full 的已保存 GMM、标准化统计、固定噪声和 test feature cache；不拟合、不重新校准，并输出到新目录。当前本轮未执行：
+以下为历史有效端点检查命令形式，仅用于复现对应 valid-endpoint 评分包；本次主 benchmark 使用了已注册源和独立的完整轴输出，没有把这些短数组当作全轴结果：
 
 ```bash
 python scripts/prepare_mnrf_comparison_adapter.py --mode score --task PSM --source-dir result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714 --output-dir result/score/MNRF-Comparison-Adapter/PSM/valid-endpoint
@@ -77,16 +85,15 @@ python scripts/prepare_mnrf_comparison_adapter.py --mode score --task CICIDS --s
 
 The `score` mode stops if the frozen-cache score differs from the source's existing score at any endpoint. It never converts the valid-endpoint bundle into an official full-test-axis result. A future full-axis run would require a separately approved warm-up policy and newly encoded prefix features.
 
-## 冷启动补算入口（本轮未执行）
+## 冷启动补算状态
 
-`score-cold-start` 是后续人工授权后才运行的真实前缀补算入口。它加载已验证的
+`score-cold-start` 是真实前缀补算入口。它加载已验证的
 冻结 encoder checkpoint、`input_statistics.npz`、GMM、特征统计和固定噪声，在同一
 frozen segment 内按当前/历史窗口前向生成缺失前缀特征，再复用原阈值评分。入口会
 先在内存中复现全部已保存有效端点；任何端点不一致即停止。它不训练、不拟合 GMM、
-不重新校准，也不改写 Full 源。当前计划中的缺失前缀为 PSM/MSL/Genesis/NYC/
-CalIt2/Creditcard/CICIDS 各 191 点，GECCO 95 点。
+不重新校准，也不改写 Full 源。本次已在固定 Run ID 上执行 PSM/GECCO/Genesis/NYC/旧 CalIt2，分别补入 191/95/191/191/191 点并完成严格评价。MSL 因训练尾部 T-9 与测试开头 C-1 为不同遥测通道而拒绝；Creditcard/CICIDS 因行相邻不能证明同实体/session 而拒绝。三个阻塞任务没有生成补分。
 
-示例（一次只处理一个数据集，输出必须是新目录）：
+历史示例（一次只处理一个数据集，输出必须是新目录；已完成任务不要重复运行）：
 
 ```bash
 python scripts/prepare_mnrf_comparison_adapter.py --mode score-cold-start \

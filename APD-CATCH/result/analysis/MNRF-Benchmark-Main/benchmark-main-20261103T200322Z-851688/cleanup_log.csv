@@ -1,0 +1,13 @@
+path,du_bytes_before,action,reason
+result/analysis/MNRF-Comparison-Diagnosis-20261101T140000Z,148211,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261101T150000Z,184555,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261101T151500Z,233314,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261101T161500Z,717825,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261101T162000Z,739895,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261101T163000Z,740220,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261101T164000Z,830481,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261101T164500Z,830545,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261102T120000Z,1279773,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261102T123000Z,1281651,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-Comparison-Diagnosis-20261102T124000Z,1283025,deleted,Obsolete generated report only; no unique raw evidence or run dependency
+result/analysis/MNRF-FrozenDecoder-Analysis-20261102,4096,rmdir,Empty obsolete directory; zero regular-file payload

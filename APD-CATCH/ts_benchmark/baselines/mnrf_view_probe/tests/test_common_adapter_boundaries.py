@@ -9,6 +9,7 @@ from scripts.run_mnrf_catch_common import (
     _validate_window_boundaries,
 )
 from scripts.export_mnrf_view_probe_common import _endpoints_for_ranges
+from scripts.prepare_mnrf_comparison_adapter import synthetic_cold_start_check
 
 
 def test_catch_windows_are_lazy_and_batch_bounded():
@@ -96,6 +97,14 @@ def test_common_contract_derives_different_context_endpoints_without_rewriting_r
     assert train[0] == 127 and catch_train[0] == 191
     assert catch_train[-1] == 299
     assert np.all(catch_train >= train[0])
+
+
+def test_cold_start_full_axis_benchmark_affiliation_and_old_point_binding():
+    result = synthetic_cold_start_check()
+    assert result["status"] == "passed"
+    assert result["old_valid_unchanged"] is True
+    assert result["cross_channel_rejected"] is True
+    assert result["benchmark_affiliation_f"] is not None
 
 
 def test_frozen_probe_cadence_is_used_when_short_entities_are_not_windows():
