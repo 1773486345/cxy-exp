@@ -33,6 +33,9 @@ class AnomalyDetect(Strategy):
         super().__init__(strategy_config, evaluator)
         self.model = None
         self.data_lens = None
+        # UnFixed strategies reset the test frame index for model input.  Keep
+        # the offset so serialized artifacts can recover official coordinates.
+        self.test_coordinate_offset = 0
 
 
     def execute(self, series_name: str, model_factory: ModelFactory) -> Any:
@@ -67,6 +70,7 @@ class AnomalyDetect(Strategy):
 
             single_series_results_list = []
             for ratio, predict_label in predict_labels.items():
+                raw_output = np.asarray(predict_label).reshape(-1).copy()
                 remaining_length = len(actual_label) - len(predict_label)
                 print(remaining_length)
                 # Pad the predict_label array with zeros at the end
@@ -90,7 +94,22 @@ class AnomalyDetect(Strategy):
                 )
                 print(single_series_results)
 
-                inference_data = [predict_label, another]
+                save_artifacts = bool(
+                    self.strategy_config.get("save_anomaly_artifacts", False)
+                )
+                if save_artifacts:
+                    inference_data = {
+                        "schema_version": 1,
+                        "kind": self.strategy_config.get("artifact_kind", "unknown"),
+                        "coordinate_offset": int(self.test_coordinate_offset),
+                        "raw_values": raw_output,
+                        "evaluated_values": np.asarray(predict_label).reshape(-1),
+                        "secondary_output": another,
+                        "raw_output_length": int(raw_output.size),
+                        "evaluated_length": int(len(actual_label)),
+                    }
+                else:
+                    inference_data = [predict_label, another]
                 actual_data_pickle = pickle.dumps(test_label)
                 actual_data_pickle = base64.b64encode(actual_data_pickle).decode("utf-8")
 
@@ -103,8 +122,8 @@ class AnomalyDetect(Strategy):
                     end_fit_time - start_fit_time,
                     end_inference_time - end_fit_time,
                     ratio,
-                    '',
-                    '',
+                    actual_data_pickle if save_artifacts else '',
+                    inference_data_pickle if save_artifacts else '',
                     log_info,
                 ]
                 single_series_results_list.append(single_series_results)
@@ -143,6 +162,7 @@ class FixedDetectScore(AnomalyDetect):
     REQUIRED_FIELDS = ["train_test_split"]
 
     def split_data(self, series_name):
+        self.test_coordinate_offset = 0
         data = DataPool().get_pool().get_series(series_name)
         self.data_lens = len(data)
         train_length = int(self.strategy_config["train_test_split"] * self.data_lens)
@@ -169,6 +189,7 @@ class FixedDetectLabel(AnomalyDetect):
     REQUIRED_FIELDS = ["train_test_split"]
 
     def split_data(self, series_name: str):
+        self.test_coordinate_offset = 0
         data = DataPool().get_pool().get_series(series_name)
         self.data_lens = len(data)
         train_length = int(self.strategy_config["train_test_split"] * self.data_lens)
@@ -198,6 +219,7 @@ class UnFixedDetectScore(AnomalyDetect):
         train_length = int(
             DataPool().get_pool().get_series_meta_info(series_name)["train_lens"].item()
         )
+        self.test_coordinate_offset = train_length
         train, test = split_before(data, train_length)
         train_data, train_label = (
             train.loc[:, train.columns != "label"],
@@ -225,6 +247,7 @@ class UnFixedDetectLabel(AnomalyDetect):
         train_length = int(
             DataPool().get_pool().get_series_meta_info(series_name)["train_lens"].item()
         )
+        self.test_coordinate_offset = train_length
         train, test = split_before(data, train_length)
         train_data, train_label = (
             train.loc[:, train.columns != "label"],
@@ -247,6 +270,7 @@ class UnFixedDetectLabel(AnomalyDetect):
 
 class AllDetectScore(AnomalyDetect):
     def split_data(self, series_name):
+        self.test_coordinate_offset = 0
         data = DataPool().get_pool().get_series(series_name)
         train = data
         test = data
@@ -267,6 +291,7 @@ class AllDetectScore(AnomalyDetect):
 
 class AllDetectLabel(AnomalyDetect):
     def split_data(self, series_name):
+        self.test_coordinate_offset = 0
         data = DataPool().get_pool().get_series(series_name)
         train = data
         test = data

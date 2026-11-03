@@ -1,0 +1,17 @@
+field,meaning,required_before_comparison
+dataset,PSM or MSL,true
+method,registered method name,true
+entry_mode,detect_score or detect_label,true
+source_run_id,unique run manifest identity,true
+data_version,data and metadata SHA256,true
+global_indices,sorted original row coordinates,true
+time_values,source timestamp at each coordinate,true
+labels,binary labels bound to coordinates,true
+valid_mask,coordinates included in this artifact,true
+scores,continuous higher-is-anomalous values for score runs,ROC-AUC/AP only
+threshold,method-owned threshold and provenance,alert metrics only
+precision,strict score greater than threshold,alert metrics only
+recall,strict score greater than threshold,alert metrics only
+fpr,normal-point denominator on the same coordinates,alert metrics only
+affiliation_f,benchmark label implementation with explicit boundary protocol,only when boundaries are bound
+status,verified/blocked/invalid,verified only enters comparison

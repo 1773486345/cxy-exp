@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "scope": ["PSM", "MSL"],
+  "seed": 2021,
+  "entries": [
+    {
+      "method": "DAGMM",
+      "status": "static_integrated",
+      "model_name": "merlion.DAGMM",
+      "upstream": "salesforce-merlion==1.3.1",
+      "license": "Merlion BSD-3-Clause source distribution",
+      "task": "unsupervised joint autoencoder and GMM sample-energy detection",
+      "score_direction": "higher_is_anomalous",
+      "score_entry": "scripts/run_archived_baseline.py",
+      "label_entry": "scripts/run_archived_baseline.py",
+      "native_threshold": "Merlion postrule/calibrator; must be read from the saved native record",
+      "hyperparameters": {
+        "gmm_k": 3,
+        "hidden_size": 5,
+        "sequence_len": 1,
+        "lambda_energy": 0.1,
+        "lambda_cov_diag": 0.005,
+        "lr": 0.001,
+        "batch_size": 256,
+        "num_epochs": 10,
+        "max_score": 1000,
+        "enable_calibrator": true,
+        "enable_threshold": true
+      }
+    },
+    {
+      "method": "GANF",
+      "status": "blocked_source_and_scope",
+      "upstream": "https://github.com/EnyanDai/GANF",
+      "reason": "No repository copy or APD-CATCH adapter; upstream README scope is SWaT/Metr-LA/PMU, not PSM/MSL, and reuse license was not verified."
+    },
+    {
+      "method": "MTGFlow",
+      "status": "blocked_environment_adapter",
+      "upstream": "https://github.com/zqhang/MTGFLOW",
+      "license": "MIT",
+      "reason": "Official code supports PSM/MSL but requires an old Python 3.8.5/Torch 1.7.1/Numpy 1.19.2 stack; no isolated environment or adapter is present."
+    },
+    {
+      "method": "tcNF",
+      "status": "blocked_identity_and_license",
+      "reason": "The name identifies multiple works; the candidate HistCondFlow repository has no verified reuse license and no PSM/MSL adapter in this checkout."
+    },
+    {
+      "method": "OmniAnomaly",
+      "status": "blocked_environment_adapter",
+      "upstream": "https://github.com/NetManAIOps/OmniAnomaly",
+      "license": "MIT",
+      "reason": "The author implementation is an old TensorFlow-era stack; TensorFlow is absent from catch_env and no APD-CATCH adapter is present."
+    },
+    {
+      "method": "ConFlow",
+      "status": "blocked_source",
+      "reason": "No unique official implementation and no verified APD-CATCH-compatible adapter was found; the name is used by unrelated methods."
+    },
+    {
+      "method": "AFNF",
+      "status": "blocked_source",
+      "reason": "The paper describes a conditional factorized normalizing flow, but no trusted public implementation or adapter is available in this checkout."
+    }
+  ]
+}

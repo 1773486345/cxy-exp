@@ -1,0 +1,15 @@
+method,dataset,score_entry,label_entry,status,implementation_or_source,license_or_dependency,score_unit,blocking_reason
+DAGMM,PSM,ready_static,ready_static,static_checked,merlion.DAGMM,Merlion 1.3.1 BSD-3-Clause,point sample energy,manual run required
+DAGMM,MSL,ready_static,ready_static,static_checked,merlion.DAGMM,Merlion 1.3.1 BSD-3-Clause,point sample energy,manual run required
+GANF,PSM,none,none,blocked,EnyanDai/GANF,license not verified,upstream time point or window score,scope and adapter unavailable
+GANF,MSL,none,none,blocked,EnyanDai/GANF,license not verified,upstream time point or window score,scope and adapter unavailable
+MTGFlow,PSM,none,none,blocked,zqhang/MTGFLOW,MIT; legacy Torch 1.7.1,flow sample likelihood,isolated environment and adapter unavailable
+MTGFlow,MSL,none,none,blocked,zqhang/MTGFLOW,MIT; legacy Torch 1.7.1,flow sample likelihood,isolated environment and adapter unavailable
+tcNF,PSM,none,none,blocked,identity unresolved,license not verified,conditional flow score,official source and adapter unavailable
+tcNF,MSL,none,none,blocked,identity unresolved,license not verified,conditional flow score,official source and adapter unavailable
+OmniAnomaly,PSM,none,none,blocked,NetManAIOps/OmniAnomaly,MIT; TensorFlow absent,negative log likelihood,legacy TensorFlow adapter unavailable
+OmniAnomaly,MSL,none,none,blocked,NetManAIOps/OmniAnomaly,MIT; TensorFlow absent,negative log likelihood,legacy TensorFlow adapter unavailable
+ConFlow,PSM,none,none,blocked,identity unresolved,unknown,conditional flow score,unique implementation unavailable
+ConFlow,MSL,none,none,blocked,identity unresolved,unknown,conditional flow score,unique implementation unavailable
+AFNF,PSM,none,none,blocked,public implementation not found,unknown,conditional factorized flow score,adapter unavailable
+AFNF,MSL,none,none,blocked,public implementation not found,unknown,conditional factorized flow score,adapter unavailable
