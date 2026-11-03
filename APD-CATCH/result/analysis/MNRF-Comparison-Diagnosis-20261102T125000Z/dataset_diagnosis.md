@@ -19,7 +19,7 @@ This is a read-only synthesis of the existing Full GMM and frozen E/R CSVs. No m
 
 ### PSM
 
-[已完成] Full ranking is useful (AUC=0.744926, AP=0.437281, P/R/F1=0.459202/0.602757/0.521276, FPR=0.273502, TP/FP/FN/TN=14694/17305/9684/45967, segments hit/scored=48/71). [已完成] FullDiagnostic 的协方差/max-mean 对照和正常高分变量归因已保存；R squared-residual 的排序较强但固定阈值 FPR 较高。 [尚未证实] E/R 是否解释 Full 的增益仍没有因果证据。 [真正新增验证] 只需在同一分数上预注册校准尾部审计，不改变 AUC/AP。
+[已完成] 历史 Full 有效点评价为 AUC=0.744926、AP=0.437281，保存阈值报警为 P/R/F1=0.459202/0.602757/0.521276、FPR=27.35%（TP/FP/FN/TN=14694/17305/9684/45967；segments hit/scored=48/71）。FullDiagnostic 的协方差/max-mean 对照、正常高分变量归因和校准上尾审计均已保存。新增同点低误报诊断表明，当前分数在严格低 FPR 区域的排序尾部明显弱于可用基线；提高阈值只能沿当前分数排序曲线移动，不能补回这些预算下的召回差距。E/R 是否解释 Full 增益仍无因果证据。
 
 Evidence record: `reference_metrics.csv` Full row with source `full_gmm-full-20261024T115119Z-3976714`; supporting files are `variable_metrics.csv`, `max_attribution.csv`, and `scale_diagnostics.csv` in the frozen analysis directory.
 
@@ -34,9 +34,22 @@ Existing diagnostic evidence:
 - FullDiagnostic calibration evidence: q=.995 tail has 66 points, 0 label anomalies and 0 contextual anomalies; this affects alarm interpretation, not ranking metrics.
 - ConditionalScore post-hoc row: joint versus p(S,P|E,R) AP 0.4373->0.3633, AUC 0.7449->0.6934; it retains the source cache and is not a refit or proof of field causality.
 
+#### Low-FPR comparison on the same points
+
+This supplement uses the same 87,650 common test coordinates for all four methods (24,378 anomaly points, 63,272 normal points). Each cell reports `recall / actual FPR`; ties are kept whole and thresholds are selected post hoc using test labels solely to diagnose ranking, not as deployable thresholds.
+
+| FPR ceiling | MNRF-Full-GMM | CATCH-common | IsolationForest | PCA |
+|---:|---:|---:|---:|---:|
+| 0.1% | 0.07% / 0.0000% | 0.38% / 0.0980% | 2.22% / 0.0996% | 0.32% / 0.0996% |
+| 0.5% | 0.76% / 0.4963% | 2.14% / 0.4994% | 2.83% / 0.4994% | 1.49% / 0.4963% |
+| 1% | 1.38% / 0.9973% | 3.96% / 0.9973% | 3.80% / 0.9910% | 2.51% / 0.9910% |
+| 2% | 3.86% / 1.9977% | 6.74% / 1.9993% | 6.38% / 1.9946% | 14.38% / 1.9993% |
+
+At the 1% ceiling MNRF and CATCH-common both produce 631 false positives, but MNRF detects 337 anomalies versus CATCH-common's 966. The saved MNRF `q=0.995` alarm point is separate: on these same 87,650 points it has recall 60.28% and FPR 27.35% (14,694 TP, 17,305 FP). The threshold and curve details are in the [operating-point CSV](../MNRF-PSM-LowFPR/low-fpr-20261103T121447Z/psm_low_fpr_operating_points.csv) and [low-FPR recall curve](../MNRF-PSM-LowFPR/low-fpr-20261103T121447Z/psm_low_fpr_recall_curve.png). This is evidence about the current score ranking at a restricted error budget; it does not justify replacing its saved calibration threshold or selecting a new model from test labels.
+
 ### MSL
 
-[已完成] Full 的排序和固定阈值指标为 AUC=0.602445, AP=0.159006, P/R/F1=0.290260/0.077517/0.122358, FPR=0.022380, TP/FP/FN/TN=602/1472/7164/64300, segments hit/scored=13/36. [已完成] 27 条序列边界排除诊断及 col_0 目标列事后聚合均已保存（目标列 AP 0.1590→0.2792）；这不是按边界重新训练。 [尚未证实] 拼接边界与目标/条件混合对训练表示的因果影响。 [真正新增验证] 如需确认，应进行保留序列身份的边界感知重训，而不是把已完成排除诊断写成待完成。
+[已完成] 历史拼接 Full 的排序和固定阈值指标为 AUC=0.602445、AP=0.159006、P/R/F1=0.290260/0.077517/0.122358，FPR=0.022380（TP/FP/FN/TN=602/1472/7164/64300；segments hit/scored=13/36）。序列边界约束下的修正版训练及 `col_0` 评分也已完成，不能再列为待运行。
 
 Evidence record: `reference_metrics.csv` Full row with source `full_gmm-full-20261021T112147Z-2470335`; supporting files are `variable_metrics.csv`, `max_attribution.csv`, and `scale_diagnostics.csv` in the frozen analysis directory.
 
@@ -51,7 +64,9 @@ Existing diagnostic evidence:
 - FullDiagnostic calibration evidence: q=.995 tail has 29 points, 0 label anomalies and 0 contextual anomalies; this affects alarm interpretation, not ranking metrics.
 - ConditionalScore post-hoc row: joint versus p(S,P|E,R) AP 0.1590->0.1455, AUC 0.6024->0.5656; it retains the source cache and is not a refit or proof of field causality.
 - DataRepair MSL target-only post-hoc aggregation for col_0: AP 0.1590->0.2792, AUC 0.6024->0.7680; source Full threshold was 2201.67. This is post-hoc target aggregation, not a segmented retrain.
-- MSL boundary exclusion retained 68,572 points after excluding 4,966 cross-sequence/cold-start points; diagnostic AUC/AP=0.6112/0.1715. The encoder/head was not retrained under these boundaries.
+- `full_gmm-sequence-bounded-20261102T105427Z-2415811` keeps all 55 input fields and trains/windows within the 27 mapped test-sequence boundaries; final scoring uses `col_0`. On the 68,572 exact common test points (7,766 positives), it obtains AUC=0.778967, AP=0.307332, precision=0.437238, recall=0.107649 and FPR=1.7696% at its saved `q=0.995` threshold. It exceeds CATCH-common, IsolationForest and PCA-residual in both AUC and AP; its AP is +0.106561 versus CATCH-common. These method-specific thresholds are not an equal-FPR comparison.
+- The same-point table and source/binding details are in [`MSL same-point comparison`](../MNRF-ViewProbe-MSL-Boundary/same-point-baselines-20261103T121447Z/README.md) and [`CSV`](../MNRF-ViewProbe-MSL-Boundary/same-point-baselines-20261103T121447Z/msl_same_point_comparison.csv). CATCH-common still uses concatenated-source training; each method retains its own saved threshold. Thus the comparison supports this sequence-bounded MNRF configuration over these common-protocol artifacts on this point set, but does not equalize training protocol or alarm threshold.
+- The four-cell comparison separates two effects: for the sequence-bounded model, changing final score from all-55 max to `col_0` changes AP 0.1322→0.3073 (+0.1751); for all-55 max, changing from concatenated to sequence-bounded training changes AP 0.1715→0.1322 (-0.0392). Under `col_0` scoring, the boundary change is 0.3053→0.3073 (+0.0020). On these fixed coordinates, the larger observed AP change is associated with the scoring target, while the isolated boundary effect is small and differs by score target. This is a controlled diagnostic contrast, not a claim that boundary handling is unimportant for valid sequence semantics.
 
 ### GECCO
 
@@ -158,12 +173,14 @@ Existing diagnostic evidence:
 - FullDiagnostic calibration evidence: q=.995 tail has 42 points, 0 label anomalies and 42 contextual anomalies; this affects alarm interpretation, not ranking metrics.
 - ConditionalScore post-hoc row: joint versus p(S,P|E,R) AP 0.0009->0.0012, AUC 0.5388->0.5885; it retains the source cache and is not a refit or proof of field causality.
 
-## Interpretation boundary
+## Updated overall assessment
 
-A residual AP above persistence is only a comparison to that reference; it is not proof of conditional information gain. The target-mean and latent-mean references are also required. Lower prediction error is not equivalent to better anomaly ranking. Full GMM, E/R decoder residual/NLL, conditional-score diagnostics, and any complete coupling-flow score are separate heads and must not be pooled.
+The historical eight-dataset snapshot above and the paper-baseline reference remain unchanged. The new MSL and PSM tables are separately scoped supplements, not replacements for those historical rows and not a new pooled eight-dataset average. MSL now has evidence supporting the sequence-bounded, 55-field-input/`col_0`-scoring task definition: on 68,572 common points its AUC/AP exceed all three available common-protocol comparators, and the four-cell contrast associates the larger AP change with the score target rather than the boundary-only change. PSM shows the opposite operational constraint: despite useful overall ranking and a high-recall saved `q=.995` alarm, its current low-FPR tail recalls fewer anomalies than every best baseline selected at the corresponding FPR ceiling; changing only the threshold cannot improve the ordering of that tail. CalIt2 remains split by data version: the historical modulo-10 result stays in the old eight-group snapshot, while the completed RawCount four-method paired comparison is reported separately (RawCount MNRF AUC/AP 0.853538/0.170287; CATCH 0.881578/0.281496; IF 0.890166/0.253774; PCA 0.822361/0.146648).
 
-## Up to three next validations
+These results support preserving each dataset's explicit task semantics and reporting score-ranking and thresholded alarm behavior separately. They do not establish that one head or score rule should be selected per test dataset. E/R residual AP above persistence remains only a reference comparison, not proof of conditional information gain; target-mean and latent-mean references still matter. Full GMM, E/R decoder residual/NLL, conditional-score diagnostics, and any complete coupling-flow score are separate heads and must not be pooled.
 
-1. Run a predeclared boundary-aware MSL diagnostic/retrain comparison that keeps the 27 sequence identities and reports col_0 separately; this tests whether concatenation, rather than the frozen representation, explains the target-column gain.
-2. Audit GECCO calibration labels and CICIDS flow/session boundaries together, then repeat only the fixed-coordinate alarm analysis; this adds the missing evidence needed to interpret calibration contamination and segment metrics.
-3. Export fixed pointwise decoder mean/sigma for Creditcard and compare residual versus NLL ranks on a predeclared sample; this tests the remaining variance-masking hypothesis without selecting variables from test AP.
+## Remaining decision-changing validations
+
+1. If changing the MSL training objective is under consideration, compare a predeclared target/condition-aware objective against this completed sequence-bounded 55-input, `col_0`-scored model. The current four-cell result establishes the score-target effect more directly than the boundary-only AP change, but does not test objective-level separation of telemetry and commands.
+2. For GECCO alarm interpretation and CICIDS segment interpretation, preserve the existing scores and first resolve whether GECCO calibration contamination affects the chosen alarm rule and whether CICIDS entity/session boundaries can be recovered. This does not alter the already observed ranking metrics.
+3. Creditcard's sampled residual-vs-NLL ranking reversal is established, but pointwise decoder `mu`/`sigma` are still needed to distinguish mechanisms; the existing sample export proposal is diagnostic only and must not choose variables or a new test-set scoring rule.
