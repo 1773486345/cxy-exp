@@ -769,6 +769,103 @@ def _load_npy_memmap(path: Path):
     return values
 
 
+def _endpoint_replay_check(actual, expected, cache_rows, global_endpoints,
+                           variable_names, rtol=1e-5, atol=1e-6,
+                           raise_on_failure=False):
+    """Check a replayed feature batch before applying the finite-value tolerance.
+
+    Non-finite cache or replay values are a contract failure, not a large
+    numeric error.  Keeping this check separate makes the publication gate
+    and its synthetic regression test use exactly the same rules.
+    """
+    actual = np.asarray(actual)
+    expected = np.asarray(expected)
+    cache_rows = np.asarray(cache_rows, dtype=np.int64)
+    global_endpoints = np.asarray(global_endpoints, dtype=np.int64)
+    if actual.shape != expected.shape or actual.ndim != 3:
+        raise ValueError("endpoint replay arrays must have the same [N,C,F] shape")
+    if len(cache_rows) != actual.shape[0] or len(global_endpoints) != actual.shape[0]:
+        raise ValueError("endpoint replay row bindings have the wrong length")
+    names = list(variable_names)
+    if len(names) != actual.shape[1]:
+        raise ValueError("endpoint replay variable names do not match feature shape")
+
+    finite = np.isfinite(actual) & np.isfinite(expected)
+    nonfinite = ~finite
+    # Do not evaluate a tolerance expression on NaN/Inf.  This keeps a
+    # non-finite cache or replay value an explicit contract failure.
+    finite_delta = np.abs(actual[finite] - expected[finite])
+    finite_allowed = atol + rtol * np.abs(expected[finite])
+    finite_failed = np.zeros(expected.shape, dtype=bool)
+    finite_failed[finite] = finite_delta > finite_allowed
+    details = []
+
+    def report_value(value):
+        value = float(value)
+        return value if np.isfinite(value) else str(value)
+
+    for local_index, variable_index, feature_index in np.argwhere(nonfinite):
+        local_index = int(local_index)
+        variable_index = int(variable_index)
+        feature_index = int(feature_index)
+        details.append({
+            "reason": "nonfinite",
+            "cache_row": int(cache_rows[local_index]),
+            "global_endpoint": int(global_endpoints[local_index]),
+            "variable_index": variable_index,
+            "variable": str(names[variable_index]),
+            "feature_dim": feature_index,
+            "cached_value": report_value(expected[local_index, variable_index, feature_index]),
+            "replayed_value": report_value(actual[local_index, variable_index, feature_index]),
+        })
+    for local_index, variable_index, feature_index in np.argwhere(finite_failed):
+        local_index = int(local_index)
+        variable_index = int(variable_index)
+        feature_index = int(feature_index)
+        details.append({
+            "reason": "tolerance",
+            "cache_row": int(cache_rows[local_index]),
+            "global_endpoint": int(global_endpoints[local_index]),
+            "variable_index": variable_index,
+            "variable": str(names[variable_index]),
+            "feature_dim": feature_index,
+            "cached_value": float(expected[local_index, variable_index, feature_index]),
+            "replayed_value": float(actual[local_index, variable_index, feature_index]),
+            "absolute_error": float(np.abs(
+                actual[local_index, variable_index, feature_index]
+                - expected[local_index, variable_index, feature_index]
+            )),
+            "allowed_error": float(atol + rtol * np.abs(
+                expected[local_index, variable_index, feature_index]
+            )),
+        })
+    report = {
+        "passed": not details,
+        "checked_elements": int(expected.size),
+        "failed_elements": int(len(details)),
+        "nonfinite_elements": int(nonfinite.sum()),
+        "max_abs": float(finite_delta.max()) if finite_delta.size else 0.0,
+        "mismatches": details,
+    }
+    if raise_on_failure and details:
+        first = sorted(details, key=lambda item: (
+            item["cache_row"], item["variable_index"], item["feature_dim"]
+        ))[0]
+        finite_details = [item for item in details if item["reason"] == "tolerance"]
+        if finite_details:
+            worst = max(finite_details, key=lambda item: item["absolute_error"] / item["allowed_error"])
+        else:
+            worst = first
+        raise ValueError(
+            "endpoint replay rejected; "
+            f"failed_elements={len(details)}/{expected.size}; "
+            f"nonfinite_elements={int(nonfinite.sum())}; "
+            f"first_failure={json.dumps(first, sort_keys=True)}; "
+            f"worst_failure={json.dumps(worst, sort_keys=True)}"
+        )
+    return report
+
+
 def _assemble_cold_start_payload(old, prefix, prefix_scores, prefix_predictions,
                                  test_global, test_times, test_labels, threshold):
     """Fill the full test axis, then derive the compact native representation."""
@@ -1068,39 +1165,30 @@ def _score_cold_start(task: str, source: Path, output: Path, masked: bool = Fals
                 positions = np.asarray(selected_rows, dtype=np.int64) - batch_start
                 actual = batch_features[positions]
                 expected = np.asarray(test_cache[np.asarray(selected_rows, dtype=np.int64)], dtype=np.float32)
-                delta = np.abs(actual - expected)
-                allowed = 1e-6 + 1e-5 * np.abs(expected)
-                failed = delta > allowed
-                check_count += int(delta.size)
-                if delta.size:
-                    check_max_abs = max(check_max_abs, float(delta.max()))
-                check_passed = check_passed and not bool(failed.any())
-                for local_index, variable_index, feature_index in np.argwhere(failed):
-                    row_index = int(selected_rows[int(local_index)])
-                    mismatch_details.append({
-                        "cache_row": row_index,
-                        "global_endpoint": int(saved_endpoints[row_index]),
-                        "variable_index": int(variable_index),
-                        "variable": str(source_manifest["variable_names"][int(variable_index)]),
-                        "feature_dim": int(feature_index),
-                        "cached_value": float(expected[local_index, variable_index, feature_index]),
-                        "replayed_value": float(actual[local_index, variable_index, feature_index]),
-                        "absolute_error": float(delta[local_index, variable_index, feature_index]),
-                        "allowed_error": float(allowed[local_index, variable_index, feature_index]),
-                    })
+                replay_report = _endpoint_replay_check(
+                    actual, expected, np.asarray(selected_rows, dtype=np.int64),
+                    np.asarray(saved_endpoints[np.asarray(selected_rows, dtype=np.int64)], dtype=np.int64),
+                    source_manifest["variable_names"], rtol=1e-5, atol=1e-6,
+                )
+                check_count += replay_report["checked_elements"]
+                check_max_abs = max(check_max_abs, replay_report["max_abs"])
+                check_passed = check_passed and replay_report["passed"]
+                mismatch_details.extend(replay_report["mismatches"])
         max_abs = check_max_abs
         if not check_passed:
             mismatch_details.sort(key=lambda item: (
                 item["cache_row"], item["variable_index"], item["feature_dim"]
             ))
             first_failure = mismatch_details[0]
+            finite_failures = [item for item in mismatch_details if item.get("reason") == "tolerance"]
             worst_failure = max(
-                mismatch_details,
+                finite_failures,
                 key=lambda item: item["absolute_error"] / item["allowed_error"],
-            )
+            ) if finite_failures else first_failure
             raise ValueError(
                 f"{task}: frozen encoder endpoint reproduction failed; "
                 f"failed_elements={len(mismatch_details)}/{check_count}; max_abs={max_abs}; "
+                f"nonfinite_elements={sum(item.get('reason') == 'nonfinite' for item in mismatch_details)}; "
                 f"first_failure={json.dumps(first_failure, sort_keys=True)}; "
                 f"worst_relative_failure={json.dumps(worst_failure, sort_keys=True)}"
             )

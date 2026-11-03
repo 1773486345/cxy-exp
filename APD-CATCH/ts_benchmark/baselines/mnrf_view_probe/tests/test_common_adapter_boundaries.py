@@ -10,7 +10,7 @@ from scripts.run_mnrf_catch_common import (
 )
 from scripts.export_mnrf_view_probe_common import _endpoints_for_ranges
 from scripts.prepare_mnrf_comparison_adapter import (
-    _masked_prefix_windows, synthetic_cold_start_check,
+    _endpoint_replay_check, _masked_prefix_windows, synthetic_cold_start_check,
 )
 
 
@@ -107,6 +107,48 @@ def test_cold_start_full_axis_benchmark_affiliation_and_old_point_binding():
     assert result["old_valid_unchanged"] is True
     assert result["cross_channel_rejected"] is True
     assert result["benchmark_affiliation_f"] is not None
+
+
+def test_frozen_endpoint_replay_finite_and_nonfinite_gate():
+    expected = np.zeros((1, 2, 2), dtype=np.float32)
+    actual = expected.copy()
+    passed = _endpoint_replay_check(
+        actual, expected, [17], [43017], ["x", "y"],
+    )
+    assert passed["passed"] is True
+    assert passed["nonfinite_elements"] == 0
+
+    too_far = expected.copy()
+    too_far[0, 1, 0] = 1e-3
+    rejected = _endpoint_replay_check(
+        too_far, expected, [17], [43017], ["x", "y"],
+    )
+    assert rejected["passed"] is False
+    assert rejected["mismatches"][0]["reason"] == "tolerance"
+    assert rejected["mismatches"][0]["global_endpoint"] == 43017
+    with pytest.raises(ValueError, match="endpoint replay rejected"):
+        _endpoint_replay_check(
+            too_far, expected, [17], [43017], ["x", "y"], raise_on_failure=True,
+        )
+
+    for bad_value in (np.nan, np.inf, -np.inf):
+        nonfinite = expected.copy()
+        nonfinite[0, 0, 1] = bad_value
+        report = _endpoint_replay_check(
+            nonfinite, expected, [17], [43017], ["x", "y"],
+        )
+        assert report["passed"] is False
+        assert report["nonfinite_elements"] == 1
+        detail = report["mismatches"][0]
+        assert detail["reason"] == "nonfinite"
+        assert detail["global_endpoint"] == 43017
+        assert detail["variable"] == "x"
+        assert detail["feature_dim"] == 1
+        with pytest.raises(ValueError, match="nonfinite_elements=1"):
+            _endpoint_replay_check(
+                nonfinite, expected, [17], [43017], ["x", "y"],
+                raise_on_failure=True,
+            )
 
 
 def test_masked_cold_start_window_and_msl_sequence_boundary(monkeypatch):
