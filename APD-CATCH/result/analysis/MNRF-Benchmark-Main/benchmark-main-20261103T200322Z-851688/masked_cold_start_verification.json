@@ -61,12 +61,81 @@
       "prefix_points_attempted": 191,
       "prefix_points_published": 0,
       "prefix_points": 191,
+      "saved_threshold_unchanged": 21.887293834686155,
       "max_abs": 6.318092346191406e-06,
       "rtol": 1e-05,
       "atol": 1e-06,
       "published_output": false,
       "source_unchanged": true,
-      "reason": "The frozen encoder endpoint check failed before prefix publication; no score, metric or threshold was inferred."
+      "reason": "The frozen encoder endpoint check failed before prefix publication; no score, metric or threshold was inferred.",
+      "endpoint_replay": {
+        "sampled_cache_rows": [0, 20316, 40632, 60948, 81264, 101580, 121896, 142212],
+        "sampled_global_endpoints": [142594, 162910, 183226, 203542, 223858, 244174, 264490, 284806],
+        "batch_size": 128,
+        "tail_batch_shape": [5, 192, 29],
+        "normalized_values_shape": [284807, 29],
+        "test_feature_cache_shape": [142213, 29, 25],
+        "checked_elements": 5800,
+        "failed_elements": 3,
+        "tolerance": "abs(actual-expected) <= 1e-6 + 1e-5*abs(expected)",
+        "first_failure": {
+          "cache_row": 142212,
+          "global_endpoint": 284806,
+          "variable_index": 11,
+          "variable": "V12",
+          "feature_dim": 24,
+          "cached_value": -0.009205833077430725,
+          "replayed_value": -0.009204469621181488,
+          "absolute_error": 1.3634562492370605e-06,
+          "allowed_error": 1.0920583690676722e-06
+        },
+        "worst_relative_failure": {
+          "cache_row": 142212,
+          "global_endpoint": 284806,
+          "variable_index": 14,
+          "variable": "V15",
+          "feature_dim": 24,
+          "cached_value": 0.0041212961077690125,
+          "replayed_value": 0.004122734069824219,
+          "absolute_error": 1.4379620552062988e-06,
+          "allowed_error": 1.041212954078219e-06,
+          "error_to_tolerance_ratio": 1.3810451066461424
+        },
+        "worst_absolute_error": {
+          "cache_row": 142212,
+          "global_endpoint": 284806,
+          "variable_index": 25,
+          "variable": "V26",
+          "feature_dim": 18,
+          "cached_value": 1.4898771047592163,
+          "replayed_value": 1.4898707866668701,
+          "absolute_error": 6.318092346191406e-06,
+          "allowed_error": 1.5898771380307153e-05
+        },
+        "source_conditions": {
+          "source_code_commit_matched_by_all_receipt_code_file_hashes": "f46e4600856dd51d638fa490aad3cf477b9d11b7",
+          "requested_device": "cuda:0",
+          "gpu": "NVIDIA A800-SXM4-80GB",
+          "python": "3.8.20",
+          "torch": "2.4.1+cu121",
+          "cuda_runtime": "12.1",
+          "cudnn": 90100,
+          "batch_size": 128,
+          "encoding_batch_size": 128,
+          "input_and_cached_feature_dtype": "float32",
+          "model_mode": "eval",
+          "test_cache_extraction_gradient_mode": "enabled, as source _cache_all calls encode_views without no_grad",
+          "precision_flags": "TF32/determinism flags were not captured in the training receipt; no source-code override was found",
+          "replay_cpu_threads": 1,
+          "current_replay_precision_flags": {
+            "cuda_matmul_allow_tf32": false,
+            "cudnn_allow_tf32": true,
+            "cudnn_benchmark": false,
+            "cudnn_deterministic": false
+          },
+          "replay_context_adjustment": "endpoint verification now matches source test extraction gradient mode; the same 3/5800 tolerance failures remain"
+        }
+      }
     }
   },
   "execution_boundary": {

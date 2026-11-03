@@ -1014,7 +1014,8 @@ def _score_cold_start(task: str, source: Path, output: Path, masked: bool = Fals
         if masked:
             masked_windows, masked_valid, history_indices = _masked_prefix_windows(
                 task, prefix, test_global, all_global, all_times, seq_len, normalized)
-        with torch.no_grad():
+        prefix_forward_context = torch.enable_grad if masked else torch.no_grad
+        with prefix_forward_context():
             for begin in range(0, len(positions), batch_size):
                 batch_endpoints = positions[begin:begin + batch_size]
                 if masked:
@@ -1048,7 +1049,12 @@ def _score_cold_start(task: str, source: Path, output: Path, masked: bool = Fals
             checks_by_batch.setdefault(int(row) // source_batch, []).append(int(row))
         check_max_abs = 0.0
         check_passed = True
-        with torch.no_grad():
+        check_count = 0
+        mismatch_details = []
+        # The historical test-cache path in MNRFViewProbe._cache_all calls
+        # encode_views while eval() is active but without a no_grad context.
+        # Match that recorded execution context for the frozen replay check.
+        with torch.enable_grad():
             for batch_index, selected_rows in checks_by_batch.items():
                 batch_start = batch_index * source_batch
                 batch_stop = min(batch_start + source_batch, len(saved_endpoints))
@@ -1063,12 +1069,41 @@ def _score_cold_start(task: str, source: Path, output: Path, masked: bool = Fals
                 actual = batch_features[positions]
                 expected = np.asarray(test_cache[np.asarray(selected_rows, dtype=np.int64)], dtype=np.float32)
                 delta = np.abs(actual - expected)
+                allowed = 1e-6 + 1e-5 * np.abs(expected)
+                failed = delta > allowed
+                check_count += int(delta.size)
                 if delta.size:
                     check_max_abs = max(check_max_abs, float(delta.max()))
-                check_passed = check_passed and bool(np.allclose(actual, expected, rtol=1e-5, atol=1e-6))
+                check_passed = check_passed and not bool(failed.any())
+                for local_index, variable_index, feature_index in np.argwhere(failed):
+                    row_index = int(selected_rows[int(local_index)])
+                    mismatch_details.append({
+                        "cache_row": row_index,
+                        "global_endpoint": int(saved_endpoints[row_index]),
+                        "variable_index": int(variable_index),
+                        "variable": str(source_manifest["variable_names"][int(variable_index)]),
+                        "feature_dim": int(feature_index),
+                        "cached_value": float(expected[local_index, variable_index, feature_index]),
+                        "replayed_value": float(actual[local_index, variable_index, feature_index]),
+                        "absolute_error": float(delta[local_index, variable_index, feature_index]),
+                        "allowed_error": float(allowed[local_index, variable_index, feature_index]),
+                    })
         max_abs = check_max_abs
         if not check_passed:
-            raise ValueError(f"{task}: frozen encoder endpoint reproduction failed (max_abs={max_abs})")
+            mismatch_details.sort(key=lambda item: (
+                item["cache_row"], item["variable_index"], item["feature_dim"]
+            ))
+            first_failure = mismatch_details[0]
+            worst_failure = max(
+                mismatch_details,
+                key=lambda item: item["absolute_error"] / item["allowed_error"],
+            )
+            raise ValueError(
+                f"{task}: frozen encoder endpoint reproduction failed; "
+                f"failed_elements={len(mismatch_details)}/{check_count}; max_abs={max_abs}; "
+                f"first_failure={json.dumps(first_failure, sort_keys=True)}; "
+                f"worst_relative_failure={json.dumps(worst_failure, sort_keys=True)}"
+            )
 
         # GMM scores need the frozen feature statistics, not the trainer's
         # freshly constructed (unfitted) scaler.
