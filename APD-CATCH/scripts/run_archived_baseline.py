@@ -7,14 +7,17 @@ adds opt-in point-output capture for later coordinate-aware evaluation.
 
 import argparse
 import base64
+import csv
 import hashlib
 import json
 import math
 import os
 import pickle
 import selectors
+import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULT_ROOT = ROOT / "result"
 CONFIG_ROOT = ROOT / "config"
 TASKS = {"PSM", "MSL"}
+DEFAULT_MIN_FREE_GIB = 4.0
 
 
 def sha256_bytes(data):
@@ -40,13 +44,18 @@ def sha256_file(path):
 
 
 def atomic_json(path, payload):
-    temporary = path.with_name("." + path.name + ".tmp-" + str(os.getpid()))
-    with open(temporary, "x", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True, allow_nan=False)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(str(temporary), str(path))
+    fd, temporary_name = tempfile.mkstemp(prefix="." + path.name + ".tmp-", dir=str(path.parent))
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True, allow_nan=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(temporary), str(path))
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def _git_value(*args):
@@ -61,8 +70,22 @@ def _git_value(*args):
 
 
 def _unique_run_path(entry, method_path, task, override=None):
+    storage_root = os.environ.get("BASELINE_STORAGE_ROOT")
     if override:
-        raw = Path(override)
+        raw = Path(override).expanduser()
+        if storage_root:
+            root = Path(storage_root).expanduser().resolve(strict=False)
+            if not root.is_dir() or not os.access(str(root), os.W_OK | os.X_OK):
+                raise PermissionError("BASELINE_STORAGE_ROOT must already exist and be writable: {}".format(root))
+            target = raw if raw.is_absolute() else root / raw
+            resolved = target.resolve(strict=False)
+            try:
+                resolved.relative_to(root)
+            except ValueError:
+                raise ValueError("BASELINE_SAVE_PATH must stay under BASELINE_STORAGE_ROOT")
+            if target.exists() or target.is_symlink():
+                raise FileExistsError("refusing to reuse existing archive path: {}".format(target))
+            return target, str(target)
         target = raw if raw.is_absolute() else RESULT_ROOT / raw
         resolved = target.resolve(strict=False)
         try:
@@ -72,12 +95,61 @@ def _unique_run_path(entry, method_path, task, override=None):
         if target.exists() or target.is_symlink():
             raise FileExistsError("refusing to reuse existing archive path: {}".format(target))
         return target, str(target.relative_to(RESULT_ROOT))
+    if storage_root:
+        root = Path(storage_root).expanduser().resolve(strict=False)
+        if not root.is_dir() or not os.access(str(root), os.W_OK | os.X_OK):
+            raise PermissionError("BASELINE_STORAGE_ROOT must already exist and be writable: {}".format(root))
+        relative = Path(entry) / method_path / task / "run-{}-{}".format(
+            datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"), os.getpid()
+        )
+        target = root / relative
+        try:
+            target.resolve(strict=False).relative_to(root)
+        except ValueError:
+            raise ValueError("method path escapes BASELINE_STORAGE_ROOT")
+        if target.exists() or target.is_symlink():
+            raise FileExistsError("run archive path already exists: {}".format(target))
+        return target, str(target)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     relative = Path(entry) / method_path / task / "run-{}-{}".format(stamp, os.getpid())
     target = RESULT_ROOT / relative
     if target.exists() or target.is_symlink():
         raise FileExistsError("run archive path already exists: {}".format(target))
     return target, relative.as_posix()
+
+
+def _estimate_point_artifact_bytes(task, entry, metadata_path=None):
+    """Estimate the compact point package from the official test length."""
+    if entry not in ("score", "label"):
+        raise ValueError("entry must be score or label")
+    path = Path(metadata_path) if metadata_path else ROOT / "dataset" / "anomaly_detect" / "DETECT_META.csv"
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = [row for row in csv.DictReader(handle)
+                if row.get("file_name") == task + ".csv"]
+    if len(rows) != 1:
+        raise ValueError("cannot estimate artifact size: {} must have one {} row".format(path, task))
+    try:
+        points = int(rows[0]["test_lens"])
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("cannot estimate artifact size: invalid test_lens for {}".format(task))
+    if points <= 0:
+        raise ValueError("cannot estimate artifact size: non-positive test_lens for {}".format(task))
+    # indices, times (bounded estimate), labels, validity mask, values, NPZ headers.
+    return (points * (8 + 64 + 1 + 1 + 8)) + (1024 * 1024)
+
+
+def _storage_preflight(path, minimum_free_bytes, estimated_output_bytes, disk_usage=None):
+    usage = (disk_usage or shutil.disk_usage)(str(path))
+    required_bytes = int(minimum_free_bytes) + int(estimated_output_bytes)
+    return {
+        "path": str(path),
+        "filesystem_free_bytes": int(usage.free),
+        "minimum_free_bytes": int(minimum_free_bytes),
+        "estimated_compact_artifact_bytes": int(estimated_output_bytes),
+        "required_before_run_bytes": required_bytes,
+        "passed": int(usage.free) >= required_bytes,
+        "estimate_scope": "compact point artifact only; opaque native report/checkpoint sizes are covered by reserve, not predicted",
+    }
 
 
 def _package_versions():
@@ -216,6 +288,7 @@ def export_point_artifacts(run_dir, task, entry, record_paths):
                 "task": np.asarray([task]),
                 "entry": np.asarray([entry]),
                 "coordinate_offset": np.asarray([int(indices[0] - np.asarray(actual.index)[0])], dtype=np.int64),
+                "coordinate_source": np.asarray(["source_frame_row_index_plus_test_offset"]),
                 "global_indices": indices,
                 "time_values": times,
                 "labels": labels.astype(np.int8, copy=False),
@@ -232,7 +305,10 @@ def export_point_artifacts(run_dir, task, entry, record_paths):
             output = artifacts_dir / "{}_{}_{}.npz".format(entry, _ratio_name(ratio), row_index)
             with open(output, "xb") as handle:
                 np.savez_compressed(handle, **payload_data)
-            outputs.append({"path": str(output), "sha256": sha256_file(output), "points": int(indices.size)})
+            outputs.append({"path": str(output), "sha256": sha256_file(output), "points": int(indices.size),
+                            "global_index_sha256": sha256_bytes(indices.tobytes()),
+                            "time_values_sha256": sha256_bytes(times.astype(str).astype("U").tobytes()),
+                            "coordinate_source": "source_frame_row_index_plus_test_offset"})
     if not outputs:
         raise RuntimeError("no point artifact was exported from benchmark records")
     return outputs
@@ -304,7 +380,12 @@ def _effective_config(args, save_path):
         config = json.load(handle)
     hyper_params = json.loads(args.model_hyper_params)
     strategy_args = dict(config["evaluation_config"]["strategy_args"])
-    strategy_args.update({"seed": args.seed, "save_anomaly_artifacts": True, "artifact_kind": args.entry})
+    point_artifact = getattr(args, "point_artifact", "compact")
+    strategy_args.update({
+        "seed": args.seed,
+        "save_anomaly_artifacts": point_artifact == "compact",
+        "artifact_kind": args.entry,
+    })
     model_config = {
         "models": [{"model_name": args.model_name, "adapter": None, "model_hyper_params": hyper_params}],
         "recommend_model_hyper_params": config.get("model_config", {}).get("recommend_model_hyper_params", {}),
@@ -325,6 +406,8 @@ def run(args):
         raise ValueError("this first-batch launcher supports PSM and MSL only")
     if args.entry not in ("score", "label"):
         raise ValueError("entry must be score or label")
+    if float(getattr(args, "min_free_gib", DEFAULT_MIN_FREE_GIB)) < 0:
+        raise ValueError("min_free_gib must be non-negative")
     config_path, effective = _effective_config(args, "pending")
     if (args.entry == "score") != ("detect_score" in config_path.name):
         raise ValueError("config path does not match score/label entry")
@@ -333,7 +416,7 @@ def run(args):
     snapshot = _snapshot_startup(args.startup_script, entry_dir)
     config_path, effective = _effective_config(args, save_path)
     effective["report_config"]["save_path"] = save_path
-    (entry_dir / "config_source.json").write_bytes(config_path.read_bytes())
+    config_source_sha256 = sha256_file(config_path)
     atomic_json(entry_dir / "effective_config.json", effective)
     command = [
         sys.executable, str(ROOT / "scripts" / "run_benchmark.py"),
@@ -365,7 +448,17 @@ def run(args):
         "packages": _package_versions(),
         "cuda_visible_devices_inherited": os.environ.get("CUDA_VISIBLE_DEVICES"),
         "data_evidence": _data_evidence(args.task),
+        "coordinate_contract": {
+            "source_axis": str((ROOT / "dataset" / "anomaly_detect" / "data" / (args.task + ".csv")).resolve()),
+            "mapping": "serialized_test_index_plus_coordinate_offset",
+            "requires_sorted_unique_global_indices": True,
+            "requires_exact_source_labels": True,
+        },
         "effective_config_path": str(entry_dir / "effective_config.json"),
+        "effective_config_sha256": sha256_file(entry_dir / "effective_config.json"),
+        "config_source_path": str(config_path),
+        "config_source_sha256": config_source_sha256,
+        "point_artifact_policy": getattr(args, "point_artifact", "compact"),
         "started_utc": None,
         "ended_utc": None,
         "benchmark_returncode": None,
@@ -382,19 +475,35 @@ def run(args):
     status["started_utc"] = datetime.now(timezone.utc).isoformat()
     atomic_json(manifest_path, status)
     try:
-        status["benchmark_returncode"] = _run_and_tee(
-            command, ROOT, entry_dir / "stdout.log", entry_dir / "stderr.log"
+        estimate = _estimate_point_artifact_bytes(args.task, args.entry)
+        status["storage_preflight"] = _storage_preflight(
+            entry_dir,
+            int(float(getattr(args, "min_free_gib", DEFAULT_MIN_FREE_GIB)) * (1024 ** 3)),
+            estimate,
         )
+        if not status["storage_preflight"]["passed"]:
+            status["status"] = "blocked_disk_space"
+            status["failure_reason"] = (
+                "insufficient free space before benchmark: need {} bytes including reserve, have {}"
+                .format(status["storage_preflight"]["required_before_run_bytes"],
+                        status["storage_preflight"]["filesystem_free_bytes"])
+            )
+        else:
+            status["benchmark_returncode"] = _run_and_tee(
+                command, ROOT, entry_dir / "stdout.log", entry_dir / "stderr.log"
+            )
         after = set(entry_dir.glob("*.tar.gz")) | set(entry_dir.glob("test_report*.csv"))
         created = sorted(str(p) for p in after.difference(before))
         status["record_files"] = created
-        if status["benchmark_returncode"] != 0:
+        if status["status"] == "blocked_disk_space":
+            pass
+        elif status["benchmark_returncode"] != 0:
             status["status"] = "benchmark_process_failed"
             status["failure_reason"] = "run_benchmark.py exited {}".format(status["benchmark_returncode"])
         elif (record_error := _record_error(_record_paths(created))):
             status["status"] = "benchmark_task_failed"
             status["failure_reason"] = record_error[:1000]
-        elif args.entry == "score":
+        elif args.entry == "score" and getattr(args, "point_artifact", "compact") == "compact":
             records = _record_paths(created)
             try:
                 status["score_or_label_artifacts"] = export_point_artifacts(entry_dir, args.task, args.entry, records)
@@ -402,9 +511,15 @@ def run(args):
             except Exception as exc:
                 status["status"] = "artifact_export_blocked"
                 status["failure_reason"] = "{}: {}".format(type(exc).__name__, exc)
-        else:
+        elif args.entry == "score":
+            status["status"] = "complete_native_score_no_point_artifact"
+            status["failure_reason"] = "native score report retained; no compact coordinate artifact requested"
+        elif getattr(args, "point_artifact", "compact") == "compact":
             status["status"] = "complete_native_label_no_threshold_export"
             status["failure_reason"] = "native labels saved; generic model threshold is not exposed by the adapter contract"
+        else:
+            status["status"] = "complete_native_label_no_point_artifact"
+            status["failure_reason"] = "native label report retained; no compact coordinate artifact requested"
     except Exception as exc:
         status["status"] = "launcher_failed"
         status["failure_reason"] = "{}: {}".format(type(exc).__name__, exc)
@@ -431,6 +546,10 @@ def main():
     parser.add_argument("--num-workers", type=int, default=1)
     parser.add_argument("--num-cpus", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=60000)
+    parser.add_argument("--point-artifact", choices=("compact", "native-only"), default="compact",
+                        help="write one coordinate-bound NPZ for offline comparison, or retain native reports only")
+    parser.add_argument("--min-free-gib", type=float, default=DEFAULT_MIN_FREE_GIB,
+                        help="required free-space reserve before starting the benchmark (default: 4 GiB)")
     args = parser.parse_args()
     try:
         return run(args)

@@ -32,12 +32,14 @@
       "method": "GANF",
       "status": "blocked_source_and_scope",
       "upstream": "https://github.com/EnyanDai/GANF",
+      "commit": "bce38333b109f325a403dae9aff4987ae5bd6e1f",
       "reason": "No repository copy or APD-CATCH adapter; upstream README scope is SWaT/Metr-LA/PMU, not PSM/MSL, and reuse license was not verified."
     },
     {
       "method": "MTGFlow",
       "status": "blocked_environment_adapter",
       "upstream": "https://github.com/zqhang/MTGFLOW",
+      "commit": "f8cb9ea225fd7e64cfb4556dae3525accac285f5",
       "license": "MIT",
       "reason": "Official code supports PSM/MSL but requires an old Python 3.8.5/Torch 1.7.1/Numpy 1.19.2 stack; no isolated environment or adapter is present."
     },
@@ -50,6 +52,7 @@
       "method": "OmniAnomaly",
       "status": "blocked_environment_adapter",
       "upstream": "https://github.com/NetManAIOps/OmniAnomaly",
+      "commit": "7fb0e0acf89ea49908896bcc9f9e80fcfff6baf4",
       "license": "MIT",
       "reason": "The author implementation is an old TensorFlow-era stack; TensorFlow is absent from catch_env and no APD-CATCH adapter is present."
     },
