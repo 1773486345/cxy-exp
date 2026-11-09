@@ -10,6 +10,8 @@ import numpy as np
 from scripts.evaluate_added_baselines import evaluate
 from scripts import run_archived_baseline
 from scripts.run_archived_baseline import (
+    TASKS,
+    TASKS,
     _effective_config,
     _estimate_point_artifact_bytes,
     _global_artifact_indices,
@@ -19,6 +21,28 @@ from scripts.run_archived_baseline import (
 
 
 ROOT = Path(__file__).resolve().parents[4]
+
+
+def test_dagmm_launchers_cover_all_registered_tasks_without_running_models():
+    assert TASKS == {"PSM", "MSL", "GECCO", "Genesis", "NYC", "CalIt2", "Creditcard", "CICIDS"}
+    for task in sorted(TASKS):
+        for entry in ("score", "label"):
+            path = ROOT / "scripts" / "multivariate_detection" / ("detect_" + entry) / (task + "_script") / "DAGMM.sh"
+            assert path.is_file()
+            content = path.read_text()
+            assert "--task " + task in content
+            assert "--entry " + entry in content
+
+
+def test_dagmm_launchers_cover_all_registered_tasks_without_running_models():
+    assert TASKS == {"PSM", "MSL", "GECCO", "Genesis", "NYC", "CalIt2", "Creditcard", "CICIDS"}
+    for task in sorted(TASKS):
+        for entry in ("score", "label"):
+            path = ROOT / "scripts" / "multivariate_detection" / ("detect_" + entry) / (task + "_script") / "DAGMM.sh"
+            assert path.is_file()
+            content = path.read_text()
+            assert "--task " + task in content
+            assert "--entry " + entry in content
 
 
 def test_archived_launcher_help_is_static():
@@ -77,6 +101,24 @@ def test_evaluation_requires_bound_direction_and_identity(tmp_path):
     with pytest.raises(ValueError, match="source identity"):
         evaluate("PSM", [("bad", bad), ("left", left)], tmp_path / "bad.csv",
                  require_identity=True)
+
+
+def test_evaluation_rejects_incomplete_or_wrong_task_manifest(tmp_path):
+    import pytest
+
+    artifact = tmp_path / "scores.npz"
+    np.savez(artifact, task=np.asarray(["PSM"]), global_indices=np.asarray([0, 1]),
+             labels=np.asarray([0, 1]), scores=np.asarray([0.1, 0.9]),
+             score_direction=np.asarray(["higher_is_anomalous"]))
+    manifest = tmp_path / "run.json"
+    manifest.write_text(json.dumps({"task": "PSM", "status": "failed", "data_sha256": "x"}))
+    with pytest.raises(ValueError, match="not complete"):
+        evaluate("PSM", [("m", artifact)], tmp_path / "out.csv",
+                 manifests={"m": manifest}, require_identity=True)
+    manifest.write_text(json.dumps({"task": "MSL", "status": "complete", "data_sha256": "x"}))
+    with pytest.raises(ValueError, match="task binding"):
+        evaluate("PSM", [("m", artifact)], tmp_path / "out.csv",
+                 manifests={"m": manifest}, require_identity=True)
 
 
 def test_evaluation_accepts_compact_scores_with_aligned_mask(tmp_path):

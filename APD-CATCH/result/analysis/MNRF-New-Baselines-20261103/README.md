@@ -1,15 +1,16 @@
 # Added baseline preparation (static only)
 
-This directory records the first PSM/MSL preparation against commit
-`5e7ffe9e3b4daeab80ab5a27d94a766d69abfb8f`. No model was instantiated, fitted,
-run, or scored in this preparation. The active environment was `catch_env`
+This directory records the added-baseline preparation against commit
+`5e7ffe9e3b4daeab80ab5a27d94a766d69abfb8f`, extended to all eight APD tasks.
+The active environments are `catch_env` and `tods_legacy` (the latter has
+TensorFlow 2.4.0); `catch_env` has no TensorFlow.
 (Python 3.8.20, PyTorch 2.4.1, NumPy 1.24.4, pandas 1.5.3, scikit-learn 1.3.2,
 Merlion 1.3.1). TensorFlow is not installed.
 
 ## What is actually connected
 
 Only Merlion DAGMM has a verified in-repository registration and an executable
-PSM/MSL wrapper. It uses the existing `merlion.DAGMM` adapter and the existing
+eight-task wrapper set. It uses the existing `merlion.DAGMM` adapter and the existing
 `run_benchmark.py` pipeline. The explicit configuration is the Merlion 1.3.1
 `DAGMMConfig`: `gmm_k=3`, `hidden_size=5`, `sequence_len=1`,
 `lambda_energy=0.1`, `lambda_cov_diag=0.005`, `lr=0.001`, `batch_size=256`,
@@ -19,8 +20,8 @@ threshold is owned by Merlion's postrule/calibrator and is not guessed by this
 wrapper.
 
 GANF, MTGFlow, tcNF, OmniAnomaly, ConFlow and AFNF are not represented by
-placeholder adapters. Their exact status, source, license/dependency gap and
-PSM/MSL score unit are in `candidate_status.csv` and
+placeholder adapters. Their per-task status, source, license/dependency gap and
+score unit are in `candidate_status.csv` and
 `config/added_baselines_registry.json`. MTGFlow is the only blocked candidate
 with a verified MIT source and explicit PSM/MSL scope, but its legacy runtime
 must be isolated before an adapter can be reviewed. The other unresolved
@@ -64,7 +65,7 @@ wrapper and are not piped through a second `tee` in these launchers.
 ## Manual DAGMM commands
 
 After manually activating `catch_env`, from `APD-CATCH` run one command at a
-time:
+time. The same pattern is available for all eight datasets:
 
 ```bash
 # Optional, only after an administrator creates and grants a writable data1/data3 directory:
@@ -75,6 +76,18 @@ bash scripts/multivariate_detection/detect_score/PSM_script/DAGMM.sh
 bash scripts/multivariate_detection/detect_score/MSL_script/DAGMM.sh
 bash scripts/multivariate_detection/detect_label/PSM_script/DAGMM.sh
 bash scripts/multivariate_detection/detect_label/MSL_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_score/GECCO_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_score/Genesis_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_score/NYC_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_score/CalIt2_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_score/Creditcard_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_score/CICIDS_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_label/GECCO_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_label/Genesis_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_label/NYC_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_label/CalIt2_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_label/Creditcard_script/DAGMM.sh
+bash scripts/multivariate_detection/detect_label/CICIDS_script/DAGMM.sh
 ```
 
 Success requires `run_manifest.json` with status
@@ -85,15 +98,16 @@ is retained in the same manifest and exits non-zero. These commands are not
 run by this preparation.
 
 There are deliberately no executable APD-CATCH commands for the other six
-names yet. Their rows are blocked preparations, not failed experiments. The
-only safe next checks are source/environment checks in an isolated location,
-for example `git ls-remote https://github.com/zqhang/MTGFLOW
-f8cb9ea225fd7e64cfb4556dae3525accac285f5` for MTGFlow and
-`python -c 'import tensorflow'` in a separately prepared OmniAnomaly
-environment. Neither check is a substitute for an adapter. GANF, tcNF,
-ConFlow and AFNF need a pinned implementation and reuse terms before a
-launcher can be supplied; a method name or paper score must not enter the
-PSM/MSL tables by itself.
+methods yet. Their 48 dataset-method rows are blocked preparations, not failed
+experiments. MTGFlow is pinned and MIT-licensed and its upstream documents
+PSM/MSL, but it needs a separate compatible runtime and a reviewed APD adapter.
+`tods_legacy` supplies TensorFlow 2.4.0, but OmniAnomaly still needs its author
+implementation adapted to this benchmark. GANF's official repository gives no
+explicit reuse license and documents different datasets. The tcNF paper says
+open-source code is available, but the candidate HistCondFlow repository's
+identity and license are not yet verified. AFNF and ConFlow lack a verified
+compatible source in this checkout. No dependencies were installed and no new
+environment was created because the user quota filesystem is full.
 
 ## Offline evaluation after a score run
 
@@ -107,7 +121,7 @@ binds the benchmark event boundaries.
 
 ## Static checks and limits
 
-The four DAGMM scripts are syntax-checked and the registry/config parse is
+The sixteen DAGMM scripts are syntax-checked and the registry/config parse is
 checked. These checks do not prove training, forward, score, convergence,
 native threshold behavior, or fairness against MNRF. Those claims require the
 manual runs and the source-specific adapters for the six blocked candidates.
@@ -120,10 +134,12 @@ official README lists PSM/MSL but requires Python 3.8.5, PyTorch 1.7.1, NumPy 1.
 SciPy 1.6.1 and scikit-learn 0.24.1. GANF is pinned to
 `bce38333b109f325a403dae9aff4987ae5bd6e1f` and its official experiment scripts cover
 SWaT/Metr-LA/PMU, not PSM/MSL. OmniAnomaly is pinned to
-`7fb0e0acf89ea49908896bcc9f9e80fcfff6baf4`; its TensorFlow runtime is absent from
-`catch_env`. tcNF is identified by arXiv:2603.09490, but no author repository or
-licensed APD-CATCH adapter was found. ConFlow and AFNF likewise lack a unique,
-license-verified adapter. These are preparation blockers, not failed experiments.
+`7fb0e0acf89ea49908896bcc9f9e80fcfff6baf4`; TensorFlow 2.4.0 is present in
+`tods_legacy` but absent from `catch_env`, and no APD adapter is present. The tcNF
+paper (arXiv:2603.09490) names open-source code; `2er0/HistCondFlow` is a candidate
+but its paper identity and license require confirmation. ConFlow (IEEE TIM 2025)
+and AFNF (ISA Transactions 143, 2023) lack verified compatible adapters. These
+are preparation blockers, not failed experiments.
 
 For a strict common-protocol comparison, bind every artifact to its task, source
 manifest or embedded source digest, sorted global coordinates, labels, time values,
@@ -149,3 +165,15 @@ and its `results/aligned_scores.npz`. The evaluator reports AUC/AP only after th
 coordinate and identity checks. Alert metrics require a verified threshold in the
 artifact; DAGMM native labels remain a separate native-protocol result because no
 portable independent calibration artifact is exported.
+
+The PSM/MNRF duplicate-artifact check reproduced 87,650 common points, ROC-AUC
+0.7449263161, AP 0.4372811313, saved-threshold recall 0.6027566 and FPR
+0.2735017. This validates the evaluator's coordinate/mask handling against an
+existing artifact; it is not a new DAGMM result.
+
+During this preparation a shell `--help` check was mistakenly passed through the
+score wrapper, which entered PSM benchmark scheduling. The process was stopped
+before completion. Because it had entered scheduling, model initialization is
+not claimed to have been avoided; its incomplete run directory was removed and
+no score/checkpoint/result is claimed. This incident is disclosed here rather
+than treated as a successful or completed experiment.

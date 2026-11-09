@@ -20,13 +20,19 @@ def _text(values, key):
 def _manifest(path, task):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     found_task = data.get("task") or data.get("task_name")
-    if found_task and str(found_task).replace(".csv", "") != task:
+    if not found_task or str(found_task).replace(".csv", "") != task:
         raise ValueError(f"{path}: manifest task binding mismatch")
     status = data.get("status") or data.get("stage_status") or data.get("head_status")
     allowed = {"complete", "complete_native_score_artifact", "complete_native_label_no_threshold_export"}
-    if status and status not in allowed:
+    if status not in allowed:
         raise ValueError(f"{path}: manifest is not complete ({status})")
-    return True
+    source = data.get("source_identity") or {}
+    digest = (data.get("source_data_sha256") or data.get("data_sha256")
+              or (data.get("data_evidence") or {}).get("data_sha256")
+              or data.get("source_identity_sha256") or source.get("source_data_sha256"))
+    if not digest:
+        raise ValueError(f"{path}: manifest lacks a source digest/identity")
+    return str(digest)
 
 
 def _load(path, task):
@@ -70,11 +76,13 @@ def evaluate(task, entries, output, manifests=None, data_file=None, directions=N
     data_digest = _sha256(data_file) if data_file else None
     identities = {}
     for name, values in loaded.items():
-        bound = _text(values, "source_data_sha256") is not None
-        if name in manifests:
-            _manifest(manifests[name], task)
-            bound = True
         artifact_digest = _text(values, "source_data_sha256")
+        manifest_digest = None
+        if name in manifests:
+            manifest_digest = _manifest(manifests[name], task)
+            if artifact_digest and artifact_digest != manifest_digest:
+                raise ValueError(f"{name}: artifact source digest differs from manifest")
+        bound = artifact_digest is not None or manifest_digest is not None
         if data_digest and artifact_digest and artifact_digest != data_digest:
             raise ValueError(f"{name}: source_data_sha256 does not match data file")
         direction = _text(values, "score_direction") or directions.get(name)
@@ -163,7 +171,8 @@ def evaluate(task, entries, output, manifests=None, data_file=None, directions=N
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", required=True, choices=("PSM", "MSL"))
+    parser.add_argument("--task", required=True,
+                        choices=("PSM", "MSL", "GECCO", "Genesis", "NYC", "CalIt2", "Creditcard", "CICIDS"))
     parser.add_argument("--artifact", action="append", required=True, metavar="NAME=NPZ")
     parser.add_argument("--source-manifest", action="append", default=[], metavar="NAME=JSON")
     parser.add_argument("--score-direction", action="append", default=[], metavar="NAME=DIRECTION")

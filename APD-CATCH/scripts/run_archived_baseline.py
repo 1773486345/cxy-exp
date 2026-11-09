@@ -27,7 +27,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 RESULT_ROOT = ROOT / "result"
 CONFIG_ROOT = ROOT / "config"
-TASKS = {"PSM", "MSL"}
+TASKS = {"PSM", "MSL", "GECCO", "Genesis", "NYC", "CalIt2", "Creditcard", "CICIDS"}
 DEFAULT_MIN_FREE_GIB = 4.0
 
 
