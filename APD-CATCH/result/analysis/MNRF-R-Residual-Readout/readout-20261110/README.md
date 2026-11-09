@@ -14,6 +14,14 @@
 - 十等分先对完整官方测试轴按 `floor(j*N/10)` 固定，再映射共同有效点；不是对紧凑数组重分块。PSM 官方轴 87,841，Creditcard 142,404，各有 191 点未评分，本轮未补分。各分段 TP/FP 使用**全局**工作点，绝不逐段另选阈值。CSV 的 decile=global 为全局，1..10 为区段。
 - 保存 q=.995 阈值逐方法保留，严格 > 复算。各方法不是共同数值阈值或相同实际 FPR。PSM 数据时间值不擅自解释为墙钟；Creditcard 十分位仅交易行序，不证明实体/session 连续性。
 
+## 阈值来源更正与独立确认状态（2026-11-10）
+
+Full GMM、R 平方残差、R 辅助 NLL 先用各自保存的 validation median/MAD 标准化逐变量分数，再跨变量 max，取 calibration 聚合分数的 q=.995。**IF、PCA-residual 直接取各自校准分数的 q=.995**：前者为负 `score_samples`，后者为标准化输入的重建 MSE；二者没有 validation median/MAD 分数变换。CATCH-common 同样直接取其原生校准分数的 q=.995。输入的训练侧标准化与上述分数变换是两件事。依据：`scripts/run_mnrf_common_baselines.py::_fit_light_method`、`scripts/run_mnrf_catch_common.py::run` 的校准写出路径、`scripts/run_mnrf_frozen_decoder_diagnostic.py::_score_from_matrix` 及 `probe.py::_calibrate`。
+
+本次仅更正 results.csv 的 threshold_source：IF/PCA 共 62 行，另纠正同样误标的 CATCH-common 31 行。444 行逐行对照提交 `8611b10dbeedb07624b273fa3c197c7cff49d3f8`，其余所有字段原文相同，包含阈值、AP、TP、FP 和分段统计；未重新评价或重新校准。
+
+独立确认**尚未完成：缺合格的独立数据**。已核对两组来源登记、官方/外部数据 metadata、Full 与 FrozenDecoder 的实际评分轴以及 common 的保存分数；现有两组可对齐分数仍全部来自已分析的官方测试集。外部登记 20 份数据没有两组的新留出区间。固定候选、按新数据正常点数换算的预算、跨时段规则及输入缺口详见 [独立确认锁定方案](independent_confirmation.md)。不把重新分块或换种子当作独立确认。
+
 ## 全局结果（AP 与阈值无关）
 
 | dataset | scope | method | rule | AP | TP | FP | Recall | FPR |

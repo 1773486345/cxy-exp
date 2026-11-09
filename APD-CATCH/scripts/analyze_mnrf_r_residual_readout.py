@@ -23,6 +23,17 @@ SOURCES = {
     "Creditcard": ("full_gmm-full-20261024T115131Z-3977864", 142213),
 }
 COMMON = ROOT / "result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun"
+# Input standardization is distinct from score calibration. The native common
+# baselines take quantiles of their calibration scores directly; they do not
+# apply the MNRF per-variable validation median/MAD score transform.
+SAVED_THRESHOLD_SOURCES = {
+    "Full-GMM": "saved validation median/MAD + calibration q=.995",
+    "R-residual": "saved validation median/MAD + calibration q=.995",
+    "R-auxiliary-NLL": "saved validation median/MAD + calibration q=.995",
+    "CATCH-common": "direct calibration q=.995 of CATCH-common native scores; no validation median/MAD",
+    "IsolationForest": "direct calibration q=.995 of IsolationForest negative score_samples; no validation median/MAD",
+    "PCA-residual": "direct calibration q=.995 of PCA-residual reconstruction MSE scores; no validation median/MAD",
+}
 
 
 def read_json(path):
@@ -271,7 +282,7 @@ def analyze(task):
                     row = dict(dataset=task["task"], source_run_id=task["run_id"], method=method,
                                scope=scope, decile=part or "global", operating_point=rule,
                                global_fp_budget=budget, threshold=threshold,
-                               threshold_source="saved validation median/MAD + calibration q=.995" if rule == "saved_q995" else "post-hoc test-label ranking diagnostic; no calibration",
+                               threshold_source=SAVED_THRESHOLD_SOURCES[method] if rule == "saved_q995" else "post-hoc test-label ranking diagnostic; no calibration",
                                official_test_points=len(task["official"]), scope_points=int(np.sum(keep)),
                                official_global_start=int(task["official"][edges[part - 1]]) if part else int(task["official"][0]),
                                official_global_stop_exclusive=int(task["official"][edges[part] - 1]) + 1 if part else int(task["official"][-1]) + 1,
@@ -314,6 +325,7 @@ def report(rows, tasks, inputs):
              "- 每种方法扫描自己的完整连续分数。相同分数整组进入/退出；最大化 TP，再最小化 FP。严格 `score > threshold`，不插值。FP 上限为整数：PSM floor(63272×.01)=632；排除 7/8 后 floor(52568×.01)=525；Creditcard 固定 222 / 1480。实际 FP 允许小于上限。",
              "- 十等分先对完整官方测试轴按 `floor(j*N/10)` 固定，再映射共同有效点；不是对紧凑数组重分块。PSM 官方轴 87,841，Creditcard 142,404，各有 191 点未评分，本轮未补分。各分段 TP/FP 使用**全局**工作点，绝不逐段另选阈值。CSV 的 decile=global 为全局，1..10 为区段。",
              "- 保存 q=.995 阈值逐方法保留，严格 > 复算。各方法不是共同数值阈值或相同实际 FPR。PSM 数据时间值不擅自解释为墙钟；Creditcard 十分位仅交易行序，不证明实体/session 连续性。", "",
+             "Full GMM、R 残差与 R 辅助 NLL 先用各自保存的 validation median/MAD 标准化逐变量分数，再跨变量 max，最后取 calibration 聚合分数的 q=.995。CATCH-common 直接取原生校准分数的 q=.995；IF 直接取负 score_samples 的校准分位数，PCA-residual 直接取重建 MSE 的校准分位数。这三种 common baseline 不使用 MNRF 的 validation median/MAD 分数变换；其训练侧输入标准化是另一件事。阈值来源见 run_mnrf_catch_common.py 和 run_mnrf_common_baselines.py。", "",
              "## 全局结果（AP 与阈值无关）", ""]
     global_rows = [r for r in rows if r["decile"] == "global" and r["status"] == "complete_exploratory"]
     display = []

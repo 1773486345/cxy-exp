@@ -78,3 +78,26 @@ def test_reselect_sensitivity_and_segment_accounting():
 def test_nonfinite_scores_rejected(bad):
     with pytest.raises(ValueError, match="invalid"):
         MODULE.budget_point([1, bad], [0, 1], 1)
+
+
+@pytest.mark.parametrize("method", list(MODULE.SAVED_THRESHOLD_SOURCES))
+def test_actual_rows_distinguish_saved_threshold_provenance(method):
+    axis = np.arange(1000)
+    task = dict(task="PSM", run_id="synthetic", official=axis, coordinates=axis,
+                labels=(axis % 13 == 0).astype(np.int8), gaps=[], metrics=[],
+                methods={method: dict(scores=axis.astype(float), threshold=500,
+                                      path=MODULE.ROOT / "synthetic.npz")})
+    rows = MODULE.analyze(task)
+    saved = [r for r in rows if r["operating_point"] == "saved_q995"]
+    assert all(r["threshold"] == 500 for r in saved)
+    assert all(r["threshold_source"] == MODULE.SAVED_THRESHOLD_SOURCES[method] for r in saved)
+    if method in ("CATCH-common", "IsolationForest", "PCA-residual"):
+        assert all(r["threshold_source"].startswith("direct calibration q=.995")
+                   and "no validation median/MAD" in r["threshold_source"] for r in saved)
+    else:
+        assert all(r["threshold_source"].startswith("saved validation median/MAD") for r in saved)
+    assert all(r["threshold_source"] == "post-hoc test-label ranking diagnostic; no calibration"
+               for r in rows if r["operating_point"].startswith("posthoc"))
+    global_saved, = [r for r in saved if r["scope"] == "all_common" and r["decile"] == "global"]
+    assert global_saved["tp"] == int(np.sum((axis % 13 == 0) & (axis > 500)))
+    assert global_saved["fp"] == int(np.sum((axis % 13 != 0) & (axis > 500)))
