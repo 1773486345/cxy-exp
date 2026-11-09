@@ -18,6 +18,7 @@ from .config import MNRFConfig
 from .fusion import AlternatingAffineFlow
 from .layout import FeatureLayout
 from .normalization import FixedFeatureStandardizer, FixedInputStandardizer
+from .readout import fit_amplitude_calibration, flow_scores, state_amplitude_scores
 from .views import FourViewEncoder
 from .windows import intersect_segments, window_endpoints
 
@@ -120,6 +121,7 @@ class MNRFTrainer:
         self.calibration_center = None
         self.calibration_scale = None
         self.threshold = None
+        self.amplitude_calibration = None
         self.history = {"stage1": [], "stage2": []}
         self.split_info = None
         self.cache_sha256 = {}
@@ -485,7 +487,7 @@ class MNRFTrainer:
             return output
         return np.concatenate(results, axis=0)
 
-    def calibrate(self, validation_features, calibration_features, work_dir=None):
+    def calibrate(self, validation_features, calibration_features, work_dir=None, *, with_amplitude=False):
         work = Path(work_dir or ".")
         work.mkdir(parents=True, exist_ok=True)
         validation_scores = self.per_variable_scores(validation_features, work / "validation_nll.npy")
@@ -497,10 +499,33 @@ class MNRFTrainer:
         aggregate = np.empty(len(calibration_scores), dtype=np.float32)
         for start in range(0, len(aggregate), self.config.batch_size):
             stop = min(len(aggregate), start + self.config.batch_size)
-            aggregate[start:stop] = np.max(
-                (calibration_scores[start:stop] - self.calibration_center) / self.calibration_scale, axis=1
+            aggregate[start:stop] = flow_scores(
+                calibration_scores[start:stop], self.calibration_center, self.calibration_scale
             )
         self.threshold = float(np.quantile(aggregate, self.config.calibration_quantile))
+        self.amplitude_calibration = None
+        if with_amplitude:
+            state_index = self.config.layout.slices["S"][0]
+            validation_components = np.empty((len(validation_scores), 2), dtype=np.float32)
+            calibration_components = np.empty((len(calibration_scores), 2), dtype=np.float32)
+            calibration_components[:, 0] = aggregate
+            for start in range(0, len(validation_scores), self.config.batch_size):
+                block = slice(start, start + self.config.batch_size)
+                validation_components[block, 0] = flow_scores(
+                    validation_scores[block], self.calibration_center, self.calibration_scale
+                )
+                validation_components[block, 1] = state_amplitude_scores(
+                    validation_features[block], state_index
+                )
+            for start in range(0, len(calibration_scores), self.config.batch_size):
+                block = slice(start, start + self.config.batch_size)
+                calibration_components[block, 1] = state_amplitude_scores(
+                    calibration_features[block], state_index
+                )
+            self.amplitude_calibration = fit_amplitude_calibration(
+                validation_components, calibration_components,
+                self.config.calibration_quantile, self.config.score_mad_floor,
+            )
 
     def fingerprint(self):
         digest = hashlib.sha256()

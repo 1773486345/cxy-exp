@@ -104,6 +104,7 @@ class MNRFValidDetect(UnFixedDetectScore):
             "continuity": scored.get("continuity"),
             "valid_start_timestamp": str(test_time_index[0]) if len(test_time_index) else None,
             "valid_end_timestamp": str(test_time_index[-1]) if len(test_time_index) else None,
+            "score_readout": scored.get("score_readout", "flow"),
             "threshold": float(scored["threshold"]),
             "precision_at_calibrated_threshold": precision,
             "recall_at_calibrated_threshold": recall,
@@ -124,6 +125,7 @@ class MNRFValidDetect(UnFixedDetectScore):
             "time_index_values": test_time_index, "local_valid_mask": valid,
             "time_index_kind": np.asarray(normalized_test_time.kind),
             "time_index_source_timezone": np.asarray(normalized_test_time.source_timezone or ""),
+            "score_readout": np.asarray(metric_payload["score_readout"]),
             "actual": actual, "threshold": np.asarray(scored["threshold"]),
         }
         global_valid = np.zeros(len(train_data) + len(test_data), dtype=bool)

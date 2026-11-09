@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 import torch
 
-from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2
+from ts_benchmark.baselines.mnrf_lite_v2.MNRFLiteV2 import MNRFLiteV2, load_model
 from ts_benchmark.baselines.mnrf_lite_v2.config import MNRFConfig
 from ts_benchmark.baselines.mnrf_lite_v2.fusion import AlternatingAffineFlow
 from ts_benchmark.baselines.mnrf_lite_v2.backbone import CausalResidualTCN
@@ -177,7 +177,10 @@ def test_small_fit_score_alignment_checkpoint_roundtrip():
         assert np.allclose(scored["scores"], extended_score["scores"][:len(scored["scores"])], atol=1e-6, rtol=1e-6)
         deployed = MNRFLiteV2(device="cpu").load_checkpoint(f"{path}/deployment.pt")
         rescored = deployed.score_with_metadata(frame.iloc[:64])
+        assert rescored["score_readout"] == "flow"
         assert np.allclose(scored["scores"], rescored["scores"], atol=1e-6, rtol=1e-6)
+        with pytest.raises(ValueError, match="missing training-side state amplitude calibration"):
+            load_model(f"{path}/deployment.pt", "cpu", score_readout="state_amplitude")
         model.config.cache_chunk_size = 7
         rechunked = model.score_with_metadata(frame.iloc[:64])
         assert np.allclose(scored["scores"], rechunked["scores"], atol=1e-5, rtol=1e-5)
@@ -199,10 +202,76 @@ def test_small_fit_score_alignment_checkpoint_roundtrip():
             MNRFLiteV2(**{**config, "resume_from": path}).detect_fit(changed)
 
 
+def test_state_amplitude_readouts_share_a_checkpoint_and_calibrate_on_training_side(tmp_path):
+    rng = np.random.default_rng(73)
+    run_dir = tmp_path / "run"
+    columns = ["9", "7"]
+    frame = pd.DataFrame(rng.normal(size=(430, 2)), columns=columns)
+    frame["entity_id"] = "first"
+    model = MNRFLiteV2(
+        score_readout="flow_plus_amplitude", seq_len=32, batch_size=32,
+        stage1_epochs=1, stage2_epochs=1, patience=1, device="cpu", output_dir=str(run_dir),
+    )
+    model.detect_fit(frame)
+    trainer = model.trainer
+    validation, calibration = [], []
+    for split, components in (("validation", validation), ("calibration", calibration)):
+        raw = np.load(run_dir / "cache" / f"{split}_features.npy")
+        nll = np.load(run_dir / "cache" / f"{split}_nll.npy")
+        components.extend([
+            ((nll - trainer.calibration_center) / trainer.calibration_scale).max(axis=1),
+            np.abs(raw[..., 0]).max(axis=1),
+        ])
+    center = np.median(validation, axis=1)
+    scale = np.maximum(1.4826 * np.median(np.abs(np.asarray(validation) - center[:, None]), axis=1),
+                       model.config.score_mad_floor)
+    expected_thresholds = {
+        "flow": np.quantile(calibration[0], model.config.calibration_quantile),
+        "state_amplitude": np.quantile(calibration[1], model.config.calibration_quantile),
+        "flow_plus_amplitude": np.quantile(
+            ((np.asarray(calibration) - center[:, None]) / scale[:, None]).max(axis=0),
+            model.config.calibration_quantile,
+        ),
+    }
+
+    test = pd.DataFrame(rng.normal(size=(71, 2)), columns=columns)
+    test.loc[67, "9"] = -20.0
+    test["entity_id"] = ["first"] * 34 + ["second"] * 37
+    endpoints = np.r_[31:34, 65:71]
+    flow = model.score_with_metadata(test, 100, score_readout="flow")
+    amplitude = model.score_with_metadata(test, 100, score_readout="state_amplitude")
+    combined = model.score_with_metadata(test, 100)
+    expected_amplitude = np.abs(trainer.fixed_input.transform(test[columns].to_numpy())[endpoints]).max(axis=1)
+    np.testing.assert_array_equal(amplitude["scores"], expected_amplitude)
+    expected_combined = ((np.stack([flow["scores"], expected_amplitude]) - center[:, None])
+                         / scale[:, None]).max(axis=0)
+    np.testing.assert_array_equal(combined["scores"], expected_combined)
+    for result in (flow, amplitude, combined):
+        np.testing.assert_array_equal(result["time_indices"], endpoints + 100)
+        np.testing.assert_array_equal(np.flatnonzero(result["valid_mask"]), endpoints)
+        assert result["threshold"] == pytest.approx(expected_thresholds[result["score_readout"]])
+        np.testing.assert_array_equal(result["predictions"], result["scores"] > result["threshold"])
+    assert model.score_with_metadata(test.iloc[:20])["scores"].size == 0
+    with pytest.raises(ValueError, match="score_readout must be one of"):
+        model.score_with_metadata(test, score_readout="unknown")
+
+    deployment = run_dir / "deployment.pt"
+    for readout, expected in ((None, combined), ("flow", flow), ("state_amplitude", amplitude)):
+        deployed = load_model(deployment, device="cpu", score_readout=readout)
+        scores, predictions = deployed.detect_score(test)
+        np.testing.assert_array_equal(scores, expected["scores"])
+        np.testing.assert_array_equal(predictions, expected["predictions"])
+
+
 def test_benchmark_model_import():
     from ts_benchmark.models import get_models
 
-    models = get_models({"models": [{"model_name": "mnrf_lite_v2.MNRFLiteV2", "model_hyper_params": {"device": "cpu"}}]})
+    models = get_models({"models": [{
+        "model_name": "mnrf_lite_v2.MNRFLiteV2",
+        "model_hyper_params": {"device": "cpu", "score_readout": "state_amplitude"},
+    }]})
     assert models[0].model_name == "MNRFLiteV2"
-    assert models[0]().config.device == "cpu"
+    model = models[0]()
+    assert model.config.device == "cpu"
+    assert model.score_readout == "state_amplitude"
 
