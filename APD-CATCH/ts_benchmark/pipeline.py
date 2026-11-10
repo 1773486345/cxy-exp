@@ -144,8 +144,14 @@ def pipeline(
     ):
         raise ValueError("Not supporting different types of data sources.")
 
-    data_src: DataSource = PREDEFINED_DATASETS[dataset_name_list[0]].datasrc_class()
     data_name_list = data_config.get("data_name_list", None)
+    data_root = data_config.get("data_root")
+    if data_root is not None:
+        if dataset_name_list != ["large_detect"] or not data_name_list:
+            raise ValueError("An isolated data root requires large_detect and explicit task names.")
+        data_src = LocalAnomalyDetectDataSource(data_root)
+    else:
+        data_src = data_src_type()
     if not data_name_list:
         data_name_list = []
         for dataset_name in dataset_name_list:

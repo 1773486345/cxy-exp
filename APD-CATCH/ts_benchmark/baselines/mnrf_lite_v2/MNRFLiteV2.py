@@ -122,6 +122,35 @@ class MNRFLiteV2:
         self.variable_names = tuple(map(str, columns))
         return len(columns)
 
+    def bind_readout_data(self, frame, train_length, task, data_version, data_root=None):
+        """Bind the actual benchmark pool input before fitting, never a later CSV reread."""
+        values, columns = self._features_from_frame(frame)
+        labels = frame["label"].to_numpy()
+        if (labels.ndim != 1 or labels.dtype.kind not in "biuf"
+                or not np.isfinite(labels).all() or not np.isin(labels, [0, 1]).all()):
+            raise ValueError("readout binding requires exact finite binary labels")
+        if not 0 < train_length < len(frame):
+            raise ValueError("invalid official readout split")
+        if self.output_dir is None:
+            raise ValueError("benchmark readout binding requires an explicit output_dir")
+        payload = dict(schema_version=1, source_run_id=self.output_dir.name,
+                       task=Path(task).stem, train_length=int(train_length),
+                       official_test_rows=len(frame)-int(train_length),
+                       variable_names=list(map(str, columns)),
+                       full_input_sha256=_hash_array(values),
+                       full_time_sha256=_hash_array(self._time_index(frame)),
+                       full_labels_sha256=_hash_array(labels.astype(np.int8)),
+                       data_version=data_version, data_root=data_root,
+                       captured="actual benchmark pool input, before fit")
+        path = self.output_dir / "readout_data_contract.json"
+        if self.config.resume_from:
+            if not path.is_file():
+                raise ValueError(f"resume missing original same-run data binding: {path}; no retrospective binding")
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if saved != payload:
+                raise ValueError("resume full-input/time/label/data-version binding mismatch")
+        self._readout_data_contract = payload
+
     def detect_fit(self, train_data, train_label=None):
         fit_start = time.perf_counter()
         self.config.validate()
@@ -188,6 +217,10 @@ class MNRFLiteV2:
         }
         resume_id = hashlib.sha256(json.dumps(resume_payload, sort_keys=True).encode()).hexdigest()
         self._make_output_dirs()
+        if hasattr(self, "_readout_data_contract") and not self.config.resume_from:
+            with (self.output_dir / "readout_data_contract.json").open("x", encoding="utf-8") as handle:
+                json.dump(self._readout_data_contract, handle, indent=2, allow_nan=False)
+                handle.write("\n")
         identity_path = self.output_dir / "run_identity.json"
         if self.config.resume_from:
             if not identity_path.is_file():

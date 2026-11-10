@@ -84,7 +84,7 @@ class LocalDataSource(DataSource):
     #: name of the covariates folder
     _COVARIATES_FOLDER_NAME = "covariates"
 
-    def __init__(self, local_dataset_path: str, metadata_file_name: str):
+    def __init__(self, local_dataset_path: str, metadata_file_name: str, *, register_new_series: bool = True):
         """
         initializer
 
@@ -99,7 +99,7 @@ class LocalDataSource(DataSource):
             local_dataset_path, self._COVARIATES_FOLDER_NAME
         )
         self.metadata_path = os.path.join(local_dataset_path, metadata_file_name)
-        metadata = self.update_meta_index()
+        metadata = self.update_meta_index() if register_new_series else self._load_metadata()
         super().__init__({}, {}, metadata)
 
     def update_meta_index(self) -> pd.DataFrame:
@@ -217,10 +217,11 @@ class LocalAnomalyDetectDataSource(LocalDataSource):
     The local data source of the anomaly detection task
     """
 
-    def __init__(self):
+    def __init__(self, data_root: Optional[str] = None):
         super().__init__(
-            ANOMALY_DETECT_DATASET_PATH,
+            os.path.realpath(os.path.expanduser(data_root)) if data_root is not None else ANOMALY_DETECT_DATASET_PATH,
             "DETECT_META.csv",
+            register_new_series=data_root is None,
         )
 
 

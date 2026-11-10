@@ -53,12 +53,8 @@ def native_run(tmp_path, monkeypatch):
         report_sha256=sha(report), model_column="MNRFLiteV2;synthetic",
         metrics={key: metrics[key] for key in ("auc_roc", "auc_pr")},
     )))
-    features = frame.drop(columns="label")
-    (run / "readout_data_contract.json").write_text(json.dumps(dict(
-        source_run_id=run.name, task="toy", train_length=430, variable_names=["9", "7"],
-        full_input_sha256=_hash_array(MNRFLiteV2._features_from_frame(features)[0]),
-        full_time_sha256=_hash_array(MNRFLiteV2._time_index(features)),
-        full_labels_sha256=_hash_array(frame["label"].to_numpy().astype(np.int8)), data_version="synthetic-only")))
+    contract = json.loads((run / "readout_data_contract.json").read_text())
+    assert contract["captured"] == "actual benchmark pool input, before fit"
     return run, frame, model
 
 

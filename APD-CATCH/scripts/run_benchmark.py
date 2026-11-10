@@ -87,6 +87,8 @@ def _register_mnrf_report_references(args, report_config):
             "model_column": model_columns[0],
             "metrics": metric_values,
         }
+        if not isinstance(source_logs, pd.DataFrame):
+            reference["record_paths"] = [str(Path(path).resolve()) for path in source_logs]
         destination = run_dir / "report_reference.json"
         fd, temporary = tempfile.mkstemp(prefix=".report-reference-", dir=run_dir)
         try:
@@ -113,6 +115,8 @@ def build_data_config(args: argparse.Namespace, config_data: Dict) -> Dict:
     data_config["data_name_list"] = args.data_name_list
     if args.data_set_name is not None:
         data_config["data_set_name"] = args.data_set_name
+    if getattr(args, "data_root", None) is not None:
+        data_config["data_root"] = args.data_root
     return data_config
 
 
@@ -180,6 +184,11 @@ def build_evaluation_config(args: argparse.Namespace, config_data: Dict) -> Dict
     if args.seed is not None:
         default_strategy_args["seed"] = args.seed
 
+    if default_strategy_args.get("strategy_name") == "mnrf_valid_detect":
+        from ts_benchmark.common.constant import ANOMALY_DETECT_DATASET_PATH
+        default_strategy_args["readout_data_root"] = str(Path(
+            getattr(args, "data_root", None) or ANOMALY_DETECT_DATASET_PATH).resolve())
+
     return evaluation_config
 
 
@@ -231,6 +240,7 @@ if __name__ == "__main__":
         help="List of dataset name names entered by the user,"
              "only takes effect when data_name_list is not specified",
     )
+    parser.add_argument("--data-root", help="Isolated large_detect directory containing data/ and DETECT_META.csv")
 
     # model_config
     parser.add_argument(

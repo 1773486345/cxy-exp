@@ -44,6 +44,13 @@ class MNRFValidDetect(UnFixedDetectScore):
         model = model_factory()
         self.model = model
         train_data, train_label, test_data, test_label = self.split_data(series_name)
+        # Use the same loaded pool object as split_data, before any fit. In
+        # particular, never manufacture a missing old-run binding from a CSV.
+        model.bind_readout_data(
+            DataPool().get_pool().get_series(series_name), len(train_data), series_name,
+            self.strategy_config.get("readout_data_version", series_name + "-benchmark-original"),
+            self.strategy_config.get("readout_data_root"),
+        )
         start = time.time()
         model.detect_fit(train_data, train_label)
         run_id = model.output_dir.name
