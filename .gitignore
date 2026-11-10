@@ -13,6 +13,7 @@ __pycache__/
 Thumbs.db
 APD-CATCH/dataset/
 APD-CATCH/result/score/
+APD-CATCH/result/.mnrf-work/
 
 
 # Tool and package caches
