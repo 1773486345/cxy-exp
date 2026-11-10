@@ -1,0 +1,26 @@
+{
+  "registered_main": [
+    {
+      "file_name": "Creditcard.csv",
+      "trend": NaN,
+      "seasonal": NaN,
+      "stationary": NaN,
+      "pattern": NaN,
+      "shifting": NaN,
+      "dataset_name": "Creditcard",
+      "train_lens": 142403,
+      "test_lens": 142404,
+      "time_steps": 284807,
+      "if_univariate": false,
+      "size": "large",
+      "type_value": NaN,
+      "anomaly_rate": 0.001727486
+    }
+  ],
+  "registered_external": [],
+  "main_csv_candidates": [
+    "dataset/anomaly_detect/data/Creditcard.csv"
+  ],
+  "external_csv_candidates": [],
+  "qualification": "only historical train/test found in checked registrations; candidate-selected test is not independent"
+}

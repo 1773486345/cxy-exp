@@ -1,0 +1,43 @@
+{
+  "source_run_id": "full_gmm-full-20261020T211341Z-1931786",
+  "mapping_path": "result/analysis/MNRF-ViewProbe-ConditionalScore/conditional-score-20261030T-run2/nyc_original_row_time.csv",
+  "mapping_rows": 17520,
+  "time_step_minutes": 30,
+  "internal_train_range": [
+    0,
+    10177
+  ],
+  "internal_train_normal_rows": 10177,
+  "event_range": [
+    14701,
+    14800
+  ],
+  "event_real_time": [
+    "2015-05-03 06:30:00",
+    "2015-05-05 07:30:00"
+  ],
+  "distinct_event_calendar_keys": 99,
+  "normal_training_examples_per_key_min": 30,
+  "normal_training_examples_per_key_max": 31,
+  "training_example_count_frequency": {
+    "30": 83,
+    "31": 16
+  },
+  "whole336_normal_training_examples_min": 29,
+  "whole336_normal_training_examples_max": 30,
+  "first_training_example_range": [
+    "2014-07-01 00:00:00",
+    "2014-07-07 23:30:00"
+  ],
+  "last_training_example_range": [
+    "2015-01-25 06:30:00",
+    "2015-01-27 07:30:00"
+  ],
+  "training_range_real_time": [
+    "2014-07-01 00:00:00",
+    "2015-01-29 00:00:00"
+  ],
+  "task": "availability only; no slow reference computed; labels only posthoc inventory",
+  "fixed_future_candidate": "training-only median per weekday/timeofday, fixed before test; no in-event updates",
+  "limitation": "one scored event; availability does not demonstrate mechanism"
+}

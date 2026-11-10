@@ -1,0 +1,75 @@
+{
+  "head": "4c264c9d068f53b618ae4d39b0baf3fc2667d275",
+  "applicable_agents": [],
+  "initial_git_status": [
+    "?? result/analysis/MNRF-Readout-Readiness/",
+    "?? scripts/compare_mnrf_frozen_readouts.py",
+    "?? ts_benchmark/baselines/mnrf_lite_v2/tests/test_frozen_readout_comparison.py"
+  ],
+  "initial_untracked_preserved": true,
+  "python": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python",
+  "native_tests": {
+    "command": "CUDA_VISIBLE_DEVICES=\"\" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 conda run --no-capture-output -n catch_env python -m pytest -q ts_benchmark/baselines/mnrf_lite_v2/tests/test_mnrf_lite_v2.py",
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 7.5,
+    "exit_code": 0
+  },
+  "combined_tests": {
+    "command": "CUDA_VISIBLE_DEVICES=\"\" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 conda run --no-capture-output -n catch_env python -m pytest -q ts_benchmark/baselines/mnrf_lite_v2/tests/test_mnrf_lite_v2.py ts_benchmark/baselines/mnrf_lite_v2/tests/test_frozen_readout_comparison.py",
+    "passed": 23,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 34.92,
+    "exit_code": 0,
+    "stdout": "....................... [100%]\n23 passed in 34.92s",
+    "parent_checkpoint_generated_by": "5c763f0e85f865621e7c1312b58a52db7ab89d42 (4c264c9^), real isolated git archive + subprocess tiny fit",
+    "old_flow_comparison": "same synthetic input; exact scores/threshold/predictions/coordinates",
+    "new_checkpoint": "all three readouts roundtrip native test; exact offline readout/threshold/prediction/index reproduction",
+    "forbidden_calls": "offline synthetic comparison forbids FourViewEncoder.encode_views, AlternatingAffineFlow.forward, MNRFLiteV2.detect_fit"
+  },
+  "msl_native_source_chain": {
+    "seq_len": 128,
+    "columns": 55,
+    "sequence_mapping_propagated": false,
+    "col0_before_variable_aggregation": false,
+    "cross_sequence_windows_if_using_current_native_launcher": {
+      "train": 2413,
+      "validation": 381,
+      "calibration": 457,
+      "test": 3302
+    },
+    "official_train_rows": 58317,
+    "official_test_rows": 73729,
+    "interpretation": "static endpoint enumeration from verified 27-channel lengths and current no-entity loader; not a new model run"
+  },
+  "read_only_rechecks": {
+    "small_source_hashes_unchanged": 23,
+    "gecco": "saved AP/AUC, calibration endpoints, fit endpoints, fingerprint and coordinates; saved predictions",
+    "cicids": "Full/IF/PCA global coordinates, timestamps and labels; common contract catch_test endpoint axis; saved metrics and predictions",
+    "genesis": "all 13 binary-field near/stable normal population and FP counts independently reproduced",
+    "nyc": "real half-hour mapping; training-only calendar history availability"
+  },
+  "final_combined_rerun": {
+    "passed": 23,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 42.66,
+    "exit_code": 0,
+    "stdout": "....................... [100%]\n23 passed in 42.66s"
+  },
+  "syntax_checks": {
+    "py_compile_comparator_and_test": 0,
+    "bash_n_shared_launcher": 0
+  },
+  "real_data": {
+    "model_load": false,
+    "encoder_forward": false,
+    "flow_forward": false,
+    "training": false,
+    "fit": false,
+    "new_thresholds": false,
+    "baseline_rerun": false
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "binary_fields": [
+    "MotorData.Motor_Pos1reached",
+    "MotorData.Motor_Pos2reached",
+    "MotorData.Motor_Pos3reached",
+    "MotorData.Motor_Pos4reached",
+    "NVL_Recv_Ind.GL_Metall",
+    "NVL_Recv_Ind.GL_NonMetall",
+    "NVL_Recv_Storage.GL_I_ProcessStarted",
+    "NVL_Recv_Storage.GL_I_Slider_IN",
+    "NVL_Recv_Storage.GL_I_Slider_OUT",
+    "NVL_Recv_Storage.GL_LightBarrier",
+    "NVL_Send_Storage.ActivateStorage",
+    "PLC_PRG.Gripper",
+    "PLC_PRG.MaterialIsMetal"
+  ],
+  "normal_points": 12375,
+  "fp": 375,
+  "all_fields_rechecked": true
+}

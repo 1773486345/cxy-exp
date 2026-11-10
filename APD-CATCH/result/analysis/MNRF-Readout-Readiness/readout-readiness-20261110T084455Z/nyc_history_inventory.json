@@ -1,0 +1,14 @@
+{
+  "past_history_rows": 336,
+  "past_history_hours": 168,
+  "scored_points": 4225,
+  "normal_scored_points": 4126,
+  "history_available_scored": 4225,
+  "whole_past_history_normal_scored": 3791,
+  "whole_past_history_normal_normal_scored": 3790,
+  "event_start": 14701,
+  "normal_contiguous_rows_before_event": 14701,
+  "event_past_336_normal": true,
+  "event_true_time": "2015-05-03T06:30:00.000000000",
+  "caveat": "one scored event; history inventory only, no new slow-reference score; labels used for inventory only"
+}

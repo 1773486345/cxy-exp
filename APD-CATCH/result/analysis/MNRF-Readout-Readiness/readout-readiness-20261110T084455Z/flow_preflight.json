@@ -1,0 +1,209 @@
+{
+  "CalIt2": {
+    "configuration": {
+      "action": "--dry-run",
+      "task": "CalIt2",
+      "data_root": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root",
+      "config": {
+        "seed": 2021,
+        "seq_len": 192,
+        "pattern_len": 32,
+        "hidden_dim": 32,
+        "view_dim": 8,
+        "evolution_dim": 8,
+        "pattern_dim": 8,
+        "relation_dim": 8,
+        "batch_size": 128,
+        "stage1_epochs": 50,
+        "stage2_epochs": 30,
+        "patience": 5,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0001,
+        "feature_std_floor": 0.05,
+        "train_noise_std": 0.01,
+        "noise_seed": 20261013,
+        "score_mad_floor": 0.001,
+        "calibration_quantile": 0.995,
+        "cache_chunk_size": 256,
+        "encoding_batch_size": 128,
+        "device": "cpu",
+        "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-Lite-V2/CalIt2-RawCount/flow-readout-4c264c9",
+        "resume_from": "",
+        "task_name": "CalIt2.csv",
+        "score_readout": "flow"
+      },
+      "arguments": [
+        "scripts/run_benchmark.py",
+        "--config-path",
+        "mnrf_lite_v2_unfixed_detect_score.json",
+        "--data-set-name",
+        "large_detect",
+        "--data-name-list",
+        "CalIt2.csv",
+        "--model-name",
+        "mnrf_lite_v2.MNRFLiteV2",
+        "--model-hyper-params",
+        "{\"seed\": 2021, \"seq_len\": 192, \"pattern_len\": 32, \"hidden_dim\": 32, \"view_dim\": 8, \"evolution_dim\": 8, \"pattern_dim\": 8, \"relation_dim\": 8, \"batch_size\": 128, \"stage1_epochs\": 50, \"stage2_epochs\": 30, \"patience\": 5, \"learning_rate\": 0.001, \"weight_decay\": 0.0001, \"feature_std_floor\": 0.05, \"train_noise_std\": 0.01, \"noise_seed\": 20261013, \"score_mad_floor\": 0.001, \"calibration_quantile\": 0.995, \"cache_chunk_size\": 256, \"encoding_batch_size\": 128, \"device\": \"cpu\", \"output_dir\": \"/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-Lite-V2/CalIt2-RawCount/flow-readout-4c264c9\", \"resume_from\": \"\", \"task_name\": \"CalIt2.csv\", \"score_readout\": \"flow\"}",
+        "--seed",
+        "2021",
+        "--num-workers",
+        "1",
+        "--timeout",
+        "60000",
+        "--save-path",
+        "score/MNRF-Lite-V2/CalIt2-RawCount/flow-readout-4c264c9"
+      ],
+      "historical_gmm_reference": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe-RawCount/CalIt2/rawcount-full-20261031T20261031T092320Z-1093827"
+    },
+    "preflight": {
+      "preflight": "passed-no-model-created",
+      "data_csv": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root/data/CalIt2.csv",
+      "metadata": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root/DETECT_META.csv",
+      "variable_names": [
+        "9",
+        "7"
+      ],
+      "official_train_rows": 2520,
+      "official_test_rows": 2520,
+      "split_ranges": {
+        "train": [
+          0,
+          1710
+        ],
+        "validation": [
+          1901,
+          2114
+        ],
+        "calibration": [
+          2305,
+          2520
+        ]
+      },
+      "window_counts": {
+        "train": 1519,
+        "validation": 22,
+        "calibration": 24
+      },
+      "test_windows": 2329,
+      "test_first_local": 191,
+      "full_input_sha256": "c3d3a6fd5464c83617674765005e7ddecf71eccfe08190c84f0aab656ee870fd",
+      "head_seed": 2021
+    },
+    "exit_code": 0
+  },
+  "PSM": {
+    "configuration": {
+      "action": "--dry-run",
+      "task": "PSM",
+      "data_root": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect",
+      "config": {
+        "seed": 2021,
+        "seq_len": 192,
+        "pattern_len": 32,
+        "hidden_dim": 32,
+        "view_dim": 8,
+        "evolution_dim": 8,
+        "pattern_dim": 8,
+        "relation_dim": 8,
+        "batch_size": 128,
+        "stage1_epochs": 50,
+        "stage2_epochs": 30,
+        "patience": 5,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0001,
+        "feature_std_floor": 0.05,
+        "train_noise_std": 0.01,
+        "noise_seed": 20261013,
+        "score_mad_floor": 0.001,
+        "calibration_quantile": 0.995,
+        "cache_chunk_size": 256,
+        "encoding_batch_size": 128,
+        "device": "cpu",
+        "output_dir": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-Lite-V2/PSM/flow-readout-4c264c9",
+        "resume_from": "",
+        "task_name": "PSM.csv",
+        "score_readout": "flow"
+      },
+      "arguments": [
+        "scripts/run_benchmark.py",
+        "--config-path",
+        "mnrf_lite_v2_unfixed_detect_score.json",
+        "--data-set-name",
+        "large_detect",
+        "--data-name-list",
+        "PSM.csv",
+        "--model-name",
+        "mnrf_lite_v2.MNRFLiteV2",
+        "--model-hyper-params",
+        "{\"seed\": 2021, \"seq_len\": 192, \"pattern_len\": 32, \"hidden_dim\": 32, \"view_dim\": 8, \"evolution_dim\": 8, \"pattern_dim\": 8, \"relation_dim\": 8, \"batch_size\": 128, \"stage1_epochs\": 50, \"stage2_epochs\": 30, \"patience\": 5, \"learning_rate\": 0.001, \"weight_decay\": 0.0001, \"feature_std_floor\": 0.05, \"train_noise_std\": 0.01, \"noise_seed\": 20261013, \"score_mad_floor\": 0.001, \"calibration_quantile\": 0.995, \"cache_chunk_size\": 256, \"encoding_batch_size\": 128, \"device\": \"cpu\", \"output_dir\": \"/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-Lite-V2/PSM/flow-readout-4c264c9\", \"resume_from\": \"\", \"task_name\": \"PSM.csv\", \"score_readout\": \"flow\"}",
+        "--seed",
+        "2021",
+        "--num-workers",
+        "1",
+        "--timeout",
+        "60000",
+        "--save-path",
+        "score/MNRF-Lite-V2/PSM/flow-readout-4c264c9"
+      ],
+      "historical_gmm_reference": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714"
+    },
+    "preflight": {
+      "preflight": "passed-no-model-created",
+      "data_csv": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/data/PSM.csv",
+      "metadata": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/dataset/anomaly_detect/DETECT_META.csv",
+      "variable_names": [
+        "feature_0",
+        "feature_1",
+        "feature_2",
+        "feature_3",
+        "feature_4",
+        "feature_5",
+        "feature_6",
+        "feature_7",
+        "feature_8",
+        "feature_9",
+        "feature_10",
+        "feature_11",
+        "feature_12",
+        "feature_13",
+        "feature_14",
+        "feature_15",
+        "feature_16",
+        "feature_17",
+        "feature_18",
+        "feature_19",
+        "feature_20",
+        "feature_21",
+        "feature_22",
+        "feature_23",
+        "feature_24"
+      ],
+      "official_train_rows": 132481,
+      "official_test_rows": 87841,
+      "split_ranges": {
+        "train": [
+          0,
+          105679
+        ],
+        "validation": [
+          105870,
+          119079
+        ],
+        "calibration": [
+          119270,
+          132481
+        ]
+      },
+      "window_counts": {
+        "train": 105488,
+        "validation": 13018,
+        "calibration": 13020
+      },
+      "test_windows": 87650,
+      "test_first_local": 191,
+      "full_input_sha256": "49d760cc748c54890127f9bf25b507796d7a0dea41759946280548bdb83e2500",
+      "head_seed": 2021
+    },
+    "exit_code": 0
+  }
+}

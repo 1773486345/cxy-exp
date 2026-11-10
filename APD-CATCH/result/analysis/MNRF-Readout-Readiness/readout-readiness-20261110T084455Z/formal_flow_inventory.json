@@ -1,0 +1,45 @@
+{
+  "head": "4c264c9d068f53b618ae4d39b0baf3fc2667d275",
+  "roots": [
+    "result/score",
+    "result/analysis"
+  ],
+  "files_examined": 5572,
+  "include_ignored_files": true,
+  "follow_directory_symlinks": false,
+  "formal_marker_files": [],
+  "formal_runs_selected": [],
+  "formal_runs_missing": [
+    "PSM",
+    "CalIt2-RawCount"
+  ],
+  "markers": [
+    "deployment.pt",
+    "run_metadata.json",
+    "best_fusion.pt",
+    "fusion.pt",
+    "flow.pt"
+  ],
+  "selection_rule": "bound source/data version and complete native Flow artifacts; never test metric or mtime",
+  "historical_references": [
+    {
+      "task": "PSM",
+      "run_id": "full_gmm-full-20261024T115119Z-3976714",
+      "type": "Full GMM; not formal Flow",
+      "path": "result/score/MNRF-ViewProbe/PSM/full_gmm-full-20261024T115119Z-3976714",
+      "seq_len": 192
+    },
+    {
+      "task": "CalIt2-RawCount",
+      "run_id": "rawcount-full-20261031T20261031T092320Z-1093827",
+      "type": "Full GMM; not formal Flow",
+      "path": "result/score/MNRF-ViewProbe-RawCount/CalIt2/rawcount-full-20261031T20261031T092320Z-1093827",
+      "seq_len": 192,
+      "variable_names": [
+        "9",
+        "7"
+      ]
+    }
+  ],
+  "scope_limit": "No conclusion about results outside the checked project result roots; no model weights loaded for real-data inventory"
+}

@@ -1,0 +1,52 @@
+{
+  "head": "4c264c9d068f53b618ae4d39b0baf3fc2667d275",
+  "interpreter": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/bin/python",
+  "process_threads": 1,
+  "created_utc": "2026-11-10T08:44:56.620891Z",
+  "formal_flow_inventory": {
+    "roots": [
+      "result/score",
+      "result/analysis"
+    ],
+    "matched_files": [],
+    "names": [
+      "deployment.pt",
+      "run_metadata.json",
+      "best_fusion.pt",
+      "fusion.pt",
+      "flow.pt"
+    ]
+  },
+  "genesis_rule": {
+    "binary_fields": "all full-data fields with exactly two observed values, not assumed exogenous",
+    "neighborhood": "fixed +/-8 actual rows around transitions with both adjacent endpoints normal; clipped to same continuous normal segment; posthoc descriptive",
+    "second_population": "normal endpoint with all192 input rows labeled normal"
+  },
+  "consumed_small_file_sha256": {
+    "result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522/probe_manifest.json": "d9c790772ba682c7d298e626da9744e01591429da03fa51d130b34313d2bc020",
+    "result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522/analysis_inputs.npz": "c2f96dea8c13ddd7ad1821cb21b010cb4aea19be0be2d00f3f3697175461f304",
+    "result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522/results/aligned_scores.npz": "3a10938e40aafe3ea1c9da75b7d465872a7e890a72a10881ea990fdbc3d321ee",
+    "result/score/MNRF-ViewProbe/Genesis/full_gmm-full-20261020T205005Z-1645522/analysis_inputs.json": "3d1d27b1418ee3a6188bb9d0e415152e5c06de05dfa99292e78af83eea31cd18",
+    "result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/probe_manifest.json": "06eebc2845264ec1cca3255d7f6b8e3958b2380291aca3773ff1895a23f87e09",
+    "result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/analysis_inputs.npz": "35720eaa8b11c226346bef13d0622be01bc7705756f6435618d0ebf6fb90dea5",
+    "result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/results/aligned_scores.npz": "25b16dc5e648c03242990ecd9ac10eb60e3c5dee264a531fab6b60eb2aa37158",
+    "result/analysis/MNRF-ViewProbe-ConditionalScore/conditional-score-20261030T-run2/nyc_original_row_time.csv": "2ca0a02b37ba6e9ea9c019007c55b0d0ddf0862a7485623b3d45328b060129a4",
+    "result/score/MNRF-ViewProbe/NYC/full_gmm-full-20261020T211341Z-1931786/analysis_inputs.json": "12f30513581f85e4cdb39e214ad283db20a483b57be03f699872cc47abfb824d",
+    "result/analysis/MNRF-ViewProbe-FullDiagnostic/full-head-diagnostic-20261030T062555Z-3226097/full_four_configurations.csv": "cb4479f3dbae47c9d35e2c96db20107602667f133252a7f97ba2990cd4ef35e4",
+    "result/analysis/MNRF-ViewProbe-FullDiagnostic/full-head-diagnostic-20261030T062555Z-3226097/loss_decomposition.csv": "4ae88f4b85e1bc4e26581f4e5262b0984dd8a69171b6a762b51b24f942105988",
+    "result/score/MNRF-ViewProbe/GECCO/full_gmm-full-20261020T204951Z-1642355/results/aligned_scores.npz": "fa5ab0ff360decb892f9ad1cff2ab182f8fd479d78a238e1d013a4157aec4610",
+    "result/analysis/MNRF-ViewProbe-Ablation/branch-ablation-20261024T210034Z-2771438/branch-probe/GECCO/heads/FULL_CONCAT/results/aligned_scores.npz": "12473b3c1e32ba6184ef30e5ff6d2207311d62a143fb5dd521e665e6c47aa59c",
+    "result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319/probe_manifest.json": "8cdf4d090c6f3a73b454f49102edba0d8c8e028601ae55e86581d372adfc8d8a",
+    "result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319/analysis_inputs.npz": "520ab1457aa28fbb3a9643c2e73b557cbcbebb001dc7312abeabe937060011aa",
+    "result/score/MNRF-ViewProbe/CICIDS/full_gmm-full-20261024T115157Z-3980319/results/aligned_scores.npz": "bd68fc24c2dbd15e32b9f5355bea631339db480f3d2393ada5985c15005b40e3",
+    "result/analysis/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/common_contract/common_contract.json": "6de93931c890673bf7bcfdf9c2f606d69c10d5eafeeb6ca0373860dd9e09007d",
+    "result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/IsolationForest/evidence/baseline.json": "12db6841abe6edafb88d9a48edfa56c2b6660e804fa90a2f06e5d5073f571939",
+    "result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/IsolationForest/results/aligned_scores.npz": "879ab2d5259b82305d71126dc112f14a38feb341821a5e8561ab4605b78ad3eb",
+    "result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/PCA/evidence/baseline.json": "b02d2a76cf4b99b2a941968434cf35fbbe102e2ef3b9f1a59f0d06d8d7f98811",
+    "result/score/MNRF-ViewProbe-Common/common-baseline-20261029T-newrun/CICIDS/PCA/results/aligned_scores.npz": "21fbd7e28ed9d171b011f46f58dad4bf6a0d279e6214c68e5e5fb7d68fd0fd7b",
+    "dataset/anomaly_detect/DETECT_META.csv": "3f12e5cac116aee0839a3664018d610a09e98182e6d9d406bc77cc0e89310570",
+    "dataset/external_validation/EXTERNAL_DETECT_META.csv": "f6dbb5c071cc50492fe1a988757f7a4a38145da5561077e7f2b98455e381f39a"
+  },
+  "no_model_load_or_forward": true,
+  "no_fit_training_or_new_calibration": true
+}

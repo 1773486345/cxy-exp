@@ -1,0 +1,7 @@
+dataset,readout,status,source_run_id,ap,tp,fp,recall,fpr,calibration_windows,blocked_reason
+CalIt2-RawCount,flow,missing_artifacts,,,,,,,,no completed native Flow run in checked result roots
+CalIt2-RawCount,state_amplitude,missing_artifacts,,,,,,,,no same-run input statistics and validation/calibration caches
+CalIt2-RawCount,flow_plus_amplitude,missing_artifacts,,,,,,,,no same-run Flow and amplitude calibration components
+PSM,flow,missing_artifacts,,,,,,,,no completed native Flow run in checked result roots
+PSM,state_amplitude,missing_artifacts,,,,,,,,no same-run input statistics and validation/calibration caches
+PSM,flow_plus_amplitude,missing_artifacts,,,,,,,,no same-run Flow and amplitude calibration components
