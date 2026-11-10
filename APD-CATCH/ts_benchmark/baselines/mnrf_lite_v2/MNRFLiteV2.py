@@ -15,6 +15,8 @@ import torch
 
 from .config import MNRFConfig
 from .layout import require_layout
+from .readout import (combine_scores, flow_scores, state_amplitude_scores,
+                      validate_amplitude_calibration, validate_score_readout)
 from .training import EndWindowDataset, MNRFTrainer, _validate_resume_state, purged_ranges, seed_all
 from .windows import (TimeIndex, continuous_segments, infer_expected_interval,
                       intersect_segments, normalize_time_index)
@@ -26,7 +28,11 @@ TIME_PROTOCOL_VERSION = "train-frozen-cadence-v1"
 class MNRFLiteV2:
     model_name = "MNRFLiteV2"
 
-    def __init__(self, **kwargs):
+    def __init__(self, *, score_readout=None, **kwargs):
+        # An explicit readout opts in during fit or overrides a deployment default.
+        self._requested_score_readout = (validate_score_readout(score_readout)
+                                         if score_readout is not None else None)
+        self.score_readout = self._requested_score_readout or "flow"
         self.config = MNRFConfig.from_kwargs(**kwargs)
         self.device = self._select_device(self.config.device)
         self.trainer: Optional[MNRFTrainer] = None
@@ -119,6 +125,7 @@ class MNRFLiteV2:
     def detect_fit(self, train_data, train_label=None):
         fit_start = time.perf_counter()
         self.config.validate()
+        self.score_readout = self._requested_score_readout or "flow"
         seed_all(self.config.seed)
         values, columns = self._features_from_frame(train_data)
         if len(columns) < 2:
@@ -423,7 +430,10 @@ class MNRFLiteV2:
             stage2_identity=stage2_identity,
         )
         stage2_seconds = time.perf_counter() - stage2_start
-        self.trainer.calibrate(validation_features, calibration_features, self.output_dir / "cache")
+        self.trainer.calibrate(
+            validation_features, calibration_features, self.output_dir / "cache",
+            with_amplitude=self.score_readout != "flow",
+        )
         labels = None if train_label is None else np.asarray(train_label).reshape(-1)
         label_audit = {"available": labels is not None, "count": 0, "positive_count": None, "used_for_filtering": False}
         if labels is not None:
@@ -479,7 +489,8 @@ class MNRFLiteV2:
                 "deployment_total": sum(parameter.numel() for parameter in self.trainer.encoder.parameters())
                 + sum(parameter.numel() for parameter in self.trainer.flow.parameters()),
             },
-            "threshold": self.trainer.threshold,
+            "score_readout": self.score_readout,
+            "threshold": self._score_threshold(self.score_readout),
             "calibration_quantile": self.config.calibration_quantile,
             "feature_cache_paths": {
                 "train": str(train_path), "validation": str(validation_path), "calibration": str(calibration_path)
@@ -560,6 +571,9 @@ class MNRFLiteV2:
             "temporal_rule": self.temporal_rule,
             "training_metadata": self.training_metadata,
         }
+        if self.trainer.amplitude_calibration is not None:
+            artifact["score_readout"] = self.score_readout
+            artifact["amplitude_calibration"] = self.trainer.amplitude_calibration
         temporary = root / f"deployment.pt.tmp-{os.getpid()}"
         torch.save(artifact, temporary)
         os.replace(temporary, root / "deployment.pt")
@@ -569,6 +583,13 @@ class MNRFLiteV2:
         expected_version = ARCHITECTURE_VERSION
         if artifact.get("architecture_version") != expected_version:
             raise ValueError("deployment architecture version is missing or incompatible")
+        saved_readout = validate_score_readout(artifact.get("score_readout", "flow"))
+        readout = self._requested_score_readout or saved_readout
+        amplitude_calibration = artifact.get("amplitude_calibration")
+        if amplitude_calibration is not None:
+            amplitude_calibration = validate_amplitude_calibration(amplitude_calibration)
+        elif readout != "flow" or saved_readout != "flow":
+            raise ValueError("deployment is missing training-side state amplitude calibration")
         requested_device = self.config.device
         config = MNRFConfig.from_kwargs(**artifact["config"])
         require_layout(artifact.get("feature_layout"), config.layout, f"{path} deployment")
@@ -596,6 +617,8 @@ class MNRFLiteV2:
         self.trainer.calibration_center = np.asarray(artifact["calibration_center"], dtype=np.float32)
         self.trainer.calibration_scale = np.asarray(artifact["calibration_scale"], dtype=np.float32)
         self.trainer.threshold = float(artifact["threshold"])
+        self.trainer.amplitude_calibration = amplitude_calibration
+        self.score_readout = readout
         self.training_metadata = artifact.get("training_metadata", {})
         self.temporal_rule = artifact.get("temporal_rule")
         if not self.temporal_rule or self.temporal_rule.get("version") != TIME_PROTOCOL_VERSION:
@@ -603,10 +626,20 @@ class MNRFLiteV2:
         self._fitted = True
         return self
 
+    def _score_threshold(self, readout):
+        if readout == "flow":
+            return self.trainer.threshold
+        if self.trainer.amplitude_calibration is None:
+            raise ValueError("score_readout requires training-side state amplitude calibration")
+        return self.trainer.amplitude_calibration["thresholds"][readout]
+
     @torch.no_grad()
-    def score_with_metadata(self, test_data, index_offset=0, return_diagnostics=False):
+    def score_with_metadata(self, test_data, index_offset=0, return_diagnostics=False, *, score_readout=None):
+        """Score frozen window endpoints with Flow, S amplitude, or their calibrated max."""
         if not self._fitted or self.trainer is None:
             raise RuntimeError("detect_fit or load_checkpoint must be called before scoring")
+        readout = self.score_readout if score_readout is None else validate_score_readout(score_readout)
+        threshold = self._score_threshold(readout)
         values, columns = self._features_from_frame(test_data)
         names = tuple(map(str, columns))
         if names != self.variable_names:
@@ -633,7 +666,8 @@ class MNRFLiteV2:
                 "valid_mask": valid_mask,
                 "per_variable_nll": None,
                 "per_variable_calibrated": None,
-                "threshold": self.trainer.threshold,
+                "score_readout": readout,
+                "threshold": threshold,
             }
         endpoint_parts = [np.arange(left + self.config.seq_len - 1, right, dtype=np.int64)
                           for left, right in segments if right - left >= self.config.seq_len]
@@ -654,10 +688,17 @@ class MNRFLiteV2:
             ).reshape(len(selected), self.config.seq_len, len(columns))
             raw = self.trainer.encoder.encode_views(torch.as_tensor(windows, device=self.device))["features"].cpu().numpy()
             nll = self.trainer.per_variable_scores(raw)
-            calibrated = (nll - self.trainer.calibration_center) / self.trainer.calibration_scale
             stop = start + len(selected)
-            scores[start:stop] = np.max(calibrated, axis=1)
-            predictions[start:stop] = (scores[start:stop] > self.trainer.threshold).astype(np.int64)
+            flow = flow_scores(nll, self.trainer.calibration_center, self.trainer.calibration_scale)
+            if readout == "flow":
+                batch_scores = flow
+            else:
+                amplitude = state_amplitude_scores(raw, self.config.layout.slices["S"][0])
+                batch_scores = amplitude if readout == "state_amplitude" else combine_scores(
+                    flow, amplitude, self.trainer.amplitude_calibration
+                )
+            scores[start:stop] = batch_scores
+            predictions[start:stop] = (scores[start:stop] > threshold).astype(np.int64)
             if nll_output is not None:
                 nll_output[start:stop] = nll
         local_indices = endpoints
@@ -672,7 +713,8 @@ class MNRFLiteV2:
             "per_variable_nll": nll_output,
             "per_variable_calibrated": None,
             "continuity": continuity,
-            "threshold": self.trainer.threshold,
+            "score_readout": readout,
+            "threshold": threshold,
         }
 
     def detect_score(self, test_data):
@@ -680,8 +722,8 @@ class MNRFLiteV2:
         return result["scores"], result["predictions"]
 
 
-def load_model(path, device="auto"):
-    model = MNRFLiteV2(device=device)
+def load_model(path, device="auto", *, score_readout=None):
+    model = MNRFLiteV2(device=device, score_readout=score_readout)
     return model.load_checkpoint(path)
 
 
