@@ -126,9 +126,16 @@ content hashes match the saved binding. Incompatible or legacy checkpoints are
 rejected without overwriting run artifacts; start a new run for a new protocol.
 The time/cache/deployment schema is versioned as
 `mnrf-lite-v2-tcn6b-2l-r1-segment-v3-timefreeze-layout-v1`. The deployment package
-excludes the auxiliary head. Caches, statistics, manifests, aligned scores,
-metrics and the benchmark report remain inside the run directory. The run
-validator fails on missing, malformed, cross-task, or inconsistent artifacts.
+excludes the auxiliary head. The run validator checks the working directory
+before the task launcher publishes results.
+
+The task launcher defaults to `MNRF_ARTIFACT_POLICY=benchmark`. It publishes
+only the native benchmark `.tar.gz` record and `test_report*.csv`. Checkpoints,
+caches and detailed scores live under `result/.mnrf-work/` during training and
+are removed after publication. Failed runs retain their working directory.
+Use `MNRF_ARTIFACT_POLICY=readout` to retain the separate validated work
+directory for offline comparisons. `MNRF_ARTIFACT_POLICY=full` retains the
+original all-artifacts layout in the final run directory.
 
 ## Scoring and Task Status
 
@@ -195,8 +202,12 @@ The launcher defaults to the first GPU already visible as `cuda:0`; it preserves
 an existing `CUDA_VISIBLE_DEVICES` restriction and prints the final device and
 mask. Use `GPU_ID=cpu` for explicit CPU mode. Shared-GPU memory overrides are
 manual, for example `BATCH_SIZE=16 ENCODING_BATCH_SIZE=4`; no automatic OOM
-retry or batch adjustment exists. `MNRF_SAVE_PATH` sets a new relative path
-under `result/`. To resume a verified epoch-boundary run:
+retry or batch adjustment exists. `MNRF_SEQ_LEN` overrides the default 128.
+For `large_detect`, `MNRF_DATA_ROOT` selects an isolated data root with a
+registered task in `DETECT_META.csv` and its CSV under `data/`. The isolated
+loader reads the supplied metadata as-is. `MNRF_SAVE_PATH` sets a new relative
+path under `result/`. To resume a verified epoch-boundary run, use the relative
+final path with the original options, including the artifact policy if set:
 
 ```bash
 GPU_ID=0 MNRF_RESUME_FROM=score/MNRF-Lite-V2/PSM/run-<UTC>-<PID> conda run --no-capture-output -n catch_env bash ./scripts/multivariate_detection/detect_score/PSM_script/MNRFLiteV2.sh
