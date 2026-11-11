@@ -1,8 +1,8 @@
 # 状态幅度读出与八组决策检查
 
-**本轮不能确认“状态幅度给同一个正式 Flow 补回多少检出”：检查的两个结果根目录中没有正式 Flow 运行产物。** 没有把历史 Full GMM、冻结 R 解码器或计数幅度的成绩冒充 Flow。共用离线入口、真实旧版本 checkpoint 回归及两组数据加载预检已完成；其余六组检查的实际结果如下。未启动任何真实模型前向、训练、拟合、baseline 或真实数据新阈值计算。
+**两组正式 Flow 的原工作目录已找到，原生验收及三路同源离线对照均完成（2/2）。** 1% FPR预算内，CalIt2 RawCount 的 Flow→Flow加幅度为9TP/15FP→9TP/12FP；PSM为177TP/575FP→182TP/577FP。新增幅度未证明普遍补检出：按各自q=.995报警，CalIt2净增13TP但增加113FP，PSM不增TP、增加2FP。没有把历史Full GMM或冻结R读出当成正式Flow。
 
-实际 HEAD：`4c264c9d068f53b618ae4d39b0baf3fc2667d275`；仓库根为 `/media/h3c/users/wangyueyang1/cxy`，工作目录保持 `APD-CATCH`。没有适用的祖先或子目录 AGENTS.md。开始时已存在的三个未跟踪路径为本目录所属结果根、共用比较脚本及其测试；保留并在其上继续完成，没有 reset、切换、提交或推送。
+本次分析起始HEAD：`98657f7025c6e2a8776414dfd316ef6b8d7f1857`，分支`main`，起始工作树干净；仓库根为 `/media/h3c/users/wangyueyang1/cxy`，工作目录保持 `APD-CATCH`。没有适用AGENTS.md。原准备轮次基于`4c264c9`，以下六组历史检查保留其原记录。本次只运行CPU离线核验与统计：没有训练、恢复、模型前向、拟合或baseline；两个新增读出的阈值仅由同次运行保存的验证/独立校准资料复现，没有调整原Flow阈值。
 
 catch_env：Python 3.8.20、PyTorch 2.4.1+cu121、NumPy 1.24.4、pandas 1.5.3、scikit-learn 1.3.2。统计进程各用单线程；独立任务并行检查，共用评分入口只实现一份。
 
@@ -10,8 +10,8 @@ catch_env：Python 3.8.20、PyTorch 2.4.1+cu121、NumPy 1.24.4、pandas 1.5.3、
 
 | 数据集 | 状态、已经执行的检查 | 可采用的设置与下一项缺口 |
 |---|---|---|
-| CalIt2 RawCount | 入口预检通过，正式 Flow 缺产物；隔离根、字段 `[9,7]`、2520/2520 官方划分、L=192 全部核对 | RawCount 单列。未来显式 L=192 的 Flow 预期测试 2329、校准 24 窗口；小校准集限制须保留。不能套用默认 L=128 launcher 的轴或阈值 |
-| PSM | 入口预检通过，正式 Flow 缺产物；L=192、87650 测试端点、13020 校准窗口 | 历史 GMM/R 结果各自保留；正式 Flow 完成后再运行同源三读出比较。越界只分层，不屏蔽或加分 |
+| CalIt2 RawCount | 正式Flow三读出验收完成；隔离根、字段 `[9,7]`、2520/2520官方划分、L192、2329同点 | 24个校准窗口限制保留；同预算没有增加TP，独立校准报警增加误报。历史183FP预算单列 |
+| PSM | 正式Flow三读出验收完成；L192、87650同点、13020校准窗口 | 加幅度在1%预算净增5TP/2FP；保存阈值下高误报未改善。历史GMM/R独立报告，越界仅分层 |
 | MSL | 只读链路检查完成；55 列保留，但真实序列 ID 未传入原生 launcher，聚合前 col_0 选择也未接通 | 不能把原生 Flow 入口称为已采用边界修正版。最小修补点见下文；已完成的 col_0 成绩是 Full GMM |
 | GECCO | 原 full/diag GMM 保存结果与同源端点、指纹、坐标、标签、预测、上尾标签复核完成 | diag 可保留协方差敏感性对照；整体 AUC 提升不等于低 FPR 检出明显改善。校准污染针对报警解释，不能解释 AUC |
 | Genesis | 固定 ±8 行的状态切换邻域与稳定区统计已完成，三个异常段均核对 | 有支持工况读出的局部证据，但不同状态变量方向相反，不能统一把二值字段移出评分 |
@@ -19,7 +19,7 @@ catch_env：Python 3.8.20、PyTorch 2.4.1+cu121、NumPy 1.24.4、pandas 1.5.3、
 | Creditcard | 数据资格盘点完成，缺独立数据及其分数 | 保持 R 残差候选，不宣称独立确认完成；全轴 3/5800 特征超差是另一个未解决问题 |
 | CICIDS | 历史 GMM、逐行 IF/PCA 同 84925 点结果复核完成；session/entity 映射缺失 | 逐行参照可判断现有字段的行级排序；不能证明行邻接是物理时序。191 点掩码前缀另列 |
 
-机器可读状态：[dataset_status.csv](dataset_status.csv)。实际新正式 Flow 三读出结果 **0/2 组**；[formal_flow_results.csv](formal_flow_results.csv) 六个位置均明确缺产物，指标留空。其余六组有本轮可判定检查，不因前两组缺产物而停止。
+机器可读状态：[dataset_status.csv](dataset_status.csv)。[formal_flow_results.csv](formal_flow_results.csv)含两组正式Flow的六个读出位置、各自报警/预算点（12行）；[formal_flow_psm_segments.csv](formal_flow_psm_segments.csv)含PSM十等分60行。越界分层及完整比较行保存在对应离线输出目录的`results.csv`中；[formal_flow_sources.json](formal_flow_sources.json)保存实际来源、绑定摘要与校准参数。其余六组沿用已完成的检查，本次没有重算这些模型。
 
 ## 共用入口及公式
 
@@ -35,35 +35,61 @@ catch_env：Python 3.8.20、PyTorch 2.4.1+cu121、NumPy 1.24.4、pandas 1.5.3、
 
 输出 `results.csv`、`scores.npz`、`manifest.json`：保存三路真实分数/预测/阈值、同一坐标与原掩码、校准窗口数和源小文件摘要。排序诊断每路只在全轴选一次 `floor(N_normal/100)` 预算点，并列分数组整体移动，严格 `>`，TP 最大后 FP 最少；保存 q=.995 报警独立列出。PSM 再按官方测试轴十等分投影，并报告相对 Flow 的新增/丢失 TP、FP。feature_1/3 超官方训练最大值只作附加分层，不重新选预算或阈值。
 
-## CalIt2 RawCount 与 PSM：来源核查、已执行预检、待运行命令
+## CalIt2 RawCount 与 PSM：已完成正式Flow同源对照
 
-[formal_flow_inventory.json](formal_flow_inventory.json) 记录实际遍历 `result/score`、`result/analysis`，包含被 Git 忽略的文件，检查 5572 个文件，未发现 `deployment.pt`、`run_metadata.json`、`best_fusion.pt`、`fusion.pt` 或 `flow.pt`。未检查这两个根之外的任意服务器位置，不将未找到扩大成“任何位置都不存在”。候选按数据来源与完整性选，未按时间/AP 选。
+[formal_flow_inventory.json](formal_flow_inventory.json)是准备阶段的历史盘点，不代表当前缺产物。本次按[native_flow_benchmark_results.csv](native_flow_benchmark_results.csv)的两个Run ID定位原目录，未按AP或时间换源。两次实际运行均保留在`result/.mnrf-work/score/MNRF-Lite-V2/<TASK>/<RUN_ID>`，原生发布目录只含`.tar.gz`和`test_report*.csv`，不是完整可验收工作目录。
 
-| 当前可找到的固定来源 | 真实类型 | 数据与窗口 | 为什么不能作为正式 Flow |
-|---|---|---|---|
-| PSM `full_gmm-full-20261024T115119Z-3976714` | 历史 Full GMM | 原 PSM，25 字段，L192 | 无原生 Flow 部署、run identity、Flow val/cal NLL 或 Flow 阈值 |
-| CalIt2 `rawcount-full-20261031T20261031T092320Z-1093827` | 历史 RawCount Full GMM | 隔离 RawCount，`[9,7]`，L192 | 同上，GMM NLL 不可替代 Flow NLL |
+| 正式来源Run ID | 数据与窗口 | 原目录及离线输出 |
+|---|---|---|
+| `run-20261110T105831Z-3223502` | CalIt2 RawCount，`[9,7]`，L192，seed2021，batch/encoding128 | [原工作目录](../../../.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502)；[比较输出](../../../score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502-readout-comparison) |
+| `run-20261110T105920Z-3229230` | PSM原benchmark数据，25字段，L192，seed2021，batch/encoding128 | [原工作目录](../../../.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230)；[比较输出](../../../score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230-readout-comparison) |
 
-已经实际执行两次 `formal_flow_launch.sh <task> --dry-run`，退出均为 0，未构造模型。加载真实 CSV，使用对应 GMM 的正确数组摘要算法核对输入身份，按正式 Lite V2 窗口函数计算轴；[flow_preflight.json](flow_preflight.json) 保存完整有效配置、实际 CSV/metadata 路径及命令参数。
+实际使用现有`compare_mnrf_frozen_readouts.py`，每个源调用一次原生validator，随后核对同次输入合同、变量/布局、时间/坐标/标签/掩码、窗口轴、保存NLL、验证median/MAD、原Flow阈值与预测、新读出校准参数。两个CLI均返回0、manifest均complete；比较进程将`torch.nn.Module.__call__`与`MNRFLiteV2.detect_fit`设为失败哨兵，未触发。源被消费文件的SHA256在导出前后相同。没有事后补造输入合同，没有写回源。准备阶段的[flow_preflight.json](flow_preflight.json)仍保留为历史记录。
 
 | 数据 | 内部 train / validation / calibration 范围（左闭右开） | 窗口数 | 官方测试 / 有效测试 |
 |---|---|---|---|
 | RawCount | `[0,1710)` / `[1901,2114)` / `[2305,2520)` | 1519 / 22 / 24 | 2520 / 2329 |
 | PSM | `[0,105679)` / `[105870,119079)` / `[119270,132481)` | 105488 / 13018 / 13020 | 87841 / 87650 |
 
-以下是**将来人工执行**的两个完整命令，本轮仅执行了 `--dry-run`，没有执行 `--execute`。一个共用 launcher，任务独立、没有全局锁或后台调度。CPU 单线程、seed2021，RawCount 隔离根和 L192 显式绑定；不会退回默认 L128 或共享数据根。目标已存在时拒绝重新训练。
+### 1% FPR预算：事后排序诊断
 
-```bash
-bash result/analysis/MNRF-Readout-Readiness/readout-readiness-20261110T084455Z/formal_flow_launch.sh CalIt2 --execute
-bash result/analysis/MNRF-Readout-Readiness/readout-readiness-20261110T084455Z/formal_flow_launch.sh PSM --execute
-```
+每路在全局共同轴上仅选一次最高TP、再最少FP工作点，并列分数组整体处理，严格`score > threshold`。CalIt2为70异常/2259正常，FP上限22；PSM为24378异常/63272正常，FP上限632。不是沿用历史GMM的631或183预算，也不是部署阈值。
 
-前置条件是当前 catch_env、完整注册的相应数据、可接受正式训练资源；它们将新建真实 Flow，不能用旧 GMM 权重伪装。预期 run 分别为 `result/score/MNRF-Lite-V2/CalIt2-RawCount/flow-readout-4c264c9/`、`result/score/MNRF-Lite-V2/PSM/flow-readout-4c264c9/`。成功后调用共用比较，结果在各自同级的 `flow-readout-4c264c9-readout-comparison/`。保存真实模型/缓存/来源后才可三路验收；未补齐产物不报完成。未来已有合格产物时可单独只读执行，例如：
+| 数据 | 读出 | AP | TP / FP | Recall / 实际FPR | 相对Flow 新增/丢失TP | 新增/减少FP |
+|---|---|---:|---|---|---|---|
+| RawCount | Flow | .240618 | 9 / 15 | 12.857% / .664% | 0 / 0 | 0 / 0 |
+| RawCount | 幅度 | .232275 | 9 / 12 | 12.857% / .531% | 6 / 6 | 10 / 13 |
+| RawCount | Flow＋幅度 | .237730 | 9 / 12 | 12.857% / .531% | 6 / 6 | 10 / 13 |
+| PSM | Flow | .451237 | 177 / 575 | .726% / .909% | 0 / 0 | 0 / 0 |
+| PSM | 幅度 | .420669 | 388 / 631 | 1.592% / .997% | 348 / 137 | 629 / 573 |
+| PSM | Flow＋幅度 | .451709 | 182 / 577 | .747% / .912% | 5 / 0 | 2 / 0 |
 
-```bash
-python scripts/compare_mnrf_frozen_readouts.py --task CalIt2 --data-root result/analysis/MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/data_root --run-dir result/score/MNRF-Lite-V2/CalIt2-RawCount/flow-readout-4c264c9 --output-dir result/score/MNRF-Lite-V2/CalIt2-RawCount/flow-readout-4c264c9-readout-comparison --cpu-threads 1
-python scripts/compare_mnrf_frozen_readouts.py --task PSM --run-dir result/score/MNRF-Lite-V2/PSM/flow-readout-4c264c9 --output-dir result/score/MNRF-Lite-V2/PSM/flow-readout-4c264c9-readout-comparison --cpu-threads 1
-```
+RawCount联合读出替换了检出对象而没有净增TP，少3FP；PSM联合读出净增5TP/2FP，只有很小的前列收益，且幅度单路丢失137个Flow检出。以上测试标签已用于预算扫描，只是探索性排序诊断，不能称为独立确认或逐组选择最佳正式读出。
+
+### 各自q=.995：真实保存/复现阈值的报警
+
+Flow照用原保存阈值；另外两路用同次运行原验证集统计与独立校准集复现其自身阈值。没有在测试集上重新校准。
+
+| 数据 | 读出 | 阈值 | 校准窗口 | TP / FP | Recall / 实际FPR | 相对Flow 新增/丢失TP | 新增/减少FP |
+|---|---|---:|---:|---|---|---|---|
+| RawCount | Flow | 6.100638411 | 24 | 35 / 158 | 50.000% / 6.994% | 0 / 0 | 0 / 0 |
+| RawCount | 幅度 | 2.136992382 | 24 | 48 / 271 | 68.571% / 11.996% | 23 / 10 | 220 / 107 |
+| RawCount | Flow＋幅度 | 1526.882734985 | 24 | 48 / 271 | 68.571% / 11.996% | 23 / 10 | 220 / 107 |
+| PSM | Flow | 11.801858068 | 13020 | 11722 / 13937 | 48.084% / 22.027% | 0 / 0 | 0 / 0 |
+| PSM | 幅度 | 10.544049320 | 13020 | 77 / 10 | .316% / .0158% | 1 / 11646 | 2 / 13929 |
+| PSM | Flow＋幅度 | 5.096372330 | 13020 | 11722 / 13939 | 48.084% / 22.030% | 0 / 0 | 2 / 0 |
+
+RawCount仅24个校准窗口。其幅度分量的验证尺度触及.001下限（Flow尺度1.159456），联合数值阈值大不代表更保守或概率更低；PSM两路验证尺度为1.832686/.503429。两组都不能由AP或阈值数值大小推断实际误报。PSM幅度单路误报很少却几乎不召回；联合仍继承Flow的高误报。
+
+PSM第4/6/7/8段，保存阈值下Flow的FP分别为7002/1694/4125/930，联合完全相同；幅度为3/0/0/0。1%预算下Flow四段TP/FP分别为38/517、26/0、1/9、22/7；联合只有第7段变为2/9。全轴增加的5TP分布为第1/2/7/10段各1/2/1/1点，新增2FP在第1/2段各1点。完整十段分母、逐点集合变化见[逐段表](formal_flow_psm_segments.csv)，越界分层见原离线比较目录的结果CSV；每个分层没有重新选阈值。
+
+### 磁盘与后续保留策略
+
+[formal_flow_storage.csv](formal_flow_storage.csv)列出两次运行原工作目录、原生发布与本次离线比较的全部文件及字节数；[formal_flow_sources.json](formal_flow_sources.json)记录`du`实际分配/表观占用。原工作目录分别占2,842,624字节（2.71MiB）和349,609,984字节（333.41MiB），31文件/组。原生两文件发布分别45,056/692,224字节，比较输出分别69,632/1,646,592字节。
+
+PSM超过1MiB的原工作文件：train_features 263,720,128字节、calibration_features 32,550,128、validation_features 32,545,128、normalized_train 13,248,228、calibration_nll 1,302,128、validation_nll 1,301,928。CalIt2没有超过1MiB的单文件。本次PSM比较scores.npz为1,577,373字节。均仅留服务器，不加入Git。
+
+**本次未删除或压缩任何源文件，释放空间0。** 当前原生validator依赖训练缓存与checkpoint；不能删后仍宣称原生可重验。后续两个正式`scripts/.../MNRFLiteV2.sh`默认采用`benchmark`，验证成功后仅发布原生`.tar.gz`与`test_report*.csv`并清理该次暂存工作目录，失败保留。需要离线比较/继续保留完整依赖时，启动前显式设`MNRF_ARTIFACT_POLICY=readout`；该模式不做伪装的“轻量可复现包”。现有两次源继续完整保留，未触发清理，也未启动新实验。模型、缓存、逐点包由根`.gitignore`排除，只提交代码、小型统计表和来源记录。
 
 **独立的历史证据**：RawCount 历史 183 FP 预算下 Full GMM 23TP/180FP，固定幅度 43TP/182FP，IF 40TP/154FP，PCA-residual 30TP/180FP。IF 检出而 Full 漏掉的 27 点中，幅度找回 26、PCA 找回 17。幅度 AP .2323 对 Full .1703，但该历史幅度没有保存报警阈值，不能声称其独立校准报警已经验收，更不能把其尺度/阈值搬给未来 Flow。来源：[历史计数幅度表](../../MNRF-ViewProbe-DataRepair/calit2-rawcount-20261031/count-amplitude-20261110/same_point_results.csv)。
 
@@ -132,10 +158,14 @@ PSM 历史 Full GMM AP .4373、R 残差 .5294，是两种不同头；1% 预算 F
 
 ## CPU 验证与研究边界
 
+本次存储策略合成回归：`python -m pytest -q ts_benchmark/baselines/mnrf_lite_v2/tests/test_artifact_retention.py`，**8 passed，4.29秒**。实际执行两个正式wrapper（拦截通用launcher，不执行模型）验证默认benchmark、显式readout/full覆盖、L192/batch128/环境继承；临时目录验证两文件发布、默认删除本次工作副本、显式保留、重复发布拒绝及相邻运行不变。真实比较由catch_env的Python单线程执行，两组原生validator及三读出均成功，禁止模型执行哨兵未触发。未重跑包含合成拟合的历史测试或任何真实实验。
+
+以下为原准备阶段已完成的回归记录，本次没有重新训练来重复这些检查：
+
 指定原生回归实际运行 `CUDA_VISIBLE_DEVICES="" conda run --no-capture-output -n catch_env python -m pytest -q ts_benchmark/baselines/mnrf_lite_v2/tests/test_mnrf_lite_v2.py`，附加本进程 OMP/OpenBLAS/MKL单线程：**10 passed，7.50秒**。随后合并新增测试：**23 passed，34.92秒**；代码收尾后最终重跑 **23 passed，42.66秒，0失败、0跳过**。Python 编译和 Bash 语法检查退出均为0。详情 [execution_checks.json](execution_checks.json)。
 
 新增测试真正从 `4c264c9^`（`5c763f0e85f865621e7c1312b58a52db7ab89d42`）git archive 隔离代码，由旧代码对子进程合成数据拟合并保存 checkpoint，再用当前代码加载同一输入，分数/阈值/预测/有效坐标逐项精确相同。原生新 checkpoint 三模式往返已测。离线入口与原生三读出合成结果精确相同，且比较阶段禁止 encoder/Flow forward 与 fit；测试错标签、时间、字段顺序、训练/测试观测、NLL、掩码、读出身份、缺完整输入绑定和重复输出拒绝。真实数据未拟合模型，未运行前向；少量合成拟合/前向只用于测试。
 
-**总评一：**历史幅度证据值得准备同一正式 Flow 的对照，但当前无正式 Flow 产物，补检出及新增误报的真实代价尚不能回答；不得拿“历史 GMM 幅度更好”代替该结论。
+**总评一：**正式Flow同源对照已给出代价：RawCount在1%预算不增TP，保存阈值多13TP/113FP；PSM在1%预算仅多5TP/2FP，保存阈值不增TP、多2FP。幅度信息有局部互补，但当前固定联合规则未带来可靠的报警改进，不能用历史GMM/R的更大收益代替这一结论。不据此扩大实验或宣称四路互补性已证实。
 
 **总评二：**RawCount数据、MSL真实边界/目标职责、明确的共同点与各自阈值报告规则已有证据可采用。diag头、工况条件化、慢速客流参照、R残差候选仍是待独立确认的设计选择。论文16方法原表继续保留于[论文并列表](../../MNRF-Benchmark-Main/benchmark-main-20261103T200322Z-851688/paper_comparison.csv)；这里的common/修正数据结果均分列，不替换论文值。四路互补性仍需四路与最强单路/少路组合的同预算对照，本轮未启动该研究。

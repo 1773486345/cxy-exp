@@ -138,7 +138,12 @@ directory for offline comparisons. `MNRF_ARTIFACT_POLICY=full` retains the
 original all-artifacts layout in the final run directory.
 
 The PSM and CalIt2 `scripts/multivariate_detection/detect_score/*_script/MNRFLiteV2.sh`
-entries select `readout`, seed 2021, Flow, L=192 and batch/encoding batch 128.
+entries default to `benchmark`, seed 2021, Flow, L=192 and batch/encoding batch 128.
+Set `MNRF_ARTIFACT_POLICY=readout` explicitly before launching when a later
+three-readout comparison is required. That policy retains the complete validated
+working directory, including training caches and checkpoints: the current native
+validator depends on them. A benchmark-only publication is not a reloadable or
+offline-comparison source. This default change does not remove existing runs.
 CalIt2 explicitly uses the isolated RawCount data root and fields `[9,7]`.
 Execution retains the launcher's existing device selection and inherited CUDA
 visibility; `--preflight` always uses CPU without constructing a model.
@@ -152,7 +157,7 @@ field order, official train/test split, data version and run ID. The binding
 is written as `readout_data_contract.json` in the work directory before any
 Stage1 training. Resume requires the original contract to match; a missing
 old-run contract is reported, never reconstructed retrospectively. After
-successful validation/publication, send the printed **Validated readout source**
+successful validation/publication with `readout`, send the printed **Validated readout source**
 under `result/.mnrf-work/score/MNRF-Lite-V2/<TASK>/<RUN_ID>` to the offline
 comparison script. The separate published result directory contains exactly
 one native `.tar.gz` and one `test_report*.csv`.

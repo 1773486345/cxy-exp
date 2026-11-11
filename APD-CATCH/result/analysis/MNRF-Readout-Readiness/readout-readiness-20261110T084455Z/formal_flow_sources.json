@@ -1,0 +1,351 @@
+{
+  "analysis_base_head": "98657f7025c6e2a8776414dfd316ef6b8d7f1857",
+  "branch": "main",
+  "native_validation": "one actual native validation per source, followed by strict same-source comparison; no model execution",
+  "source_files_unchanged": "comparison checked consumed source SHA256 before/after export",
+  "runs": {
+    "CalIt2": {
+      "status": "complete",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502",
+      "source_run_id": "run-20261110T105831Z-3223502",
+      "task": "CalIt2",
+      "source_resume_id": "114ea56fd25bc63b8c9f9ab50e7f26be58178913a9012ebfe88b25c3ccae0527",
+      "feature_fingerprint": "5e9f29e8ebd065f6ba34ad16e36f55a8e2ae1d0ed4cc3418c9001032a6fc758f",
+      "variable_names": [
+        "9",
+        "7"
+      ],
+      "feature_layout": {
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "dimensions": {
+          "S": 1,
+          "E": 8,
+          "P": 8,
+          "R": 8
+        },
+        "slices": {
+          "S": [
+            0,
+            1
+          ],
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ]
+        },
+        "F": 25
+      },
+      "seq_len": 192,
+      "calibration_quantile": 0.995,
+      "calibration_windows": 24,
+      "threshold_rule": "strict score > threshold",
+      "score_readouts": [
+        "flow",
+        "state_amplitude",
+        "flow_plus_amplitude"
+      ],
+      "missing_artifacts": {},
+      "data_version": "CalIt2-RawCount-20261031",
+      "data_contract_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/readout_data_contract.json",
+      "full_input_sha256": "c3d3a6fd5464c83617674765005e7ddecf71eccfe08190c84f0aab656ee870fd",
+      "full_time_sha256": "a4fe899e30242fd97d47d11a76cc26105147350f9d3f590eddd6e9fe341ef375",
+      "psm_range_stratification_limits": {},
+      "amplitude_calibration": {
+        "center": [
+          0.6641998291015625,
+          0.6101096272468567
+        ],
+        "scale": [
+          1.1594562530517578,
+          0.0010000000474974513
+        ],
+        "thresholds": {
+          "state_amplitude": 2.136992381811142,
+          "flow_plus_amplitude": 1526.8827349853518
+        }
+      },
+      "source_file_sha256": {
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/run_metadata.json": "190d3cd77a9e41477a65a26b73c6427f58c09f07a57d39efcb6c467a9a4e1669",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/run_identity.json": "71df20fdd2e79ef41d8a497a4882c64d7d8f7ccc89025b150a4b864fad9aa607",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/cache_manifest.json": "0bfc06843a715b205f44dd2d8d7b5320dbfb61da96f16a01e0db3403f6126d4e",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/stage2_binding.json": "4874c2f693a8e5988a42f1c3a02293a6b60b79035dfd859512dd46992d664836",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/input_statistics.npz": "ec0eeaf8c4d28b5216dcefb13a57c930e61ead0d17b04343711ef82c80d83f30",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/deployment.pt": "b57d274a120e2c0c5e11ba192de8c3f71712c4ad44bc7f386792f55f1da51aca",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/benchmark_context.json": "cbfeedffe9f5d7b55a351c4edcfa9621c2faeba74ac5cffe429fff4e064d9466",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/results/CalIt2.csv_aligned_scores.npz": "940b33b9dc9dc8742b0bbc20c992fbdcfad42d555f43cf1357c99b38a80c9fde",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/readout_data_contract.json": "285ceb2d4dee4245260d2b49c2b8b99bf9cd4c4adde74df86143291bd2d43332",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/cache/validation_features.npy": "9db313874f3c07a270fb21dd3efd36d5e2a469c08ebe32096e7085f3d2f14335",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/cache/validation_window_end_indices.npy": "0e32a00cd353e54b89f8a1a20040df66e01c7306ffd9760653690482d7b2611f",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/cache/validation_nll.npy": "9998c44bdc70d19fe5a26101bd8ed2584d6fc708c9929d109578e30e06e5c9c1",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/cache/calibration_features.npy": "25611cd3da7cc9cd6150f0d96a5f6949e75d56e8327618346b771fa6174a3df3",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/cache/calibration_window_end_indices.npy": "0d2a34e442fc98645c7cf22cf2fab1e930515674a47a418524213c48dbad7773",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502/cache/calibration_nll.npy": "0e2d635e8e5f87b9feb90ad3404120b33cc2d6033db8a5775d039ec950e42a26"
+      },
+      "native_validation": "once in this call; no encoder/Flow forward",
+      "prediction_scope": "same complete-window endpoints",
+      "cpu_threads": 1,
+      "numerical_libraries": [
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 1,
+          "prefix": "libopenblas",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/numpy.libs/libopenblas64_p-r0-15028c96.3.21.so",
+          "version": "0.3.21",
+          "threading_layer": "pthreads",
+          "architecture": "Zen"
+        },
+        {
+          "user_api": "openmp",
+          "internal_api": "openmp",
+          "num_threads": 1,
+          "prefix": "libgomp",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/torch/lib/libgomp-a34b3233.so.1",
+          "version": null
+        },
+        {
+          "user_api": "openmp",
+          "internal_api": "openmp",
+          "num_threads": 1,
+          "prefix": "libgomp",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0",
+          "version": null
+        },
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 1,
+          "prefix": "libopenblas",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/scipy.libs/libopenblasp-r0-41284840.3.18.so",
+          "version": "0.3.18",
+          "threading_layer": "pthreads",
+          "architecture": "Zen"
+        }
+      ],
+      "exploratory_budget": "test-label posthoc whole-tie scan; not a deployment threshold",
+      "work_path": "result/.mnrf-work/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502",
+      "published_path": "result/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502",
+      "comparison_path": "result/score/MNRF-Lite-V2/CalIt2/run-20261110T105831Z-3223502-readout-comparison",
+      "official_train_points": 2520,
+      "official_test_points": 2520,
+      "model_calls_during_comparison": "torch.nn.Module.__call__ and MNRFLiteV2.detect_fit guarded to raise; native validation and comparison succeeded",
+      "source_retention": "entire original work directory preserved; no file deletion or compaction"
+    },
+    "PSM": {
+      "status": "complete",
+      "source_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230",
+      "source_run_id": "run-20261110T105920Z-3229230",
+      "task": "PSM",
+      "source_resume_id": "9e57be915351453d2b7a65a9012502e3e0c59540d63bf39638af2eb204fe5b89",
+      "feature_fingerprint": "13e2ad46057f0d38cfc6031c5276fb375533ce5ab724817257bc7610bc0c3063",
+      "variable_names": [
+        "feature_0",
+        "feature_1",
+        "feature_2",
+        "feature_3",
+        "feature_4",
+        "feature_5",
+        "feature_6",
+        "feature_7",
+        "feature_8",
+        "feature_9",
+        "feature_10",
+        "feature_11",
+        "feature_12",
+        "feature_13",
+        "feature_14",
+        "feature_15",
+        "feature_16",
+        "feature_17",
+        "feature_18",
+        "feature_19",
+        "feature_20",
+        "feature_21",
+        "feature_22",
+        "feature_23",
+        "feature_24"
+      ],
+      "feature_layout": {
+        "order": [
+          "S",
+          "E",
+          "P",
+          "R"
+        ],
+        "dimensions": {
+          "S": 1,
+          "E": 8,
+          "P": 8,
+          "R": 8
+        },
+        "slices": {
+          "S": [
+            0,
+            1
+          ],
+          "E": [
+            1,
+            9
+          ],
+          "P": [
+            9,
+            17
+          ],
+          "R": [
+            17,
+            25
+          ]
+        },
+        "F": 25
+      },
+      "seq_len": 192,
+      "calibration_quantile": 0.995,
+      "calibration_windows": 13020,
+      "threshold_rule": "strict score > threshold",
+      "score_readouts": [
+        "flow",
+        "state_amplitude",
+        "flow_plus_amplitude"
+      ],
+      "missing_artifacts": {},
+      "data_version": "PSM-benchmark-original",
+      "data_contract_path": "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/readout_data_contract.json",
+      "full_input_sha256": "49d760cc748c54890127f9bf25b507796d7a0dea41759946280548bdb83e2500",
+      "full_time_sha256": "d126be9c8ca03bca7c237397b309e31b7cdff125d44d8c4865b2cf103568fe98",
+      "psm_range_stratification_limits": {
+        "feature_1": 2.0010499954223633,
+        "feature_3": 2.231389284133911
+      },
+      "amplitude_calibration": {
+        "center": [
+          2.4618072509765625,
+          8.869197845458984
+        ],
+        "scale": [
+          1.832686185836792,
+          0.5034288763999939
+        ],
+        "thresholds": {
+          "state_amplitude": 10.544049320220948,
+          "flow_plus_amplitude": 5.096372330188777
+        }
+      },
+      "source_file_sha256": {
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/run_metadata.json": "3bc197d1eb225557184fbd8ebe3c3a264ee0ec0fb0240dcffc6d3974c0035828",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/run_identity.json": "77116b66030033f82aff3a1e2608236938d84e45afc50d71ad05f9d405e200ce",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/cache_manifest.json": "25486490b600caa1f042819a84b4a2c0950145d399fa22cd6e41294eef89b304",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/stage2_binding.json": "d1deb103eda5835a8a870ba8229d109387950efa3eb9ef33f431fa7322eeb052",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/input_statistics.npz": "e046d754643ff7e2491f5f0f831deffcb7a70674f59f04348316b5c7cfa14100",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/deployment.pt": "7f22ebfbab14f6573771204f1fd6d10804619c49d244bdc912dba90901b96525",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/benchmark_context.json": "7f622b1be0dcd8e3bcfee21e8f95e91f8a49120914cf59e704f8fcf0a1bc6bc1",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/results/PSM.csv_aligned_scores.npz": "a44469cc3565ecc45eb2198b5db327b7496cf31a6f5eaf3921a0b5aac2a6ac77",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/readout_data_contract.json": "138a275f793161b33a5c347bc080a11c42270d2604ce973cb773e117c07053fe",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/cache/validation_features.npy": "4cd17ccc9bd4581ed825561804b6f5ef0612269bd5a71ba2515374baf9ec14ce",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/cache/validation_window_end_indices.npy": "302e63ba819b1ea3192abf43cadef84366bee2d79332c6a6fb3ad370c5388c51",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/cache/validation_nll.npy": "10e60e43bb23987a39c8058b7447769a0fec7c08172209676a332d028cd633ab",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/cache/calibration_features.npy": "e65209ff51e3bd4975203c0868724cd461944afc9265f99647a559c9a32059ac",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/cache/calibration_window_end_indices.npy": "0dfea2d1bad91c6e09b709fb45cac7c461c1a46e9fd46b3979677221cb774d6c",
+        "/media/h3c/users/wangyueyang1/cxy/APD-CATCH/result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230/cache/calibration_nll.npy": "d8bb81dd360aa83a7d479a7b09248b61254cee645f2dbf0c40e91d36cfe4612c"
+      },
+      "native_validation": "once in this call; no encoder/Flow forward",
+      "prediction_scope": "same complete-window endpoints",
+      "cpu_threads": 1,
+      "numerical_libraries": [
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 1,
+          "prefix": "libopenblas",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/numpy.libs/libopenblas64_p-r0-15028c96.3.21.so",
+          "version": "0.3.21",
+          "threading_layer": "pthreads",
+          "architecture": "Zen"
+        },
+        {
+          "user_api": "openmp",
+          "internal_api": "openmp",
+          "num_threads": 1,
+          "prefix": "libgomp",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/torch/lib/libgomp-a34b3233.so.1",
+          "version": null
+        },
+        {
+          "user_api": "openmp",
+          "internal_api": "openmp",
+          "num_threads": 1,
+          "prefix": "libgomp",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0",
+          "version": null
+        },
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 1,
+          "prefix": "libopenblas",
+          "filepath": "/media/h3c/users/wangyueyang1/.conda/envs/catch_env/lib/python3.8/site-packages/scipy.libs/libopenblasp-r0-41284840.3.18.so",
+          "version": "0.3.18",
+          "threading_layer": "pthreads",
+          "architecture": "Zen"
+        }
+      ],
+      "exploratory_budget": "test-label posthoc whole-tie scan; not a deployment threshold",
+      "work_path": "result/.mnrf-work/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230",
+      "published_path": "result/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230",
+      "comparison_path": "result/score/MNRF-Lite-V2/PSM/run-20261110T105920Z-3229230-readout-comparison",
+      "official_train_points": 132481,
+      "official_test_points": 87841,
+      "model_calls_during_comparison": "torch.nn.Module.__call__ and MNRFLiteV2.detect_fit guarded to raise; native validation and comparison succeeded",
+      "source_retention": "entire original work directory preserved; no file deletion or compaction"
+    }
+  },
+  "disk_usage": {
+    "CalIt2": {
+      "original_work": {
+        "allocated_bytes": 2842624,
+        "apparent_bytes_with_directories": 2765455,
+        "file_count": 31
+      },
+      "published_native": {
+        "allocated_bytes": 45056,
+        "apparent_bytes_with_directories": 38458,
+        "file_count": 2
+      },
+      "offline_comparison": {
+        "allocated_bytes": 69632,
+        "apparent_bytes_with_directories": 62867,
+        "file_count": 3
+      }
+    },
+    "PSM": {
+      "original_work": {
+        "allocated_bytes": 349609984,
+        "apparent_bytes_with_directories": 349535452,
+        "file_count": 31
+      },
+      "published_native": {
+        "allocated_bytes": 692224,
+        "apparent_bytes_with_directories": 688120,
+        "file_count": 2
+      },
+      "offline_comparison": {
+        "allocated_bytes": 1646592,
+        "apparent_bytes_with_directories": 1638866,
+        "file_count": 3
+      }
+    }
+  },
+  "storage_policy": "current sources retained intact; future PSM/CalIt2 default benchmark; opt-in readout preserves full validator dependencies"
+}
