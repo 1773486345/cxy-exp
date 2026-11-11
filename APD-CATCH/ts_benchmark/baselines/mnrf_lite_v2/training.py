@@ -487,7 +487,8 @@ class MNRFTrainer:
             return output
         return np.concatenate(results, axis=0)
 
-    def calibrate(self, validation_features, calibration_features, work_dir=None, *, with_amplitude=False):
+    def calibrate(self, validation_features, calibration_features, work_dir=None, *, with_amplitude=False,
+                  score_indices=None):
         work = Path(work_dir or ".")
         work.mkdir(parents=True, exist_ok=True)
         validation_scores = self.per_variable_scores(validation_features, work / "validation_nll.npy")
@@ -500,7 +501,7 @@ class MNRFTrainer:
         for start in range(0, len(aggregate), self.config.batch_size):
             stop = min(len(aggregate), start + self.config.batch_size)
             aggregate[start:stop] = flow_scores(
-                calibration_scores[start:stop], self.calibration_center, self.calibration_scale
+                calibration_scores[start:stop], self.calibration_center, self.calibration_scale, score_indices
             )
         self.threshold = float(np.quantile(aggregate, self.config.calibration_quantile))
         self.amplitude_calibration = None
@@ -512,15 +513,15 @@ class MNRFTrainer:
             for start in range(0, len(validation_scores), self.config.batch_size):
                 block = slice(start, start + self.config.batch_size)
                 validation_components[block, 0] = flow_scores(
-                    validation_scores[block], self.calibration_center, self.calibration_scale
+                    validation_scores[block], self.calibration_center, self.calibration_scale, score_indices
                 )
                 validation_components[block, 1] = state_amplitude_scores(
-                    validation_features[block], state_index
+                    validation_features[block], state_index, score_indices
                 )
             for start in range(0, len(calibration_scores), self.config.batch_size):
                 block = slice(start, start + self.config.batch_size)
                 calibration_components[block, 1] = state_amplitude_scores(
-                    calibration_features[block], state_index
+                    calibration_features[block], state_index, score_indices
                 )
             self.amplitude_calibration = fit_amplitude_calibration(
                 validation_components, calibration_components,

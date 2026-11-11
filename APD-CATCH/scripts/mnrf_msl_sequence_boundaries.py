@@ -130,3 +130,12 @@ def mapping_summary(mapping, mapping_sha256, mapping_path):
         "local_csv_sha256": mapping.get("local_csv_sha256"),
         "boundary_id_rule": "distinct train:<channel> and test:<channel>; never cross any source sequence or train/test edge",
     }
+
+
+def prepare_formal_frame(frame, train_length, data_path, mapping_path=DEFAULT_MAPPING):
+    """Verify the actual loaded CSV and attach ids before the official split."""
+    mapping, digest, path = load_mapping(mapping_path)
+    verify_source_csv(mapping, data_path)
+    result = annotate_frame(frame, train_length, mapping)
+    result.attrs["mnrf_sequence_mapping"] = mapping_summary(mapping, digest, path)
+    return result

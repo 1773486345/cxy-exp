@@ -98,6 +98,18 @@ elif [[ -e "${RUN_ABS}" || -L "${RUN_ABS}" ]]; then
 fi
 printf 'MNRF-Lite V2 artifact policy=%s work directory=%s\n' "${ARTIFACT_POLICY}" "${RUN_ABS}"
 MODEL_HYPER_PARAMS="{\"seed\":${SEED},\"task_name\":\"${TASK}.csv\",\"seq_len\":${SEQ_LEN},\"pattern_len\":32,\"hidden_dim\":32,\"view_dim\":8,\"evolution_dim\":${EVOLUTION_DIM},\"pattern_dim\":${PATTERN_DIM},\"relation_dim\":${RELATION_DIM},\"batch_size\":${BATCH_SIZE},\"stage1_epochs\":${STAGE1_EPOCHS},\"stage2_epochs\":${STAGE2_EPOCHS},\"patience\":5,\"learning_rate\":0.001,\"weight_decay\":0.0001,\"feature_std_floor\":0.05,\"train_noise_std\":0.01,\"noise_seed\":20261013,\"calibration_quantile\":0.995,\"cache_chunk_size\":${CACHE_CHUNK_SIZE},\"encoding_batch_size\":${ENCODING_BATCH_SIZE},\"device\":\"${DEVICE}\",\"output_dir\":\"${RUN_ABS}\",\"resume_from\":\"${RESUME_FROM}\",\"score_readout\":\"${SCORE_READOUT}\"}"
+if [[ -n "${MNRF_MSL_SEQUENCE_MAPPING:-}${MNRF_SCORE_TARGET:-}" ]]; then
+  [[ "${TASK}" == "MSL" && "${DATA_SOURCE}" == "large_detect" && "${MNRF_SCORE_TARGET:-}" == "col_0" && -r "${MNRF_MSL_SEQUENCE_MAPPING:-}" ]] || {
+    printf 'MSL requires its verified mapping and col_0 score target together.\n' >&2; exit 2;
+  }
+  MODEL_HYPER_PARAMS="$(python - "${MODEL_HYPER_PARAMS}" <<'PY'
+import json, sys
+params = json.loads(sys.argv[1])
+params['score_target'] = 'col_0'
+print(json.dumps(params))
+PY
+)"
+fi
 
 if [[ "${ACTION}" == "--preflight" ]]; then
   [[ "${DATA_SOURCE}" == "large_detect" ]] || { printf 'Preflight requires large_detect.\n' >&2; exit 2; }
@@ -105,15 +117,19 @@ if [[ "${ACTION}" == "--preflight" ]]; then
   [[ -z "${MNRF_EXPECTED_TEST:-}" ]] || CHECK_ARGS+=(--expected-test "${MNRF_EXPECTED_TEST}")
   [[ -z "${MNRF_EXPECTED_CALIBRATION:-}" ]] || CHECK_ARGS+=(--expected-calibration "${MNRF_EXPECTED_CALIBRATION}")
   [[ -z "${MNRF_EXPECTED_FIELDS:-}" ]] || CHECK_ARGS+=(--expected-fields "${MNRF_EXPECTED_FIELDS}")
+  [[ -z "${MNRF_MSL_SEQUENCE_MAPPING:-}" ]] || CHECK_ARGS+=(--msl-sequence-mapping "${MNRF_MSL_SEQUENCE_MAPPING}")
   python ./scripts/preflight_mnrf_lite_v2.py --task "${TASK}" \
     --data-root "${DATA_ROOT:-${ROOT}/dataset/anomaly_detect}" \
     --params "${MODEL_HYPER_PARAMS}" "${CHECK_ARGS[@]}"
   exit
 fi
 
-STRATEGY_ARGS="$(python - "${MNRF_DATA_VERSION:-${TASK}-benchmark-original}" <<'PY'
+STRATEGY_ARGS="$(python - "${MNRF_DATA_VERSION:-${TASK}-benchmark-original}" "${MNRF_MSL_SEQUENCE_MAPPING:-}" <<'PY'
 import json, sys
-print(json.dumps({"readout_data_version": sys.argv[1]}))
+params = {"readout_data_version": sys.argv[1]}
+if sys.argv[2]:
+    params['msl_sequence_mapping'] = sys.argv[2]
+print(json.dumps(params))
 PY
 )"
 python ./scripts/run_benchmark.py \

@@ -16,7 +16,7 @@ import torch
 from .config import MNRFConfig
 from .layout import require_layout
 from .readout import (combine_scores, flow_scores, state_amplitude_scores,
-                      validate_amplitude_calibration, validate_score_readout)
+                      validate_amplitude_calibration, validate_score_readout, score_target_indices)
 from .training import EndWindowDataset, MNRFTrainer, _validate_resume_state, purged_ranges, seed_all
 from .windows import (TimeIndex, continuous_segments, infer_expected_interval,
                       intersect_segments, normalize_time_index)
@@ -142,6 +142,10 @@ class MNRFLiteV2:
                        full_labels_sha256=_hash_array(labels.astype(np.int8)),
                        data_version=data_version, data_root=data_root,
                        captured="actual benchmark pool input, before fit")
+        if frame.attrs.get("mnrf_sequence_mapping"):
+            payload["sequence_mapping"] = frame.attrs["mnrf_sequence_mapping"]
+            payload["full_entity_ids_sha256"] = _hash_array(self._boundary_ids(frame))
+            payload["score_target"] = self.config.score_target
         path = self.output_dir / "readout_data_contract.json"
         if self.config.resume_from:
             if not path.is_file():
@@ -162,6 +166,20 @@ class MNRFLiteV2:
         if len(values) < self.config.seq_len:
             raise ValueError("training segment is shorter than the configured window")
         self.variable_names = tuple(map(str, columns))
+        score_indices = score_target_indices(self.variable_names, self.config.score_target)
+        mapping = train_data.attrs.get("mnrf_sequence_mapping")
+        if self.config.score_target:
+            from scripts.mnrf_msl_sequence_boundaries import FEATURE_COLUMNS
+            if not mapping or list(self.variable_names) != FEATURE_COLUMNS or "entity_id" not in train_data:
+                raise ValueError("formal MSL col_0 scoring requires the verified sequence mapping and all 55 inputs")
+            expected_ids = np.concatenate([
+                np.repeat("train:" + channel, int(mapping["channel_row_counts"][channel]["train"]))
+                for channel in mapping["channels"]
+            ])
+            if not np.array_equal(self._boundary_ids(train_data), expected_ids):
+                raise ValueError("MSL training entity ids differ from the bound sequence mapping")
+        elif mapping:
+            raise ValueError("formal MSL sequence mapping requires col_0 score_target")
         ranges = purged_ranges(len(values), self.config.seq_len)
         time_index = self._time_index(train_data)
         boundary_columns = self._boundary_columns(train_data)
@@ -179,6 +197,9 @@ class MNRFLiteV2:
             "entity_boundary_columns": [str(column) for column in boundary_columns],
             "fit_range": [int(train_left), int(train_right)],
         }
+        if mapping:
+            temporal_rule["sequence_mapping"] = mapping
+            temporal_rule["score_target"] = self.config.score_target
         full_segments, continuity = continuous_segments(time_index, len(values),
                                                          expected_interval=expected_interval,
                                                          tolerance=temporal_rule["tolerance"],
@@ -212,10 +233,15 @@ class MNRFLiteV2:
             "temporal_rule": temporal_rule,
             "input_sha256": _hash_array(values),
             "config": {key: value for key, value in self.config.to_dict().items()
-                       if key not in {"output_dir", "resume_from", "device"}},
+                       if key not in {"output_dir", "resume_from", "device"}
+                       and not (key == "score_target" and not value)},
             "feature_layout": self.config.layout.to_dict(),
         }
         resume_id = hashlib.sha256(json.dumps(resume_payload, sort_keys=True).encode()).hexdigest()
+        if self.config.resume_from and self.config.score_target:
+            saved_identity = self.output_dir / "run_identity.json"
+            if not saved_identity.is_file() or json.loads(saved_identity.read_text()).get("resume_id") != resume_id:
+                raise ValueError("resume rejected: MSL boundary mapping or score target differs; start a new run")
         self._make_output_dirs()
         if hasattr(self, "_readout_data_contract") and not self.config.resume_from:
             with (self.output_dir / "readout_data_contract.json").open("x", encoding="utf-8") as handle:
@@ -466,6 +492,7 @@ class MNRFLiteV2:
         self.trainer.calibrate(
             validation_features, calibration_features, self.output_dir / "cache",
             with_amplitude=self.score_readout != "flow",
+            score_indices=score_indices,
         )
         labels = None if train_label is None else np.asarray(train_label).reshape(-1)
         label_audit = {"available": labels is not None, "count": 0, "positive_count": None, "used_for_filtering": False}
@@ -523,6 +550,7 @@ class MNRFLiteV2:
                 + sum(parameter.numel() for parameter in self.trainer.flow.parameters()),
             },
             "score_readout": self.score_readout,
+            "score_target": self.config.score_target or "all_variables",
             "threshold": self._score_threshold(self.score_readout),
             "calibration_quantile": self.config.calibration_quantile,
             "feature_cache_paths": {
@@ -625,6 +653,8 @@ class MNRFLiteV2:
             raise ValueError("deployment is missing training-side state amplitude calibration")
         requested_device = self.config.device
         config = MNRFConfig.from_kwargs(**artifact["config"])
+        if self.config.score_target and self.config.score_target != config.score_target:
+            raise ValueError("deployment score target differs from requested MSL protocol")
         require_layout(artifact.get("feature_layout"), config.layout, f"{path} deployment")
         if artifact.get("feature_layout") != config.layout.to_dict():
             raise ValueError("deployment feature layout is missing or incompatible")
@@ -656,6 +686,9 @@ class MNRFLiteV2:
         self.temporal_rule = artifact.get("temporal_rule")
         if not self.temporal_rule or self.temporal_rule.get("version") != TIME_PROTOCOL_VERSION:
             raise ValueError("deployment is missing a compatible frozen time protocol")
+        if config.score_target and (not self.temporal_rule.get("sequence_mapping")
+                                    or self.temporal_rule.get("score_target") != config.score_target):
+            raise ValueError("deployment MSL sequence mapping or score target is missing/incompatible")
         self._fitted = True
         return self
 
@@ -677,6 +710,10 @@ class MNRFLiteV2:
         names = tuple(map(str, columns))
         if names != self.variable_names:
             raise ValueError("test variable names/order do not match training variables")
+        score_indices = score_target_indices(self.variable_names, self.config.score_target)
+        if self.config.score_target:
+            if test_data.attrs.get("mnrf_sequence_mapping") != self.temporal_rule.get("sequence_mapping"):
+                raise ValueError("MSL scoring sequence mapping differs from frozen training protocol")
         total = len(values)
         score_time_index = self._time_index(test_data)
         if ((self.temporal_rule["time_kind"] == "row_order") != (score_time_index.kind == "row_order")
@@ -722,11 +759,12 @@ class MNRFLiteV2:
             raw = self.trainer.encoder.encode_views(torch.as_tensor(windows, device=self.device))["features"].cpu().numpy()
             nll = self.trainer.per_variable_scores(raw)
             stop = start + len(selected)
-            flow = flow_scores(nll, self.trainer.calibration_center, self.trainer.calibration_scale)
+            flow = flow_scores(nll, self.trainer.calibration_center, self.trainer.calibration_scale,
+                               score_indices)
             if readout == "flow":
                 batch_scores = flow
             else:
-                amplitude = state_amplitude_scores(raw, self.config.layout.slices["S"][0])
+                amplitude = state_amplitude_scores(raw, self.config.layout.slices["S"][0], score_indices)
                 batch_scores = amplitude if readout == "state_amplitude" else combine_scores(
                     flow, amplitude, self.trainer.amplitude_calibration
                 )

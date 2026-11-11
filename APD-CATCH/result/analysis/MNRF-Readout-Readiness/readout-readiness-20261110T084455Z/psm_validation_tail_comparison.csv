@@ -1,0 +1,18 @@
+dataset,source_run_id,analysis,readout,points,normal_points,anomaly_points,threshold,threshold_rule,tp,fp,ap,highest_score_ties,highest_tie_tp,highest_tie_fp,added_tp_relative_to_amplitude,lost_tp_relative_to_amplitude,group,official_decile,fpr,flow_p99,validation_max
+PSM,run-20261110T105920Z-3229230,budget_632fp,flow,87650,63272,24378,20.17416763305664,posthoc test-label strict > whole-tie scan,177,575,0.4512374535995308,1,1,0,137,348,,,,,
+PSM,run-20261110T105920Z-3229230,budget_632fp,state_amplitude,87650,63272,24378,8.704994201660156,posthoc test-label strict > whole-tie scan,388,631,0.4206691104080568,1,1,0,0,0,,,,,
+PSM,run-20261110T105920Z-3229230,budget_632fp,flow_plus_amplitude,87650,63272,24378,9.664698600769043,posthoc test-label strict > whole-tie scan,182,577,0.45170911490090093,1,1,0,137,343,,,,,
+PSM,run-20261110T105920Z-3229230,budget_632fp,validation_tail_minp,87650,63272,24378,6.640951763841181,posthoc test-label strict > whole-tie scan,181,442,0.4605442514505279,61,32,29,133,340,,,,,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,54127,54127,,11.80185806751256,original saved q=.995 strict >,,11622,,,,,,,entire_window_normal,0,0.21471723908585363,20.0512052154541,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,9145,9145,,11.80185806751256,original saved q=.995 strict >,,2315,,,,,,,normal_endpoint_anomalous_context,0,0.2531437944231821,20.411239395141592,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,6928,6928,,11.80185806751256,original saved q=.995 strict >,,5973,,,,,,,entire_window_normal,4,0.8621535796766744,20.87996704101562,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,1266,1266,,11.80185806751256,original saved q=.995 strict >,,1029,,,,,,,normal_endpoint_anomalous_context,4,0.8127962085308057,83.8815883636474,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,6903,6903,,11.80185806751256,original saved q=.995 strict >,,1500,,,,,,,entire_window_normal,6,0.21729682746631898,14.062205963134765,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,603,603,,11.80185806751256,original saved q=.995 strict >,,194,,,,,,,normal_endpoint_anomalous_context,6,0.32172470978441126,15.19463586807251,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,4736,4736,,11.80185806751256,original saved q=.995 strict >,,3479,,,,,,,entire_window_normal,7,0.7345861486486487,19.3540789604187,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,764,764,,11.80185806751256,original saved q=.995 strict >,,646,,,,,,,normal_endpoint_anomalous_context,7,0.8455497382198953,19.824494972229004,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,4381,4381,,11.80185806751256,original saved q=.995 strict >,,575,,,,,,,entire_window_normal,8,0.1312485733850719,17.62237968444824,
+PSM,run-20261110T105920Z-3229230,saved_flow_context,flow,823,823,,11.80185806751256,original saved q=.995 strict >,,355,,,,,,,normal_endpoint_anomalous_context,8,0.4313487241798299,19.948544158935544,
+PSM,run-20261110T105920Z-3229230,above_validation_max,flow,54,,,,,25,29,,,,,,,,,,,56.15598678588867
+PSM,run-20261110T105920Z-3229230,above_validation_max,state_amplitude,11,,,,,11,0,,,,,,,,,,,30.50066566467285
+PSM,run-20261110T105920Z-3229230,above_validation_max,either,61,,,,,32,29,,,,,,,,,,,

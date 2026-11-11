@@ -33,6 +33,7 @@ class MNRFConfig:
     output_dir: str = ""
     resume_from: str = ""
     task_name: str = ""
+    score_target: str = ""
 
     def __post_init__(self):
         # Explicit E/P/R values override the legacy common view_dim independently.
@@ -60,6 +61,10 @@ class MNRFConfig:
         return result
 
     def validate(self) -> None:
+        if self.score_target not in {"", "col_0"}:
+            raise ValueError("score_target must be empty (all variables) or col_0")
+        if self.score_target and self.task_name != "MSL.csv":
+            raise ValueError("col_0 score_target is reserved for the formal MSL protocol")
         if self.seq_len < self.pattern_len or self.pattern_len != 32:
             raise ValueError("seq_len must be >= pattern_len, and pattern_len is fixed at 32")
         if isinstance(self.view_dim, bool) or not isinstance(self.view_dim, int) or self.view_dim <= 0:

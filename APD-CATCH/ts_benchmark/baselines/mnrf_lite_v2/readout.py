@@ -12,12 +12,28 @@ def validate_score_readout(readout):
     return readout
 
 
-def flow_scores(nll, center, scale):
-    return np.max((nll - center) / scale, axis=1)
+def score_target_indices(variable_names, target=""):
+    """Resolve once by the frozen name/order, shared by calibration and testing."""
+    names = list(variable_names)
+    if not target:
+        return None
+    if names.count(target) != 1:
+        raise ValueError(f"score target {target!r} must occur exactly once in variable_names")
+    return [names.index(target)]
 
 
-def state_amplitude_scores(features, state_index):
-    return np.max(np.abs(features[..., state_index]), axis=1)
+def flow_scores(nll, center, scale, score_indices=None):
+    standardized = (nll - center) / scale
+    if score_indices is not None:
+        standardized = standardized[:, score_indices]
+    return np.max(standardized, axis=1)
+
+
+def state_amplitude_scores(features, state_index, score_indices=None):
+    state = features[..., state_index]
+    if score_indices is not None:
+        state = state[:, score_indices]
+    return np.max(np.abs(state), axis=1)
 
 
 def combine_scores(flow, amplitude, calibration):

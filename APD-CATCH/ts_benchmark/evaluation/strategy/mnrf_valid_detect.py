@@ -33,6 +33,16 @@ class MNRFValidDetect(UnFixedDetectScore):
     def split_data(self, series_name: str):
         data = DataPool().get_pool().get_series(series_name)
         train_length = int(DataPool().get_pool().get_series_meta_info(series_name)["train_lens"].item())
+        mapping_path = self.strategy_config.get("msl_sequence_mapping")
+        if mapping_path:
+            from pathlib import Path
+            from scripts.mnrf_msl_sequence_boundaries import prepare_formal_frame
+            if series_name != "MSL.csv":
+                raise ValueError("MSL sequence mapping may only be used with MSL.csv")
+            data_root = self.strategy_config["readout_data_root"]
+            data = prepare_formal_frame(data, train_length, Path(data_root) / "data" / series_name,
+                                        mapping_path)
+        self._full_input_frame = data
         train, test = split_before(data, train_length)
         train_data = train.loc[:, train.columns != "label"]
         train_label = train.loc[:, ["label"]]
@@ -44,10 +54,12 @@ class MNRFValidDetect(UnFixedDetectScore):
         model = model_factory()
         self.model = model
         train_data, train_label, test_data, test_label = self.split_data(series_name)
+        if self.strategy_config.get("msl_sequence_mapping") and model.config.score_target != "col_0":
+            raise ValueError("formal sequence-bounded MSL requires col_0 scoring and calibration")
         # Use the same loaded pool object as split_data, before any fit. In
         # particular, never manufacture a missing old-run binding from a CSV.
         model.bind_readout_data(
-            DataPool().get_pool().get_series(series_name), len(train_data), series_name,
+            self._full_input_frame, len(train_data), series_name,
             self.strategy_config.get("readout_data_version", series_name + "-benchmark-original"),
             self.strategy_config.get("readout_data_root"),
         )
